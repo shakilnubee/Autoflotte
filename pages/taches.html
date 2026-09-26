@@ -68,6 +68,11 @@
   .cal-pill:hover { background:rgba(249,115,22,.16); box-shadow:0 0 0 3px rgba(249,115,22,.12); }
   .cal-pill i { width:14px; height:14px; }
   body.fp-dark .cal-pill { background:rgba(249,115,22,.14); color:#fdba74; }
+  /* Étiquettes de couleur */
+  .eti-pill { display:inline-flex; align-items:center; padding:1px 8px; border-radius:9999px; font-size:.72rem; font-weight:700; white-space:nowrap; }
+  .eti-toggle { display:inline-flex; align-items:center; gap:.35rem; padding:.32rem .7rem; border-radius:9999px; font-size:.8rem; font-weight:600; border:1.5px solid var(--fp-border); background:#fff; color:var(--fp-muted); cursor:pointer; transition:all .12s; }
+  body.fp-dark .eti-toggle { background:#0f1a2e; color:#cbd5e1; border-color:#26334a; }
+  .eti-toggle .dot { width:10px; height:10px; border-radius:9999px; }
   body.fp-dark #t-type-switch .filter-chip { background:#0f1a2e; color:#e6edf6; border-color:#26334a; }
   body.fp-dark #t-type-switch .filter-chip.active { border-color:var(--fp-accent); background:rgba(249,115,22,.18); color:#fdba74; }
 </style>
@@ -198,6 +203,7 @@
         <button class="filter-chip" data-type="action">✅ Actions</button>
         <button class="filter-chip" data-type="achat">📦 Achats</button>
       </div>
+      <select class="field-input" id="filters-etiquette" style="width:auto;padding:.4rem .7rem;font-size:.82rem"></select>
       <div class="relative flex-1 min-w-[200px]">
         <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
         <input id="search" type="text" placeholder="Rechercher (titre, véhicule, conducteur, lieu…)" class="w-full pl-10 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-teal-500" />
@@ -262,6 +268,10 @@
           <div class="field-label">Priorité</div>
           <select class="field-input" id="t-priorite"><option value="normale">Normale</option><option value="haute">🔴 Haute</option><option value="basse">Basse</option></select>
         </div>
+      </div>
+      <div>
+        <div class="field-label">Étiquettes (optionnel)</div>
+        <div id="t-etiquettes" class="flex gap-2 flex-wrap"></div>
       </div>
       <div>
         <div class="field-label">Checklist (optionnel)</div>
@@ -353,29 +363,46 @@
   const $ = (id) => document.getElementById(id);
   const data = window.FP_DATA;
   let _view = 'liste'; try { _view = localStorage.getItem('fp_taches_view') || 'liste'; } catch (e) {}
-  const state = { view: _view, filtre: 'actives', typeFiltre: 'all', search: '', cal: new Date() };
+  const state = { view: _view, filtre: 'actives', typeFiltre: 'all', etiquette: 'all', search: '', cal: new Date() };
   let editingId = null;
   let editSous = [];            // checklist en cours d'édition dans le modal
+  let editEtiquettes = [];      // étiquettes en cours d'édition dans le modal
 
   // Type d'une tâche (rétro-compat : anciennes tâches = 'action').
   const T_EMO = { rdv: '📅', action: '✅', achat: '📦' };
   const T_LBL = { rdv: 'Rendez-vous', action: 'Action', achat: 'Achat' };
+  // Étiquettes de couleur (catégories). GLOBALES à toutes les sociétés.
+  const ETIQUETTES = [
+    { key: 'garage', label: 'Garage', color: '#2563eb' },
+    { key: 'admin', label: 'Admin', color: '#7c3aed' },
+    { key: 'achat', label: 'Achat', color: '#0891b2' },
+    { key: 'assurance', label: 'Assurance', color: '#059669' },
+    { key: 'carburant', label: 'Carburant', color: '#d97706' },
+    { key: 'conducteur', label: 'Conducteur', color: '#db2777' }
+  ];
+  const ETI_BY = {}; ETIQUETTES.forEach(e => ETI_BY[e.key] = e);
+  const taskEtiquettes = (t) => Array.isArray(t.etiquettes) ? t.etiquettes.filter(k => ETI_BY[k]) : [];
   const isDone = (t) => t.statut === 'done' || (t.statut == null && !!t.fait);
   function taskType(t) { return (t.type === 'rdv' || t.type === 'achat') ? t.type : 'action'; }
-  function taskStatut(t) { if (t.statut === 'todo' || t.statut === 'doing' || t.statut === 'done') return t.statut; return t.fait ? 'done' : 'todo'; }
+  function taskStatut(t) { if (t.statut === 'todo' || t.statut === 'doing' || t.statut === 'attente' || t.statut === 'done') return t.statut; return t.fait ? 'done' : 'todo'; }
   function sousProgress(t) { const s = Array.isArray(t.sousTaches) ? t.sousTaches : []; if (!s.length) return null; const d = s.filter(x => x && x.done).length; return { d, n: s.length }; }
   // Motifs rapides selon le type (clic → remplit l'intitulé).
   const MOTIFS = {
-    rdv: ['Révision', 'Contrôle technique', 'Vidange', 'Pneus', 'Carrosserie', 'Lavage', 'Livraison', 'Restitution'],
-    achat: ['Pneus', 'Carte carburant', 'Badge télépéage', 'Ampoules', 'Accessoire'],
-    action: []
+    rdv: ['Révision', 'Contrôle technique', 'Vidange', 'Pneus', 'Carrosserie', 'Pare-brise', 'Climatisation', 'Diagnostic', 'Lavage', 'Livraison', 'Restitution', 'Expertise'],
+    achat: ['Pneus', 'Carte carburant', 'Badge télépéage', 'Ampoules', 'Accessoire', 'Équipement hiver', 'Consommable'],
+    action: ['Vérifier le permis', 'Relancer le garage', 'Relancer le fournisseur', 'Valider un devis', 'Récupérer un document']
   };
   // Modèles (checklists prêtes) — créent une tâche avec ses étapes.
   const MODELS = [
-    { key: 'entree', emo: '🚗', titre: 'Entrée d\'un nouveau véhicule', type: 'action', sous: ['Vérifier la carte grise', 'Souscrire l\'assurance', 'Poser le QR code dans le véhicule', 'Créer la fiche conducteur', 'Envoyer l\'e-mail de bienvenue', 'Faire l\'état des lieux de remise'] },
-    { key: 'sortie', emo: '👋', titre: 'Départ d\'un conducteur', type: 'action', sous: ['Récupérer les clés', 'Récupérer la carte carburant + badge', 'État des lieux de restitution', 'Retirer l\'affectation du véhicule', 'Clôturer l\'accès'] },
-    { key: 'restit', emo: '🔙', titre: 'Restitution d\'un véhicule en leasing', type: 'rdv', sous: ['Prendre le RDV de restitution', 'Photos de l\'état du véhicule', 'Nettoyage / remise en état', 'Rendre les 2 jeux de clés', 'État des lieux signé', 'Récupérer le PV de restitution'] },
-    { key: 'sinistre', emo: '💥', titre: 'Gérer un sinistre', type: 'action', sous: ['Remplir le constat amiable', 'Photos des dégâts', 'Déclarer à l\'assureur', 'Prendre RDV carrosserie', 'Suivre la franchise', 'Récupérer le véhicule réparé'] }
+    { key: 'entree', emo: '🚗', titre: 'Entrée d\'un nouveau véhicule', type: 'action', eti: ['admin'], sous: ['Vérifier la carte grise', 'Souscrire l\'assurance', 'Poser le QR code dans le véhicule', 'Créer la fiche conducteur', 'Envoyer l\'e-mail de bienvenue', 'Faire l\'état des lieux de remise'] },
+    { key: 'sortie', emo: '👋', titre: 'Départ d\'un conducteur', type: 'action', eti: ['conducteur'], sous: ['Récupérer les clés', 'Récupérer la carte carburant + badge', 'État des lieux de restitution', 'Retirer l\'affectation du véhicule', 'Clôturer l\'accès'] },
+    { key: 'restit', emo: '🔙', titre: 'Restitution d\'un véhicule en leasing', type: 'rdv', eti: ['admin'], sous: ['Prendre le RDV de restitution', 'Photos de l\'état du véhicule', 'Nettoyage / remise en état', 'Rendre les 2 jeux de clés', 'État des lieux signé', 'Récupérer le PV de restitution'] },
+    { key: 'sinistre', emo: '💥', titre: 'Gérer un sinistre', type: 'action', eti: ['assurance'], sous: ['Remplir le constat amiable', 'Photos des dégâts', 'Déclarer à l\'assureur', 'Prendre RDV carrosserie', 'Suivre la franchise', 'Récupérer le véhicule réparé'] },
+    { key: 'pneus', emo: '🛞', titre: 'Changement de pneus', type: 'rdv', eti: ['garage'], sous: ['Vérifier l\'usure / la saison', 'Demander un devis', 'Valider le devis', 'Prendre le RDV', 'Déposer le véhicule', 'Récupérer le véhicule', 'Contrôler la facture'] },
+    { key: 'ct', emo: '🔧', titre: 'Contrôle technique', type: 'rdv', eti: ['garage'], sous: ['Prendre le RDV', 'Prévenir le conducteur', 'Déposer le véhicule', 'Récupérer le procès-verbal', 'Mettre à jour la date du prochain CT', 'Programmer la contre-visite si besoin'] },
+    { key: 'prepa', emo: '🧼', titre: 'Préparation d\'un véhicule', type: 'action', eti: ['garage'], sous: ['Nettoyage intérieur / extérieur', 'Vérifier les niveaux', 'Vérifier la pression des pneus', 'Contrôler les documents à bord', 'Poser le QR code', 'Photos avant remise'] },
+    { key: 'commande', emo: '📦', titre: 'Commande fournisseur', type: 'achat', eti: ['achat'], sous: ['Créer la demande d\'achat', 'Demander un devis', 'Comparer les devis', 'Valider le devis', 'Passer la commande', 'Réceptionner et contrôler', 'Contrôler la facture'] },
+    { key: 'reparation', emo: '🛠️', titre: 'Réparation au garage', type: 'rdv', eti: ['garage'], sous: ['Demander un devis', 'Valider le devis', 'Prendre le RDV', 'Suivre l\'immobilisation', 'Récupérer le véhicule', 'Contrôler la facture'] }
   ];
 
   function getTaches() { try { const t = FP.settings.get().taches; return Array.isArray(t) ? t : []; } catch { return []; } }
@@ -405,8 +432,10 @@
   // ---- Filtrage (source unique) : baseMatch = type + recherche ; filtered() ajoute le filtre statut.
   const condName = (t) => (t.conducteur || '').trim();
   const matchType = (t) => state.typeFiltre === 'all' || taskType(t) === state.typeFiltre;
+  const matchEti = (t) => state.etiquette === 'all' || taskEtiquettes(t).indexOf(state.etiquette) !== -1;
   function baseMatch(t) {
     if (!matchType(t)) return false;
+    if (!matchEti(t)) return false;
     const q = FP.norm(state.search).trim();
     if (q && !FP.norm(`${t.titre} ${vehLabel(t.vehiculeId)} ${condName(t)} ${t.lieu || ''} ${t.note || ''}`).includes(q)) return false;
     return true;
@@ -439,11 +468,15 @@
     const immat = ((data.vehicules || []).find(v => v.id === t.vehiculeId) || {}).immat || '';
     const vl = vehLabel(t.vehiculeId);
     const sp = sousProgress(t);
+    const st = taskStatut(t);
     let h = '';
+    if (st === 'doing') h += `<span class="fp-ech" style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe">🔧 En cours</span>`;
+    else if (st === 'attente') h += `<span class="fp-ech" style="background:#fffbeb;color:#b45309;border:1px solid #fde68a">⏸ En attente</span>`;
     if (e) h += `<span class="fp-ech ${e.cls}">${e.txt}${t.heure ? (' · ' + escapeHtml(t.heure)) : ''}</span>`;
     else if (t.heure) h += `<span class="fp-ech info">🕑 ${escapeHtml(t.heure)}</span>`;
     if (t.priorite === 'haute') h += `<span class="fp-ech danger">🔴 Prioritaire</span>`;
     if (sp) h += `<span class="fp-ech ${sp.d === sp.n ? 'ok' : 'info'}">☑ ${sp.d}/${sp.n}</span>`;
+    taskEtiquettes(t).forEach(k => { const e2 = ETI_BY[k]; h += `<span class="eti-pill" style="background:${e2.color}1a;color:${e2.color};border:1px solid ${e2.color}66">${escapeHtml(e2.label)}</span>`; });
     if (vl) h += `<a href="vehicules.html?immat=${encodeURIComponent(immat)}" class="text-xs font-semibold" style="color:var(--fp-accent);text-decoration:none">🚗 ${escapeHtml(vl)}</a>`;
     if (condName(t)) h += `<span class="text-xs font-semibold text-slate-500">👤 ${escapeHtml(condName(t))}</span>`;
     if (t.lieu) h += `<span class="text-xs text-slate-500">📍 ${escapeHtml(t.lieu)}</span>`;
@@ -462,6 +495,7 @@
     document.querySelectorAll('#filters-statut .filter-chip').forEach(c => c.classList.toggle('active', c.dataset.value === state.filtre));
     document.querySelectorAll('#filters-type .filter-chip').forEach(c => c.classList.toggle('active', c.dataset.type === state.typeFiltre));
     document.querySelectorAll('#view-switch .filter-chip').forEach(c => c.classList.toggle('active', c.dataset.view === state.view));
+    if ($('filters-etiquette') && $('filters-etiquette').value !== state.etiquette) $('filters-etiquette').value = state.etiquette;
 
     const isListe = state.view === 'liste', isKb = state.view === 'kanban', isCal = state.view === 'calendrier';
     $('taches-list').classList.toggle('hidden', !isListe);
@@ -506,8 +540,8 @@
     lucide.createIcons();
   }
 
-  // ---- Vue KANBAN (3 colonnes : À faire / En cours / Terminé) ----
-  const KB = [{ k: 'todo', lbl: 'À faire', emo: '📋' }, { k: 'doing', lbl: 'En cours', emo: '🔧' }, { k: 'done', lbl: 'Terminé', emo: '✅' }];
+  // ---- Vue KANBAN (4 colonnes : À faire / En cours / En attente / Terminé) ----
+  const KB = [{ k: 'todo', lbl: 'À faire', emo: '📋' }, { k: 'doing', lbl: 'En cours', emo: '🔧' }, { k: 'attente', lbl: 'En attente', emo: '⏸' }, { k: 'done', lbl: 'Terminé', emo: '✅' }];
   function kanbanCard(t) {
     const ty = taskType(t), st = taskStatut(t), idx = KB.findIndex(c => c.k === st);
     const left = idx > 0 ? `<button class="ta-icon-btn" data-move="${escapeHtml(t.id)}" data-to="${KB[idx - 1].k}" title="→ ${KB[idx - 1].lbl}">◀</button>` : '';
@@ -525,7 +559,7 @@
     $('empty').classList.add('hidden');
     const rows = getTaches().filter(baseMatch);
     const box = $('taches-kanban');
-    box.className = 'grid grid-cols-1 md:grid-cols-3 gap-4';
+    box.className = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4';
     box.innerHTML = KB.map(col => {
       const items = sortTasks(rows.filter(t => taskStatut(t) === col.k));
       const cards = items.length ? items.map(kanbanCard).join('') : '<p class="text-xs text-slate-400 py-1">Rien ici</p>';
@@ -592,22 +626,36 @@
     lucide.createIcons();
   }
   function addSous(txt) { txt = (txt || '').trim(); if (!txt) return; editSous.push({ txt, done: false }); renderEditSous(); }
+  // Étiquettes du modal : puces à activer/désactiver.
+  function renderEtiquettes() {
+    $('t-etiquettes').innerHTML = ETIQUETTES.map(e => {
+      const on = editEtiquettes.indexOf(e.key) !== -1;
+      const style = on ? `background:${e.color}1a;color:${e.color};border-color:${e.color}` : '';
+      return `<button type="button" class="eti-toggle" data-eti="${e.key}" style="${style}"><span class="dot" style="background:${e.color}"></span>${escapeHtml(e.label)}</button>`;
+    }).join('');
+  }
+  function toggleEtiquette(key) {
+    const i = editEtiquettes.indexOf(key);
+    if (i === -1) editEtiquettes.push(key); else editEtiquettes.splice(i, 1);
+    renderEtiquettes();
+  }
 
   function openNew(preset) {
-    editingId = null; editSous = [];
+    editingId = null; editSous = []; editEtiquettes = [];
     $('task-title').textContent = 'Nouvelle tâche';
     $('form-task').reset();
     fillVehSelect($('t-vehicule'), '');
     setType((preset && preset.type) || 'rdv');
     if (preset && preset.echeance) $('t-echeance').value = preset.echeance;
     $('t-notify').checked = true;
-    renderEditSous();
+    renderEditSous(); renderEtiquettes();
     $('modal-task').classList.add('open');
     setTimeout(() => $('t-titre').focus(), 50);
   }
   function openEdit(id) {
     const t = getTaches().find(x => x.id === id); if (!t) return;
     editingId = id; editSous = Array.isArray(t.sousTaches) ? t.sousTaches.map(s => ({ txt: s.txt, done: !!s.done })) : [];
+    editEtiquettes = taskEtiquettes(t).slice();
     $('task-title').textContent = 'Modifier la tâche';
     $('form-task').reset();
     fillVehSelect($('t-vehicule'), t.vehiculeId || '');
@@ -619,7 +667,7 @@
     $('t-conducteur').value = t.conducteur || '';
     $('t-priorite').value = t.priorite || 'normale';
     $('t-note').value = t.note || '';
-    renderEditSous();
+    renderEditSous(); renderEtiquettes();
     $('modal-task').classList.add('open');
   }
   function closeModal() { editingId = null; $('modal-task').classList.remove('open'); }
@@ -639,6 +687,7 @@
       conducteur: $('t-conducteur').value.trim(),
       priorite: $('t-priorite').value || 'normale',
       note: $('t-note').value.trim(),
+      etiquettes: editEtiquettes.slice(),
       sousTaches: editSous.map(s => ({ txt: s.txt, done: !!s.done }))
     };
     let saved;
@@ -788,7 +837,8 @@
     openNew({ type: m.type });
     $('t-titre').value = m.titre;
     editSous = m.sous.map(txt => ({ txt, done: false }));
-    renderEditSous();
+    editEtiquettes = Array.isArray(m.eti) ? m.eti.filter(k => ETI_BY[k]) : [];
+    renderEditSous(); renderEtiquettes();
   }
 
   // ================= WIRING =================
@@ -817,6 +867,13 @@
   document.querySelectorAll('#view-switch .filter-chip').forEach(c => c.addEventListener('click', () => { state.view = c.dataset.view; try { localStorage.setItem('fp_taches_view', state.view); } catch (e) {} render(); }));
   document.querySelectorAll('#filters-statut .filter-chip').forEach(c => c.addEventListener('click', () => { state.filtre = c.dataset.value; render(); }));
   document.querySelectorAll('#filters-type .filter-chip').forEach(c => c.addEventListener('click', () => { state.typeFiltre = c.dataset.type; render(); }));
+  // Filtre par étiquette (menu déroulant).
+  if ($('filters-etiquette')) {
+    $('filters-etiquette').innerHTML = '<option value="all">🏷️ Toutes les étiquettes</option>' + ETIQUETTES.map(e => `<option value="${e.key}">${escapeHtml(e.label)}</option>`).join('');
+    $('filters-etiquette').addEventListener('change', e => { state.etiquette = e.target.value || 'all'; render(); });
+  }
+  // Choix des étiquettes dans le modal.
+  $('t-etiquettes').addEventListener('click', e => { const b = e.target.closest('[data-eti]'); if (b) toggleEtiquette(b.getAttribute('data-eti')); });
   // Les 3 bulles KPI (À faire / En retard / Terminées) → basculent en Liste et filtrent.
   [['kpi-todo', 'actives'], ['kpi-late', 'retard'], ['kpi-done', 'faites']].forEach(([id, f]) => {
     const el = document.getElementById(id), card = el && el.closest('.kpi');
@@ -831,8 +888,9 @@
   });
   // Bouton « Réinitialiser » de la barre de filtres.
   if (FP.filterResetButton) FP.filterResetButton($('tache-filterbar'), { onReset: () => {
-    state.filtre = 'actives'; state.typeFiltre = 'all'; state.search = '';
+    state.filtre = 'actives'; state.typeFiltre = 'all'; state.etiquette = 'all'; state.search = '';
     if ($('search')) $('search').value = '';
+    if ($('filters-etiquette')) $('filters-etiquette').value = 'all';
     render();
   } });
 
