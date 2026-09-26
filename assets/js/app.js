@@ -3859,9 +3859,9 @@ FP.MAIL_DEFAUT = {
   relance_en: `Hello {prenom},\n\nJust a gentle reminder 😊\nThe fine is still pending. A small action on your side and it's all sorted!\n\nThank you so much 🙏`,
   // ===== Autres e-mails (tous ÉDITABLES dans Paramètres → E-mails). La mise en page (logo, plaque,
   // bouton) reste fixe ; SEUL le message ci-dessous est modifiable. Balises entre {…}. =====
-  bienvenue: `Bonjour {prenom},\n\nBienvenue à bord ! Le véhicule {plaque} dispose d'un QR code collé à l'intérieur. En le scannant (ou via le bouton ci-dessous), tu accèdes à ton espace véhicule en quelques secondes :\n• 📸 Envoi du kilométrage\n• 📄 Documents (carte grise, assurance, assistance)\n• 🚨 Signalement d'un problème ou d'un accident\n• 📋 État des lieux (photos)\n\nÀ garder sous la main. Bonne route ! 🙌`,
+  bienvenue: `Bonjour {prenom},\n\nBienvenue à bord ! 🚗 Ta voiture {plaque} t'attend, et elle a un petit secret : un QR code collé à l'intérieur.\n\nScanne-le (ou clique sur le bouton juste en dessous) et tu as tout sous la main en 10 secondes :\n• 📸 Envoyer ton kilométrage\n• 📄 Retrouver tes documents (carte grise, assurance, assistance)\n• 🚨 Signaler un souci ou un accident\n• 📋 Faire l'état des lieux en photos\n\nGarde-le précieusement… et bonne route ! 🙌`,
   relevekm: `Bonjour {prenom},\n\nMerci d'indiquer le kilométrage actuel de ton véhicule {immat}. C'est rapide : un clic, un nombre, terminé.`,
-  rappelgarage: `Bonjour {prenom},\n\nPetit rappel : ton rendez-vous {motif} pour le véhicule {immat} est prévu demain. Pense à t'organiser !`,
+  rappelgarage: `Bonjour {prenom},\n\nPetit rappel : {motif} pour le véhicule {immat}, c'est prévu demain ! Pense à t'organiser 😉`,
   invitation: `Bonjour,\n\nUn accès à Parc Pilot (ta plateforme de gestion de flotte) vient d'être créé pour toi. Clique ci-dessous pour choisir ton mot de passe et te connecter.\n\nTon identifiant : {email}`,
 };
 // Remplissage GÉNÉRIQUE des balises d'un modèle e-mail ({prenom} = 1er mot ; {plaque}/{immat}/{motif}/
@@ -3870,12 +3870,19 @@ FP.fillTags = function (tpl, o) {
   o = o || {};
   let s = String(tpl == null ? '' : tpl);
   const first = String(o.prenom || '').trim().split(/\s+/)[0] || '';
-  s = s.replace(/ ?\{prenom\}/gi, first ? ' ' + first : '');
-  ['plaque', 'immat', 'motif', 'date', 'email'].forEach(k => {
-    const v = String(o[k] == null ? '' : o[k]).trim();
-    s = s.replace(new RegExp(' ?\\{' + k + '\\}', 'gi'), v ? ' ' + v : '');
+  const map = { prenom: first, plaque: o.plaque, immat: o.immat, motif: o.motif, date: o.date, email: o.email };
+  Object.keys(map).forEach(k => {
+    const v = String(map[k] == null ? '' : map[k]).trim();
+    s = s.replace(new RegExp('\\{' + k + '\\}', 'gi'), v);   // remplacement DIRECT (pas d'espace ajouté)
   });
-  return s.replace(/\n{3,}/g, '\n\n').trim();
+  // Nettoyage : parenthèses vides, doubles espaces, espace avant . , ) ] (PAS avant : ; ! ? — le
+  // français garde l'espace), espaces/ lignes en trop.
+  return s.replace(/\(\s*\)/g, '')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/ +([)\].,])/g, '$1')
+    .replace(/[ \t]+$/gm, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 };
 // Modèle e-mail ACTIF : texte personnalisé de la société (profil[profilKey]) sinon défaut (MAIL_DEFAUT[defKey]).
 FP.mailModeleProfil = function (profilKey, defKey) {
@@ -4121,6 +4128,10 @@ FP._MODELES_AMENDE_OBSOLETES = {
   ],
   mailModeleRelance_en: [
     "Hello {prenom},\n\nJust a quick reminder about the fine below.\nThank you.",
+  ],
+  // Ancien modèle « signature état des lieux » en VOUVOIEMENT → remplacé par la version tutoyée.
+  mailModeleSignature: [
+    "Bonjour {prenom},\n\nDernière étape avant de rouler ! 🚀 Signez l'état des lieux de votre {modele} ({immat}) en quelques secondes, directement depuis ce mail.",
   ],
 };
 FP.migrerModelesAmendeObsoletes = function () {
@@ -11253,7 +11264,7 @@ FP.edl = {
             let logoSrc = '';
             try { logoSrc = (FP.hostSocieteLogo ? await FP.hostSocieteLogo() : '') || prof.logoUrl || ''; } catch (e) { logoSrc = prof.logoUrl || ''; }
             let tpl = (prof.mailModeleSignature || '').trim();
-            if (!tpl) tpl = 'Bonjour {prenom},\n\nDernière étape avant de rouler ! 🚀 Signez l\'état des lieux de votre {modele} ({immat}) en quelques secondes, directement depuis ce mail.';
+            if (!tpl) tpl = 'Bonjour {prenom},\n\nDernière étape avant de rouler ! 🚀 Signe l\'état des lieux de ta {modele} ({immat}) en quelques secondes, directement depuis ce mail.';
             // SOURCE UNIQUE du rendu de l'e-mail de signature (le MÊME modèle est stocké pour CHAQUE
             // signataire → l'app envoie le 1er, le serveur relaie le suivant sans dupliquer le template).
             const renderMail = (s) => {
@@ -14421,7 +14432,7 @@ FP.sendMailTest = async function (key, to) {
   //    contrôle technique…), PAS seulement le CT. `motif` = libellé humain de l'intervention.
   FP.registerMail({
     key: 'rappel-entretien', label: 'Rappel rendez-vous garage (la veille)', group: 'Kilométrage',
-    sample: () => ({ prenom: 'Alex', immat: 'AA-123-AA', motif: 'Rendez-vous garage', link: '#' }),
+    sample: () => ({ prenom: 'Alex', immat: 'AA-123-AA', motif: 'Révision', link: '#' }),
     build: (d) => { const t = tpl('mailModeleRappelGarage', 'rappelgarage', { prenom: d.prenom, immat: d.immat, motif: d.motif }); return {
       subject: 'Rappel : ' + String(d.motif).toLowerCase() + ' demain' + (d.immat ? ' (' + d.immat + ')' : ''),
       html: FP.mailShell({ brand: d.nomSoc, logoUrl: d.logoUrl, title: esc(d.motif) + ' demain', bodyHtml: bodyText(t) }),

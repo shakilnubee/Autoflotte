@@ -146,16 +146,16 @@ function mailHead(nomSoc: string, logoUrl: string): string {
 function fillTags(tpl: string, o: Record<string, unknown>): string {
   let s = String(tpl == null ? "" : tpl);
   const first = String(o.prenom || "").trim().split(/\s+/)[0] || "";
-  s = s.replace(/ ?\{prenom\}/gi, first ? " " + first : "");
-  ["immat", "motif", "date"].forEach((k) => {
-    const v = String(o[k] == null ? "" : o[k]).trim();
-    s = s.replace(new RegExp(" ?\\{" + k + "\\}", "gi"), v ? " " + v : "");
+  const map: Record<string, unknown> = { prenom: first, immat: o.immat, motif: o.motif, date: o.date };
+  Object.keys(map).forEach((k) => {
+    const v = String(map[k] == null ? "" : map[k]).trim();
+    s = s.replace(new RegExp("\\{" + k + "\\}", "gi"), v);
   });
-  return s.replace(/\n{3,}/g, "\n\n").trim();
+  return s.replace(/\(\s*\)/g, "").replace(/[ \t]{2,}/g, " ").replace(/ +([)\].,])/g, "$1").replace(/[ \t]+$/gm, "").replace(/\n{3,}/g, "\n\n").trim();
 }
 function bodyText(t: string): string { return '<div style="white-space:pre-wrap;line-height:1.55">' + esc(t).replace(/\n/g, "<br>") + "</div>"; }
 const DEF_RELEVEKM = "Bonjour {prenom},\n\nMerci d'indiquer le kilométrage actuel de ton véhicule {immat}. C'est rapide : un clic, un nombre, terminé.";
-const DEF_RAPPELGARAGE = "Bonjour {prenom},\n\nPetit rappel : ton rendez-vous {motif} pour le véhicule {immat} est prévu demain. Pense à t'organiser !";
+const DEF_RAPPELGARAGE = "Bonjour {prenom},\n\nPetit rappel : {motif} pour le véhicule {immat}, c'est prévu demain ! Pense à t'organiser 😉";
 
 function buildMail(opts: { prenom: string; immat: string; marque: string; link: string; nomSoc: string; logoUrl: string; relance: boolean; modele?: string }) {
   const { prenom, immat, marque, link, nomSoc, logoUrl, relance } = opts;
