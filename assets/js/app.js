@@ -5922,8 +5922,12 @@ FP.buildJisMenu = () => {
     const grp = document.createElement('div');
     grp.className = 'fp-jis-group';
     grp.style.order = '3';
+    // ⚠️ PAS de target="_blank" : en PWA (iPhone « ajouté à l'accueil »), un lien _blank s'ouvre
+    // DANS UNE VUE SAFARI par-dessus l'appli → le geste « glisser pour revenir » ferme cette vue
+    // et ramène au tableau de bord au lieu de faire un vrai retour. On ouvre donc les pages JIS
+    // DANS l'appli (même contexte) → retour/glisser natif fonctionne, et le bouton « Retour » aussi.
     const subLinks = FP.JIS_PAGES.map(p =>
-      `<a href="${pfx}${p.file}" target="_blank" rel="noopener" class="fp-jis-link${cur === p.file ? ' active' : ''}" style="padding-left:2.4rem;font-size:.86rem"><i data-lucide="${p.icon}"></i> ${FP.esc ? FP.esc(p.label) : p.label}</a>`
+      `<a href="${pfx}${p.file}" class="fp-jis-link${cur === p.file ? ' active' : ''}" style="padding-left:2.4rem;font-size:.86rem"><i data-lucide="${p.icon}"></i> ${FP.esc ? FP.esc(p.label) : p.label}</a>`
     ).join('');
     grp.innerHTML =
       `<a href="#" class="fp-jis-toggle" style="display:flex;align-items:center;gap:.55rem" title="Espace privé JIS (CEO)">`
