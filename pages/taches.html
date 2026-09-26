@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260926i">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260926j">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260926i"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260926j"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260926i">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260926j">
 <style>
   .field-label { font-size: .78rem; font-weight: 600; color: var(--fp-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .35rem; }
   .field-input { width: 100%; padding: .6rem .8rem; border: 1px solid var(--fp-border); border-radius: .55rem; font-size: .9rem; background: white; }
@@ -322,8 +322,8 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260926i"></script>
-<script src="../assets/js/supabase-client.js?v=20260926i"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260926j"></script>
+<script src="../assets/js/supabase-client.js?v=20260926j"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -339,10 +339,10 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260926i"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260926j"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
-<script src="../assets/js/app.min.js?v=20260926i"></script>
+<script src="../assets/js/app.min.js?v=20260926j"></script>
 <script>
   lucide.createIcons();
   const $ = (id) => document.getElementById(id);
@@ -485,6 +485,7 @@
         ${t.note ? `<div class="text-sm text-slate-500 mt-1 whitespace-pre-line">${escapeHtml(t.note)}</div>` : ''}
       </div>
       <div class="flex flex-shrink-0 gap-1">
+        ${t.echeance ? `<button class="ta-icon-btn" data-ics="${escapeHtml(t.id)}" title="Ajouter à mon agenda (Google / Apple / Outlook)"><i data-lucide="calendar-plus" class="w-4 h-4"></i></button>` : ''}
         <button class="ta-icon-btn" data-notify="${escapeHtml(t.id)}" title="Envoyer par SMS / WhatsApp / e-mail" style="color:var(--fp-accent)"><i data-lucide="send" class="w-4 h-4"></i></button>
         <button class="ta-icon-btn" data-edit="${escapeHtml(t.id)}" title="Modifier"><i data-lucide="pencil" class="w-4 h-4"></i></button>
         <button class="ta-icon-btn" data-del="${escapeHtml(t.id)}" title="Supprimer"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
@@ -511,7 +512,7 @@
         <div class="task-title" style="font-size:.88rem">${T_EMO[ty]} ${escapeHtml(t.titre)}</div>
         <div class="flex items-center gap-2 flex-wrap mt-1">${badges(t)}</div>
       </div>
-      <div class="flex flex-shrink-0 gap-1">${left}${right}<button class="ta-icon-btn" data-notify="${escapeHtml(t.id)}" title="Envoyer par SMS / WhatsApp / e-mail" style="color:var(--fp-accent)"><i data-lucide="send" class="w-4 h-4"></i></button></div>
+      <div class="flex flex-shrink-0 gap-1">${left}${right}${t.echeance ? `<button class="ta-icon-btn" data-ics="${escapeHtml(t.id)}" title="Ajouter à mon agenda"><i data-lucide="calendar-plus" class="w-4 h-4"></i></button>` : ''}<button class="ta-icon-btn" data-notify="${escapeHtml(t.id)}" title="Envoyer par SMS / WhatsApp / e-mail" style="color:var(--fp-accent)"><i data-lucide="send" class="w-4 h-4"></i></button></div>
     </div>`;
   }
   function renderKanban() {
@@ -661,6 +662,27 @@
     const t = getTaches().find(x => x.id === id); if (!t) return;
     notifyFromTask(t, { force: true });
   }
+  // Construit l'événement calendrier (.ics) d'une tâche datée.
+  function taskIcsEv(t) {
+    const veh = (data.vehicules || []).find(v => v.id === t.vehiculeId);
+    const immat = veh ? veh.immat : '';
+    const marque = veh ? ((veh.marque || '') + ' ' + (veh.modele || '')).trim() : '';
+    const desc = [];
+    if (immat) desc.push('Véhicule : ' + immat + (marque ? (' (' + marque + ')') : ''));
+    if (condName(t)) desc.push('Conducteur : ' + condName(t));
+    if (t.note) desc.push(t.note);
+    return {
+      uid: 'tache-' + t.id,
+      title: (t.titre || 'Rendez-vous') + (immat ? (' · ' + immat) : ''),
+      date: t.echeance, heure: t.heure || '', location: t.lieu || '',
+      description: desc.join('\n')
+    };
+  }
+  // Bouton « Ajouter à mon agenda » : télécharge le .ics (Google / Apple / Outlook l'importent).
+  function addToCalendar(id) {
+    const t = getTaches().find(x => x.id === id); if (!t || !t.echeance || !FP.ics) return;
+    FP.ics.download(taskIcsEv(t), (t.titre || 'rendez-vous').replace(/[^\w-]+/g, '-').toLowerCase() + '.ics');
+  }
   // Ouvre le sélecteur d'envoi (SMS / WhatsApp / e-mail) pré-rempli avec le message de la tâche.
   // RDV → annonce (date + motif) ; autres types → message simple. Message éditable avant envoi.
   function notifyFromTask(t, opts) {
@@ -687,9 +709,21 @@
       }
       let logo = ''; try { const lu = (FP.settings.get().profil || {}).logoUrl; if (/^https?:\/\//.test(String(lu || ''))) logo = String(lu); } catch (_) {}
       let soc = ''; try { soc = (FP.settings.get().societe && FP.settings.get().societe.nom) || ''; } catch (_) {}
-      const html = FP.mailShell ? FP.mailShell({ brand: soc, logoUrl: logo, title: titre, bodyHtml: '<div style="white-space:pre-wrap;line-height:1.55">' + FP.esc(msg).replace(/\n/g, '<br>') + '</div>' }) : '';
-      let reply = ''; try { reply = ((FP.societeProfil ? FP.societeProfil() : {}) || {}).mailExpediteur || ''; } catch (_) {}
-      FP.msg.open({ phone: c.tel || '', email: c.email || '', nom: prenom, title: 'Envoyer', text: msg, emailSubject: titre + (dateFr ? (' le ' + dateFr) : '') + (immat ? (' (' + immat + ')') : ''), emailHtml: html, emailOpts: reply ? { replyTo: reply } : {} });
+      // Tâche datée → on joint un fichier agenda (.ics) : le client mail propose « Ajouter au calendrier ».
+      const emailOpts = {};
+      let noteAgenda = '';
+      try { let reply = ((FP.societeProfil ? FP.societeProfil() : {}) || {}).mailExpediteur || ''; if (reply) emailOpts.replyTo = reply; } catch (_) {}
+      if (t.echeance && FP.ics) {
+        try {
+          const b64 = FP.ics.b64(taskIcsEv(t));
+          if (b64) {
+            emailOpts.attachments = [{ filename: 'rendez-vous.ics', content: b64, content_type: 'text/calendar' }];
+            noteAgenda = '<div style="margin-top:14px;font-size:13px;color:#64748b">📅 Un fichier agenda est joint à cet e-mail : ouvre-le pour ajouter ce rendez-vous à ton calendrier (Google, Apple ou Outlook).</div>';
+          }
+        } catch (_) {}
+      }
+      const html = FP.mailShell ? FP.mailShell({ brand: soc, logoUrl: logo, title: titre, bodyHtml: '<div style="white-space:pre-wrap;line-height:1.55">' + FP.esc(msg).replace(/\n/g, '<br>') + '</div>' + noteAgenda }) : '';
+      FP.msg.open({ phone: c.tel || '', email: c.email || '', nom: prenom, title: 'Envoyer', text: msg, emailSubject: titre + (dateFr ? (' le ' + dateFr) : '') + (immat ? (' (' + immat + ')') : ''), emailHtml: html, emailOpts: emailOpts });
     } catch (_) {}
   }
 
@@ -797,6 +831,7 @@
   } });
 
   $('taches-list').addEventListener('click', e => {
+    const ic = e.target.closest('[data-ics]'); if (ic) { addToCalendar(ic.dataset.ics); return; }
     const nt = e.target.closest('[data-notify]'); if (nt) { notifyTaskById(nt.dataset.notify); return; }
     const tg = e.target.closest('[data-toggle]'); if (tg) { toggleTask(tg.dataset.toggle); return; }
     const ed = e.target.closest('[data-edit]'); if (ed) { openEdit(ed.dataset.edit); return; }
@@ -806,6 +841,7 @@
     const s = e.target.closest('[data-sous]'); if (s) toggleSous(s.getAttribute('data-sous'), +s.getAttribute('data-i'), s.checked);
   });
   $('taches-kanban').addEventListener('click', e => {
+    const ic = e.target.closest('[data-ics]'); if (ic) { e.stopPropagation(); addToCalendar(ic.getAttribute('data-ics')); return; }
     const nt = e.target.closest('[data-notify]'); if (nt) { e.stopPropagation(); notifyTaskById(nt.getAttribute('data-notify')); return; }
     const mv = e.target.closest('[data-move]'); if (mv) { e.stopPropagation(); moveTask(mv.getAttribute('data-move'), mv.getAttribute('data-to')); return; }
     const ec = e.target.closest('[data-edit-card]'); if (ec) { openEdit(ec.getAttribute('data-edit-card')); return; }
