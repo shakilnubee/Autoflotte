@@ -3865,7 +3865,7 @@ FP.MAIL_DEFAUT = {
   rdvgarage: `Bonjour {prenom},\n\nUn rendez-vous {motif} est prévu pour le véhicule {immat} le {date}. 🗓️\nPense à t'organiser en conséquence 😉\n\nTu recevras un petit rappel la veille.`,
   // Rappel automatique la VEILLE (reprend les infos du rendez-vous).
   rappelgarage: `Bonjour {prenom},\n\nPetit rappel : {motif} pour le véhicule {immat}, c'est prévu demain ! Pense à t'organiser 😉`,
-  invitation: `Bonjour,\n\nUn accès à Parc Pilot (ta plateforme de gestion de flotte) vient d'être créé pour toi. Clique ci-dessous pour choisir ton mot de passe et te connecter.\n\nTon identifiant : {email}`,
+  invitation: `Bonjour,\n\nBienvenue sur Parc Pilot ! 🎉 Ton accès à la plateforme de gestion de flotte est prêt.\n\nChoisis ton mot de passe en un clic (bouton juste en dessous) et tu pourras te connecter tout de suite. Tout est réuni au même endroit, simple et rapide.\n\nTon identifiant : {email}\n\nÀ très vite ! 🚗`,
 };
 // Remplissage GÉNÉRIQUE des balises d'un modèle e-mail ({prenom} = 1er mot ; {plaque}/{immat}/{motif}/
 // {date}/{email}). Une balise vide disparaît proprement (avec son espace). Source unique côté site + repli.

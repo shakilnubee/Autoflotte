@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260926f">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260926g">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260926f"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260926g"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260926f">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260926g">
 <style>
   .field-label { font-size: .78rem; font-weight: 600; color: var(--fp-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .35rem; }
   .field-input { width: 100%; padding: .6rem .8rem; border: 1px solid var(--fp-border); border-radius: .55rem; font-size: .9rem; background: white; }
@@ -272,7 +272,7 @@
       </div>
       <label class="flex items-center gap-2 text-sm" id="t-notify-wrap" style="cursor:pointer">
         <input type="checkbox" id="t-notify" class="task-check" checked>
-        <span>Prévenir le conducteur (e-mail / SMS / WhatsApp) à l'enregistrement</span>
+        <span>Prévenir le conducteur maintenant (e-mail / SMS / WhatsApp). <b>Le rappel de la veille partira tout seul</b> si un véhicule est choisi.</span>
       </label>
       <div class="flex gap-2 pt-2">
         <button type="button" class="btn btn-outline flex-1 justify-center" id="task-cancel">Annuler</button>
@@ -322,8 +322,8 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260926f"></script>
-<script src="../assets/js/supabase-client.js?v=20260926f"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260926g"></script>
+<script src="../assets/js/supabase-client.js?v=20260926g"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -339,10 +339,10 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260926f"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260926g"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
-<script src="../assets/js/app.min.js?v=20260926f"></script>
+<script src="../assets/js/app.min.js?v=20260926g"></script>
 <script>
   lucide.createIcons();
   const $ = (id) => document.getElementById(id);
@@ -645,7 +645,15 @@
     const notify = ty === 'rdv' && $('t-notify') && $('t-notify').checked;
     saveTaches(arr); closeModal(); render();
     if (FP.toast) FP.toast('Tâche enregistrée');
-    // RDV : proposer de PRÉVENIR le conducteur (annonce avec date + motif) — même flux que la fiche véhicule.
+    // RDV avec véhicule + date → on l'enregistre comme RENDEZ-VOUS GARAGE (source unique
+    // FP.rdvGarage / settings.vehRdvGarage). Le RAPPEL AUTOMATIQUE LA VEILLE (edge km-relance,
+    // déjà en place) reprend alors tout seul ce 1er RDV (motif = intitulé, date = échéance) et
+    // l'envoie au conducteur du véhicule + gestionnaire en copie. Idem fiche véhicule (même mécanisme).
+    if (ty === 'rdv' && saved && saved.vehiculeId && saved.echeance && FP.rdvGarage) {
+      try { FP.rdvGarage.set(saved.vehiculeId, saved.echeance, titre); } catch (_) {}
+    }
+    // RDV : proposer de PRÉVENIR le conducteur maintenant (annonce avec date + motif) — le rappel
+    // de la veille, lui, partira automatiquement (voir ci-dessus).
     if (notify && saved) notifyFromTask(saved);
   }
   // Envoi manuel depuis le bouton ✈️ d'une tâche : ouvre le sélecteur SMS / WhatsApp / e-mail.
@@ -685,16 +693,28 @@
     } catch (_) {}
   }
 
+  // Retire le RENDEZ-VOUS GARAGE (donc le rappel auto la veille) quand un RDV est fait/supprimé,
+  // mais UNIQUEMENT s'il correspond bien à cette tâche (même véhicule + même date) — on ne touche
+  // pas à un RDV saisi ailleurs (fiche véhicule) pour un autre motif/date.
+  function clearRdvIfMatch(t) {
+    try {
+      if (!(t && taskType(t) === 'rdv' && t.vehiculeId && t.echeance && FP.rdvGarage)) return;
+      const cur = FP.rdvGarage.get(t.vehiculeId);
+      if (cur && String(cur.date).slice(0, 10) === String(t.echeance).slice(0, 10)) FP.rdvGarage.set(t.vehiculeId, '');
+    } catch (_) {}
+  }
   function toggleTask(id) {
     const arr = getTaches(); const t = arr.find(x => x.id === id); if (!t) return;
     const now = !isDone(t);
     t.fait = now; t.statut = now ? 'done' : 'todo'; t.faitLe = now ? todayIso() : null;
+    if (now) clearRdvIfMatch(t);
     saveTaches(arr); render();
     if (now && FP.celebrate) FP.celebrate();
   }
   function moveTask(id, to) {
     const arr = getTaches(); const t = arr.find(x => x.id === id); if (!t) return;
     t.statut = to; t.fait = (to === 'done'); t.faitLe = (to === 'done') ? todayIso() : null;
+    if (to === 'done') clearRdvIfMatch(t);
     saveTaches(arr); render();
     if (to === 'done' && FP.celebrate) FP.celebrate();
   }
@@ -705,6 +725,7 @@
   }
   async function delTask(id) {
     if (!await FP.confirm('Supprimer cette tâche ?')) return;
+    const t = getTaches().find(x => x.id === id); if (t) clearRdvIfMatch(t);
     saveTaches(getTaches().filter(x => x.id !== id)); render();
   }
 
