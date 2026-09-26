@@ -485,6 +485,7 @@
         ${t.note ? `<div class="text-sm text-slate-500 mt-1 whitespace-pre-line">${escapeHtml(t.note)}</div>` : ''}
       </div>
       <div class="flex flex-shrink-0 gap-1">
+        <button class="ta-icon-btn" data-notify="${escapeHtml(t.id)}" title="Envoyer par SMS / WhatsApp / e-mail" style="color:var(--fp-accent)"><i data-lucide="send" class="w-4 h-4"></i></button>
         <button class="ta-icon-btn" data-edit="${escapeHtml(t.id)}" title="Modifier"><i data-lucide="pencil" class="w-4 h-4"></i></button>
         <button class="ta-icon-btn" data-del="${escapeHtml(t.id)}" title="Supprimer"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
       </div>
@@ -510,7 +511,7 @@
         <div class="task-title" style="font-size:.88rem">${T_EMO[ty]} ${escapeHtml(t.titre)}</div>
         <div class="flex items-center gap-2 flex-wrap mt-1">${badges(t)}</div>
       </div>
-      <div class="flex flex-shrink-0 gap-1">${left}${right}</div>
+      <div class="flex flex-shrink-0 gap-1">${left}${right}<button class="ta-icon-btn" data-notify="${escapeHtml(t.id)}" title="Envoyer par SMS / WhatsApp / e-mail" style="color:var(--fp-accent)"><i data-lucide="send" class="w-4 h-4"></i></button></div>
     </div>`;
   }
   function renderKanban() {
@@ -645,27 +646,42 @@
     saveTaches(arr); closeModal(); render();
     if (FP.toast) FP.toast('Tâche enregistrée');
     // RDV : proposer de PRÉVENIR le conducteur (annonce avec date + motif) — même flux que la fiche véhicule.
-    if (notify && saved) maybeNotify(saved);
+    if (notify && saved) notifyFromTask(saved);
   }
-  // Ouvre le sélecteur d'envoi (SMS / WhatsApp / e-mail) pré-rempli avec l'annonce du rendez-vous.
-  function maybeNotify(t) {
+  // Envoi manuel depuis le bouton ✈️ d'une tâche : ouvre le sélecteur SMS / WhatsApp / e-mail.
+  function notifyTaskById(id) {
+    const t = getTaches().find(x => x.id === id); if (!t) return;
+    notifyFromTask(t, { force: true });
+  }
+  // Ouvre le sélecteur d'envoi (SMS / WhatsApp / e-mail) pré-rempli avec le message de la tâche.
+  // RDV → annonce (date + motif) ; autres types → message simple. Message éditable avant envoi.
+  function notifyFromTask(t, opts) {
     try {
-      if (!(FP.msg && FP.mailModeleProfil && FP.fillTags)) return;
+      if (!FP.msg) return;
+      opts = opts || {};
       const nom = (t.conducteur || '').trim();
       const veh = (data.vehicules || []).find(v => v.id === t.vehiculeId);
       const immat = veh ? veh.immat : '';
-      if (!nom && !immat) return;
+      if (!opts.force && !nom && !immat) return; // envoi auto : rien à personnaliser
       const c = (nom && FP.conducteurContact) ? (FP.conducteurContact(nom) || {}) : {};
       const prenom = nom.split(/\s+/)[0] || '';
-      const motif = t.titre || 'Rendez-vous';
+      const titre = t.titre || 'Information';
       const dateFr = t.echeance ? (FP.date ? FP.date(t.echeance) : t.echeance) : '';
       const dateTxt = dateFr + (t.heure ? (' à ' + t.heure) : '');
-      const msg = FP.fillTags(FP.mailModeleProfil('mailModeleRdvGarage', 'rdvgarage'), { prenom, immat, motif, date: dateTxt });
+      let msg;
+      if (taskType(t) === 'rdv' && FP.mailModeleProfil && FP.fillTags) {
+        msg = FP.fillTags(FP.mailModeleProfil('mailModeleRdvGarage', 'rdvgarage'), { prenom, immat, motif: titre, date: dateTxt });
+      } else {
+        msg = 'Bonjour' + (prenom ? (' ' + prenom) : '') + ',\n\n' + titre
+          + (immat ? ('\nVéhicule : ' + immat) : '')
+          + (dateTxt ? ('\nDate : ' + dateTxt) : '')
+          + (t.lieu ? ('\nLieu : ' + t.lieu) : '');
+      }
       let logo = ''; try { const lu = (FP.settings.get().profil || {}).logoUrl; if (/^https?:\/\//.test(String(lu || ''))) logo = String(lu); } catch (_) {}
       let soc = ''; try { soc = (FP.settings.get().societe && FP.settings.get().societe.nom) || ''; } catch (_) {}
-      const html = FP.mailShell ? FP.mailShell({ brand: soc, logoUrl: logo, title: motif, bodyHtml: '<div style="white-space:pre-wrap;line-height:1.55">' + FP.esc(msg).replace(/\n/g, '<br>') + '</div>' }) : '';
+      const html = FP.mailShell ? FP.mailShell({ brand: soc, logoUrl: logo, title: titre, bodyHtml: '<div style="white-space:pre-wrap;line-height:1.55">' + FP.esc(msg).replace(/\n/g, '<br>') + '</div>' }) : '';
       let reply = ''; try { reply = ((FP.societeProfil ? FP.societeProfil() : {}) || {}).mailExpediteur || ''; } catch (_) {}
-      FP.msg.open({ phone: c.tel || '', email: c.email || '', nom: prenom, title: 'Prévenir du rendez-vous', text: msg, emailSubject: motif + (dateFr ? (' le ' + dateFr) : '') + (immat ? (' (' + immat + ')') : ''), emailHtml: html, emailOpts: reply ? { replyTo: reply } : {} });
+      FP.msg.open({ phone: c.tel || '', email: c.email || '', nom: prenom, title: 'Envoyer', text: msg, emailSubject: titre + (dateFr ? (' le ' + dateFr) : '') + (immat ? (' (' + immat + ')') : ''), emailHtml: html, emailOpts: reply ? { replyTo: reply } : {} });
     } catch (_) {}
   }
 
@@ -760,6 +776,7 @@
   } });
 
   $('taches-list').addEventListener('click', e => {
+    const nt = e.target.closest('[data-notify]'); if (nt) { notifyTaskById(nt.dataset.notify); return; }
     const tg = e.target.closest('[data-toggle]'); if (tg) { toggleTask(tg.dataset.toggle); return; }
     const ed = e.target.closest('[data-edit]'); if (ed) { openEdit(ed.dataset.edit); return; }
     const dl = e.target.closest('[data-del]'); if (dl) { delTask(dl.dataset.del); return; }
@@ -768,6 +785,7 @@
     const s = e.target.closest('[data-sous]'); if (s) toggleSous(s.getAttribute('data-sous'), +s.getAttribute('data-i'), s.checked);
   });
   $('taches-kanban').addEventListener('click', e => {
+    const nt = e.target.closest('[data-notify]'); if (nt) { e.stopPropagation(); notifyTaskById(nt.getAttribute('data-notify')); return; }
     const mv = e.target.closest('[data-move]'); if (mv) { e.stopPropagation(); moveTask(mv.getAttribute('data-move'), mv.getAttribute('data-to')); return; }
     const ec = e.target.closest('[data-edit-card]'); if (ec) { openEdit(ec.getAttribute('data-edit-card')); return; }
   });
