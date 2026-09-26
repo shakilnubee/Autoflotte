@@ -2498,11 +2498,12 @@ FP.kmCollecte = {
       + (cPoste ? '<div style="font-size:13px;color:#94A3B8;margin-top:3px;font-weight:600">' + FP.esc(cPoste) + '</div>' : '')
       + (plateBadge ? '<div style="margin-top:14px;white-space:nowrap">' + plateBadge + '</div>' : '')
       + '</div>'
-      // ── Corps blanc : demande + bouton ──
+      // ── Corps blanc : demande + bouton ── (FR = message ÉDITABLE Paramètres → E-mails ; EN = défaut)
       + '<div style="border:1px solid #E7EBF0;border-top:none;padding:22px">'
-      + '<p style="margin:0 0 16px">' + T.hi + (cPrenom ? ' ' + FP.esc(cPrenom) : '') + ',</p>'
-      + '<p style="margin:0 0 16px;line-height:1.5">' + T.ask1
-      + (plaque ? ' <b style="white-space:nowrap">' + plaque + '</b>' : '') + (marque ? ' (' + marque + ')' : '') + T.ask2 + '</p>'
+      + ((L !== 'en' && FP.mailModeleProfil && FP.fillTags)
+          ? '<div style="white-space:pre-wrap;line-height:1.55">' + FP.esc(FP.fillTags(FP.mailModeleProfil('mailModeleReleveKm', 'relevekm'), { prenom: cPrenom, immat: v.immat })).replace(/\n/g, '<br>') + '</div>'
+          : ('<p style="margin:0 0 16px">' + T.hi + (cPrenom ? ' ' + FP.esc(cPrenom) : '') + ',</p>'
+             + '<p style="margin:0 0 16px;line-height:1.5">' + T.ask1 + (plaque ? ' <b style="white-space:nowrap">' + plaque + '</b>' : '') + (marque ? ' (' + marque + ')' : '') + T.ask2 + '</p>'))
       + '<p style="text-align:center;margin:22px 0">'
       + '<a href="' + link + '" style="display:inline-block;background:#0B1220;color:#fff;text-decoration:none;padding:14px 26px;border-radius:10px;font-weight:800;font-size:15px">' + T.btn + '</a>'
       + '</p>'
@@ -2510,9 +2511,11 @@ FP.kmCollecte = {
       + '</div>'
       + (FP.mailFooterHtml ? FP.mailFooterHtml(nomSoc || '') : '')
       + '</div>';
-    const text = (fullName ? T.hi + ' ' + fullName + ',\n\n' : T.hi + ',\n\n')
-      + T.askTxt + (plaque ? ' ' + (v.immat || '') : '') + '.\n'
-      + T.clickTxt + ' ' + link + '\n\n' + (nomSoc || 'Parc Pilot');
+    const text = (L !== 'en' && FP.mailModeleProfil && FP.fillTags)
+      ? (FP.fillTags(FP.mailModeleProfil('mailModeleReleveKm', 'relevekm'), { prenom: cPrenom, immat: v.immat }) + '\n\n' + T.clickTxt + ' ' + link + '\n\n' + (nomSoc || 'Parc Pilot'))
+      : ((fullName ? T.hi + ' ' + fullName + ',\n\n' : T.hi + ',\n\n')
+        + T.askTxt + (plaque ? ' ' + (v.immat || '') : '') + '.\n'
+        + T.clickTxt + ' ' + link + '\n\n' + (nomSoc || 'Parc Pilot'));
     return { subject, html: (FP.mailDocument ? FP.mailDocument(html) : html), text };
   },
   // Envoie une demande pour UN véhicule. → { ok, error?, link? }
@@ -3854,6 +3857,31 @@ FP.MAIL_DEFAUT = {
   paiement_en: `Hello {prenom},\n\nA fine concerns vehicle{plaque}\nPlease settle it, then send me the receipt.\n\nThank you in advance!`,
   designation_en: `Hello {prenom},\n\nUnless I'm mistaken, this is your vehicle\nCould you confirm, so that I can complete the driver designation?\n⚠️ And above all, do not pay the fine.\n\nThank you in advance!`,
   relance_en: `Hello {prenom},\n\nJust a gentle reminder 😊\nThe fine is still pending. A small action on your side and it's all sorted!\n\nThank you so much 🙏`,
+  // ===== Autres e-mails (tous ÉDITABLES dans Paramètres → E-mails). La mise en page (logo, plaque,
+  // bouton) reste fixe ; SEUL le message ci-dessous est modifiable. Balises entre {…}. =====
+  bienvenue: `Bonjour {prenom},\n\nBienvenue à bord ! Le véhicule {plaque} dispose d'un QR code collé à l'intérieur. En le scannant (ou via le bouton ci-dessous), tu accèdes à ton espace véhicule en quelques secondes :\n• 📸 Envoi du kilométrage\n• 📄 Documents (carte grise, assurance, assistance)\n• 🚨 Signalement d'un problème ou d'un accident\n• 📋 État des lieux (photos)\n\nÀ garder sous la main. Bonne route ! 🙌`,
+  relevekm: `Bonjour {prenom},\n\nMerci d'indiquer le kilométrage actuel de ton véhicule {immat}. C'est rapide : un clic, un nombre, terminé.`,
+  rappelgarage: `Bonjour {prenom},\n\nPetit rappel : ton rendez-vous {motif} pour le véhicule {immat} est prévu demain. Pense à t'organiser !`,
+  invitation: `Bonjour,\n\nUn accès à Parc Pilot (ta plateforme de gestion de flotte) vient d'être créé pour toi. Clique ci-dessous pour choisir ton mot de passe et te connecter.\n\nTon identifiant : {email}`,
+};
+// Remplissage GÉNÉRIQUE des balises d'un modèle e-mail ({prenom} = 1er mot ; {plaque}/{immat}/{motif}/
+// {date}/{email}). Une balise vide disparaît proprement (avec son espace). Source unique côté site + repli.
+FP.fillTags = function (tpl, o) {
+  o = o || {};
+  let s = String(tpl == null ? '' : tpl);
+  const first = String(o.prenom || '').trim().split(/\s+/)[0] || '';
+  s = s.replace(/ ?\{prenom\}/gi, first ? ' ' + first : '');
+  ['plaque', 'immat', 'motif', 'date', 'email'].forEach(k => {
+    const v = String(o[k] == null ? '' : o[k]).trim();
+    s = s.replace(new RegExp(' ?\\{' + k + '\\}', 'gi'), v ? ' ' + v : '');
+  });
+  return s.replace(/\n{3,}/g, '\n\n').trim();
+};
+// Modèle e-mail ACTIF : texte personnalisé de la société (profil[profilKey]) sinon défaut (MAIL_DEFAUT[defKey]).
+FP.mailModeleProfil = function (profilKey, defKey) {
+  let prof = {}; try { prof = FP.societeProfil ? FP.societeProfil() : {}; } catch (e) {}
+  const v = prof[profilKey]; if (v && String(v).trim()) return String(v);
+  return FP.MAIL_DEFAUT[defKey] || '';
 };
 // Champs du profil société (rendu générique : le formulaire de Paramètres itère dessus).
 // Un champ avec `default` est PRÉ-REMPLI avec ce texte quand la valeur est vide (l'utilisateur le voit).
@@ -3881,6 +3909,11 @@ FP.PROFIL_CHAMPS = [
   { key: 'mailModeleDesignation_en',label: "E-mail EN — driver designation",   type: 'textarea', ph: 'Use {prenom}.', default: FP.MAIL_DEFAUT.designation_en, lang: 'en' },
   { key: 'mailModeleRelance_en',    label: "E-mail EN — reminder",             type: 'textarea', ph: 'Use {prenom}.', default: FP.MAIL_DEFAUT.relance_en, lang: 'en' },
   { key: 'mailModeleSignature',  label: "Modèle e-mail — demande de signature (état des lieux)", type: 'textarea', ph: 'Message envoyé au conducteur pour signer. Balises : {prenom}, {immat}, {modele}, {date}. Le bouton « Signer le document » et les infos du véhicule sont ajoutés automatiquement (mise en page soignée).', default: 'Bonjour {prenom},\n\nDernière étape avant de rouler ! 🚀 Signe l\'état des lieux de ta {modele} ({immat}) en quelques secondes, directement depuis ce mail.' },
+  // ── Autres e-mails éditables (message seul ; logo/plaque/bouton ajoutés automatiquement) ──
+  { key: 'mailModeleBienvenue',    label: "Modèle e-mail — bienvenue conducteur (QR)",     type: 'textarea', ph: 'Balises : {prenom}, {plaque}. Le bouton « Accéder à mon espace » est ajouté automatiquement.', default: FP.MAIL_DEFAUT.bienvenue },
+  { key: 'mailModeleReleveKm',     label: "Modèle e-mail — demande de relevé km",          type: 'textarea', ph: 'Balises : {prenom}, {immat}. Le bouton « Indiquer mon kilométrage » est ajouté automatiquement.', default: FP.MAIL_DEFAUT.relevekm },
+  { key: 'mailModeleRappelGarage', label: "Modèle e-mail — rappel rendez-vous garage (la veille)", type: 'textarea', ph: 'Balises : {prenom}, {immat}, {motif}. Envoyé automatiquement la veille du rendez-vous.', default: FP.MAIL_DEFAUT.rappelgarage },
+  { key: 'mailModeleInvitation',   label: "Modèle e-mail — invitation à un compte",        type: 'textarea', ph: 'Balises : {email}. Le bouton « Définir mon mot de passe » est ajouté automatiquement.', default: FP.MAIL_DEFAUT.invitation },
   // ⚠️ Le champ « Signature (bas des e-mails d'amende) » a été RETIRÉ (2026-09-25) : les e-mails
   //    partent désormais via la plateforme avec un pied de page brandé (société · via Parc Pilot),
   //    plus besoin d'une signature manuelle. L'ancienne valeur settings.mailSignature est ignorée.
@@ -14336,6 +14369,9 @@ FP.sendMailTest = async function (key, to) {
   if (!FP.registerMail) return;
   const esc = FP.esc || (x => String(x == null ? '' : x));
   const btn = (href, label) => '<a href="' + esc(href || '#') + '" style="display:inline-block;background:#0B1220;color:#ffffff;padding:14px 30px;border-radius:10px;text-decoration:none;font-weight:800;font-size:15px">' + esc(label) + '</a>';
+  // Corps = message ÉDITABLE (texte simple, sauts de ligne conservés). La mise en page reste fixe.
+  const bodyText = (t) => '<div style="white-space:pre-wrap;line-height:1.55">' + esc(t).replace(/\n/g, '<br>') + '</div>';
+  const tpl = (profilKey, defKey, tags) => FP.fillTags(FP.mailModeleProfil(profilKey, defKey), tags || {});
   const amendeSample = () => ({ prenom: 'Alex Martin', immatriculation: 'AA-123-AA', montant: 90, numeroAvis: '2026ABCD1234567' });
   // 1) AMENDES (exactement l'e-mail réel — FP.renderMailAmende)
   ['paiement', 'designation', 'relance'].forEach(kind => {
@@ -14351,70 +14387,61 @@ FP.sendMailTest = async function (key, to) {
   FP.registerMail({
     key: 'bienvenue-conducteur', label: 'Bienvenue à bord (conducteur · QR)', group: 'Comptes',
     sample: () => ({ prenom: 'Alex', plaque: 'AA-123-AA', portail: '#' }),
-    build: (d) => ({
+    build: (d) => { const t = tpl('mailModeleBienvenue', 'bienvenue', { prenom: d.prenom, plaque: d.plaque }); return {
       subject: 'Bienvenue à bord 🚗 · l\'espace véhicule',
       html: FP.mailBrand({ title: 'Bienvenue à bord', prenom: d.prenom, plaque: d.plaque, nomSoc: d.nomSoc, logoUrl: d.logoUrl,
-        bodyHtml: '<p style="margin:0 0 14px">Bonjour ' + esc(d.prenom) + ',</p>'
-          + '<p style="margin:0 0 14px;line-height:1.5">Bienvenue à bord ! Le véhicule <b><span style="white-space:nowrap">' + esc(d.plaque) + '</span></b> dispose d\'un <b>QR code</b> collé à l\'intérieur. En le scannant (ou via le bouton ci-dessous), tu accèdes à ton espace véhicule en quelques secondes :</p>'
-          + '<ul style="margin:0 0 14px;padding-left:18px;line-height:1.7"><li>📸 <b>Envoi du kilométrage</b></li><li>📄 <b>Documents</b> (carte grise, assurance, assistance)</li><li>🚨 <b>Signalement</b> d\'un problème ou d\'un accident</li><li>📋 <b>État des lieux</b> (photos de prise et de restitution)</li></ul>'
-          + '<p style="margin:0;line-height:1.5">À garder sous la main. Bonne route ! 🙌</p>',
-        buttonHtml: btn(d.portail, 'Accéder à mon espace →') }),
-      text: 'Bonjour ' + d.prenom + ',\nBienvenue à bord ! 🚗\nLe véhicule ' + d.plaque + ' dispose d\'un QR code (collé à l\'intérieur) : kilométrage, documents, signalement, état des lieux.\n' + (d.portail && d.portail !== '#' ? 'Ton espace : ' + d.portail : '')
-    })
+        bodyHtml: bodyText(t), buttonHtml: btn(d.portail, 'Accéder à mon espace →') }),
+      text: t + (d.portail && d.portail !== '#' ? '\n\nTon espace : ' + d.portail : '')
+    }; }
   });
   // 2b) INVITATION À UN COMPTE (admin/gestionnaire qui se CONNECTE) — au nom de Parc Pilot — cf. manage-users
   FP.registerMail({
     key: 'bienvenue', label: 'Invitation à un compte (accès plateforme)', group: 'Comptes', from: 'plateforme',
     note: "Différent du « Bienvenue à bord » conducteur : celui-ci ouvre un COMPTE (connexion). Envoyé au nom de Parc Pilot → l'envoi réel nécessite le domaine parc-pilot.fr vérifié dans Resend.",
     sample: () => ({ email: 'alex.martin@exemple.fr', link: '#' }),
-    build: (d) => ({
+    build: (d) => { const t = tpl('mailModeleInvitation', 'invitation', { email: d.email }); return {
       subject: 'Ton accès à Parc Pilot · définis ton mot de passe',
       html: FP.mailShell({ brand: 'Parc Pilot', logoUrl: '', title: 'Bienvenue !',
-        bodyHtml: '<p style="margin:0 0 16px;line-height:1.55">Bonjour,</p>'
-          + '<p style="margin:0 0 16px;line-height:1.55">Un accès à Parc Pilot a été créé pour toi. Clique ci-dessous pour définir ton mot de passe et te connecter.</p>'
-          + '<p style="margin:0 0 8px;line-height:1.55;color:#64748B;font-size:13px">Ton identifiant : <b>' + esc(d.email) + '</b></p>',
-        buttonHtml: btn(d.link, 'Définir mon mot de passe →') }),
-      text: 'Bonjour,\n\nUn accès à Parc Pilot a été créé pour toi. Définis ton mot de passe ici :\n' + d.link + '\n\nTon identifiant : ' + d.email + '\n\nParc Pilot · parc-pilot.fr'
-    })
+        bodyHtml: bodyText(t), buttonHtml: btn(d.link, 'Définir mon mot de passe →') }),
+      text: t + '\n\n' + d.link + '\n\nParc Pilot · parc-pilot.fr'
+    }; }
   });
   // 3) RELEVÉ KM (au nom de la société) — cf. km-relance
   FP.registerMail({
     key: 'releve-km', label: 'Relevé kilométrique', group: 'Kilométrage',
     sample: () => ({ prenom: 'Alex', immat: 'AA-123-AA', link: '#', relance: false }),
-    build: (d) => ({
+    build: (d) => { const t = tpl('mailModeleReleveKm', 'relevekm', { prenom: d.prenom, immat: d.immat }); return {
       subject: 'Relevé kilométrique' + (d.immat ? ' (' + d.immat + ')' : ''),
       html: FP.mailShell({ brand: d.nomSoc, logoUrl: d.logoUrl, title: 'Relevé kilométrique demandé',
-        bodyHtml: '<p style="margin:0 0 16px;line-height:1.55">Bonjour ' + esc(d.prenom) + ',</p>'
-          + '<p style="margin:0 0 16px;line-height:1.55">Merci d\'indiquer le <b>kilométrage actuel</b> de ton véhicule ' + esc(d.immat) + '. C\'est rapide, directement depuis ce mail.</p>',
-        buttonHtml: btn(d.link, 'Indiquer mon kilométrage →') }),
-      text: 'Bonjour ' + d.prenom + ',\n\nMerci d\'indiquer le kilométrage actuel de ton véhicule ' + d.immat + ' :\n' + d.link
-    })
+        bodyHtml: bodyText(t), buttonHtml: btn(d.link, 'Indiquer mon kilométrage →') }),
+      text: t + '\n\n' + d.link
+    }; }
   });
   // 4) RAPPEL RENDEZ-VOUS GARAGE (la veille) — toute intervention programmée (révision, réparation,
   //    contrôle technique…), PAS seulement le CT. `motif` = libellé humain de l'intervention.
   FP.registerMail({
     key: 'rappel-entretien', label: 'Rappel rendez-vous garage (la veille)', group: 'Kilométrage',
     sample: () => ({ prenom: 'Alex', immat: 'AA-123-AA', motif: 'Rendez-vous garage', link: '#' }),
-    build: (d) => ({
+    build: (d) => { const t = tpl('mailModeleRappelGarage', 'rappelgarage', { prenom: d.prenom, immat: d.immat, motif: d.motif }); return {
       subject: 'Rappel : ' + String(d.motif).toLowerCase() + ' demain' + (d.immat ? ' (' + d.immat + ')' : ''),
-      html: FP.mailShell({ brand: d.nomSoc, logoUrl: d.logoUrl, title: esc(d.motif) + ' demain',
-        bodyHtml: '<p style="margin:0 0 16px;line-height:1.55">Bonjour ' + esc(d.prenom) + ',</p>'
-          + '<p style="margin:0 0 16px;line-height:1.55">Petit rappel : ton rendez-vous <b>' + esc(d.motif) + '</b> pour le véhicule ' + esc(d.immat) + ' est prévu <b>demain</b>. Pense à t\'organiser !</p>' }),
-      text: 'Bonjour ' + d.prenom + ',\n\nRappel : ' + d.motif + ' pour le véhicule ' + d.immat + ' prévu demain.'
-    })
+      html: FP.mailShell({ brand: d.nomSoc, logoUrl: d.logoUrl, title: esc(d.motif) + ' demain', bodyHtml: bodyText(t) }),
+      text: t
+    }; }
   });
   // 5) ÉTAT DES LIEUX À SIGNER — cf. edl-sign
   FP.registerMail({
     key: 'edl-a-signer', label: 'État des lieux à signer', group: 'États des lieux',
     sample: () => ({ prenom: 'Alex', immat: 'AA-123-AA', modele: 'Peugeot 208', link: '#' }),
-    build: (d) => ({
-      subject: 'État des lieux à signer (' + d.immat + ')',
-      html: FP.mailShell({ brand: d.nomSoc, logoUrl: d.logoUrl, title: 'État des lieux à signer',
-        bodyHtml: '<p style="margin:0 0 16px;line-height:1.55">Bonjour ' + esc(d.prenom) + ',</p>'
-          + '<p style="margin:0 0 16px;line-height:1.55">Dernière étape avant de rouler : signe l\'état des lieux de ta <b>' + esc(d.modele) + '</b> (' + esc(d.immat) + '), en quelques secondes depuis ce mail.</p>',
-        buttonHtml: btn(d.link, 'Signer le document →') }),
-      text: 'Bonjour ' + d.prenom + ',\n\nSigne l\'état des lieux de ' + d.modele + ' (' + d.immat + ') : ' + d.link
-    })
+    build: (d) => {
+      const def = "Bonjour {prenom},\n\nDernière étape avant de rouler ! 🚀 Signe l'état des lieux de ta {modele} ({immat}) en quelques secondes, directement depuis ce mail.";
+      let raw = def; try { const p = FP.societeProfil ? FP.societeProfil() : {}; if (p.mailModeleSignature && String(p.mailModeleSignature).trim()) raw = String(p.mailModeleSignature); } catch (e) {}
+      const t = FP.fillTags(raw.replace(/\{modele\}/gi, d.modele || ''), { prenom: d.prenom, immat: d.immat });
+      return {
+        subject: 'État des lieux à signer (' + d.immat + ')',
+        html: FP.mailShell({ brand: d.nomSoc, logoUrl: d.logoUrl, title: 'État des lieux à signer', bodyHtml: bodyText(t), buttonHtml: btn(d.link, 'Signer le document →') }),
+        text: t + '\n\n' + d.link
+      };
+    }
   });
   // 6) ÉTAT DES LIEUX SIGNÉ (copie PDF) — cf. edl-sign
   FP.registerMail({

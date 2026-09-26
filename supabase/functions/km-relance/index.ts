@@ -142,13 +142,27 @@ function mailHead(nomSoc: string, logoUrl: string): string {
         : ppLogoMail());
 }
 
-function buildMail(opts: { prenom: string; immat: string; marque: string; link: string; nomSoc: string; logoUrl: string; relance: boolean }) {
+// Remplissage des balises d'un modèle e-mail éditable (identique à FP.fillTags côté site).
+function fillTags(tpl: string, o: Record<string, unknown>): string {
+  let s = String(tpl == null ? "" : tpl);
+  const first = String(o.prenom || "").trim().split(/\s+/)[0] || "";
+  s = s.replace(/ ?\{prenom\}/gi, first ? " " + first : "");
+  ["immat", "motif", "date"].forEach((k) => {
+    const v = String(o[k] == null ? "" : o[k]).trim();
+    s = s.replace(new RegExp(" ?\\{" + k + "\\}", "gi"), v ? " " + v : "");
+  });
+  return s.replace(/\n{3,}/g, "\n\n").trim();
+}
+function bodyText(t: string): string { return '<div style="white-space:pre-wrap;line-height:1.55">' + esc(t).replace(/\n/g, "<br>") + "</div>"; }
+const DEF_RELEVEKM = "Bonjour {prenom},\n\nMerci d'indiquer le kilométrage actuel de ton véhicule {immat}. C'est rapide : un clic, un nombre, terminé.";
+const DEF_RAPPELGARAGE = "Bonjour {prenom},\n\nPetit rappel : ton rendez-vous {motif} pour le véhicule {immat} est prévu demain. Pense à t'organiser !";
+
+function buildMail(opts: { prenom: string; immat: string; marque: string; link: string; nomSoc: string; logoUrl: string; relance: boolean; modele?: string }) {
   const { prenom, immat, marque, link, nomSoc, logoUrl, relance } = opts;
   const subject = "Relevé kilométrique" + (immat ? " (" + immat + ")" : "") + (relance ? " (rappel)" : "");
   const title = relance ? "Petit rappel : relevé kilométrique" : "Relevé kilométrique demandé";
-  const intro = relance
-    ? "Nous n'avons pas encore reçu le <b>kilométrage actuel</b> de ton véhicule"
-    : "Merci d'indiquer le <b>kilométrage actuel</b> de ton véhicule";
+  // Message ÉDITABLE (Paramètres → E-mails). {prenom} {immat}. Repli = texte par défaut.
+  const msg = fillTags((opts.modele && String(opts.modele).trim()) ? String(opts.modele) : DEF_RELEVEKM, { prenom, immat });
   const plate = immat
     ? '<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:separate;white-space:nowrap"><tr>'
       + '<td style="background:#1B48C4;color:#fff;font-family:Arial,sans-serif;font-weight:800;font-size:11px;padding:8px 7px;border:2px solid #0b0b0b;border-right:none;border-radius:7px 0 0 7px">F</td>'
@@ -163,10 +177,7 @@ function buildMail(opts: { prenom: string; immat: string; marque: string; link: 
     + (plate ? '<div style="margin-top:14px">' + plate + "</div>" : "")
     + "</div>"
     + '<div style="border:1px solid #E7EBF0;border-top:none;padding:22px">'
-    + "<p style=\"margin:0 0 16px\">Bonjour" + (prenom ? " " + esc(prenom) : "") + ",</p>"
-    + '<p style="margin:0 0 16px;line-height:1.5">' + intro
-    + (immat ? ' <b style="white-space:nowrap">' + esc(immat) + "</b>" : "") + (marque ? " (" + esc(marque) + ")" : "")
-    + ". C'est rapide : un clic, un nombre, terminé.</p>"
+    + bodyText(msg)
     + '<p style="text-align:center;margin:22px 0">'
     + '<a href="' + esc(link) + '" style="display:inline-block;background:#0B1220;color:#fff;text-decoration:none;padding:14px 26px;border-radius:10px;font-weight:800;font-size:15px">Indiquer mon kilométrage →</a>'
     + "</p>"
@@ -174,19 +185,19 @@ function buildMail(opts: { prenom: string; immat: string; marque: string; link: 
     + "</div>"
     + ppFooter(nomSoc)
     + "</div>";
-  const text = "Bonjour" + (prenom ? " " + prenom : "") + ",\n\n"
-    + (relance ? "Nous n'avons pas encore reçu le kilométrage actuel de ton véhicule" : "Merci d'indiquer le kilométrage actuel de ton véhicule") + (immat ? " " + immat : "") + ".\n"
-    + "Clique sur ce lien : " + link + "\n\n" + (nomSoc || "Parc Pilot");
+  const text = msg + "\n\nClique sur ce lien : " + link + "\n\n" + (nomSoc || "Parc Pilot");
   return { subject, html: mailDoc(html), text };
 }
 
 // E-mail « rappel rendez-vous garage demain » (branded, même en-tête que le relevé km, sans bouton).
 // motif = libellé humain de l'intervention (« Révision », « Contrôle technique », « Réparation »…).
-function buildCtMail(opts: { prenom: string; immat: string; marque: string; dateFr: string; nomSoc: string; logoUrl: string; motif?: string }) {
-  const { prenom, immat, marque, dateFr, nomSoc, logoUrl } = opts;
+function buildCtMail(opts: { prenom: string; immat: string; marque: string; dateFr: string; nomSoc: string; logoUrl: string; motif?: string; modele?: string }) {
+  const { prenom, immat, dateFr, nomSoc, logoUrl } = opts;
   const motif = String(opts.motif || "Contrôle technique").trim() || "Contrôle technique";
   const motifBas = motif.toLowerCase();
   const subject = "Rappel : " + motifBas + " demain" + (immat ? " (" + immat + ")" : "");
+  // Message ÉDITABLE (Paramètres → E-mails). {prenom} {immat} {motif} {date}.
+  const msg = fillTags((opts.modele && String(opts.modele).trim()) ? String(opts.modele) : DEF_RAPPELGARAGE, { prenom, immat, motif, date: dateFr });
   const plate = immat
     ? '<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:separate;white-space:nowrap"><tr>'
       + '<td style="background:#1B48C4;color:#fff;font-family:Arial,sans-serif;font-weight:800;font-size:11px;padding:8px 7px;border:2px solid #0b0b0b;border-right:none;border-radius:7px 0 0 7px">F</td>'
@@ -201,14 +212,11 @@ function buildCtMail(opts: { prenom: string; immat: string; marque: string; date
     + (plate ? '<div style="margin-top:14px">' + plate + "</div>" : "")
     + "</div>"
     + '<div style="border:1px solid #E7EBF0;border-top:none;padding:22px">'
-    + "<p style=\"margin:0 0 16px\">Bonjour" + (prenom ? " " + esc(prenom) : "") + ",</p>"
-    + '<p style="margin:0 0 16px;line-height:1.5">Petit rappel : ton rendez-vous <b>' + esc(motif) + '</b> pour le véhicule <b style="white-space:nowrap">' + esc(immat) + "</b>" + (marque ? " (" + esc(marque) + ")" : "")
-    + ' est prévu <b>demain (' + esc(dateFr) + ')</b> ⏳. Pense à t\'organiser. 📅</p>'
+    + bodyText(msg)
     + "</div>"
     + ppFooter(nomSoc)
     + "</div>";
-  const text = "Bonjour" + (prenom ? " " + prenom : "") + ",\n\n"
-    + "Rappel : " + motif + " pour le véhicule " + immat + ", prévu demain (" + dateFr + ").\n\n" + (nomSoc || "Parc Pilot");
+  const text = msg + "\n\n" + (nomSoc || "Parc Pilot");
   return { subject, html: mailDoc(html), text };
 }
 
@@ -311,7 +319,7 @@ Deno.serve(async (req) => {
     const nomSoc = String((data.societe && data.societe.nom) || "").trim();
     const prenom = String(chauffeur || veh.chauffeur || "").trim().split(/\s+/)[0] || "";
     const link = BASE + "?t=" + token;
-    const mail = buildMail({ prenom, immat: veh.immat || "", marque: ((veh.marque || "") + " " + (veh.modele || "")).trim(), link, nomSoc, logoUrl, relance });
+    const mail = buildMail({ prenom, immat: veh.immat || "", marque: ((veh.marque || "") + " " + (veh.modele || "")).trim(), link, nomSoc, logoUrl, relance, modele: String(p.mailModeleReleveKm || "") });
     const payload: Record<string, unknown> = { from, to: [email], subject: mail.subject, html: mail.html, text: mail.text };
     if (replyTo) payload.reply_to = replyTo;
     try {
@@ -440,7 +448,7 @@ Deno.serve(async (req) => {
       // Un e-mail par motif dû demain (en pratique 1 seul ; CT + rdv le même jour = 2, rare).
       for (const tg of targets) {
         if (dryRun) { ctBump(soc, "sent"); ctDetails.push({ societe: soc, immat: veh.immat || "", to: toList, motif: tg.motif, status: "dry-run" }); continue; }
-        const mail = buildCtMail({ prenom, immat: veh.immat || "", marque: ((veh.marque || "") + " " + (veh.modele || "")).trim(), dateFr, nomSoc, logoUrl, motif: tg.motif });
+        const mail = buildCtMail({ prenom, immat: veh.immat || "", marque: ((veh.marque || "") + " " + (veh.modele || "")).trim(), dateFr, nomSoc, logoUrl, motif: tg.motif, modele: String(p.mailModeleRappelGarage || "") });
         const payload: Record<string, unknown> = { from, to: toList, subject: mail.subject, html: mail.html, text: mail.text };
         if (replyTo) payload.reply_to = replyTo;
         try {

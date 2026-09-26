@@ -169,6 +169,18 @@ Deno.serve(async (req) => {
       const from = Deno.env.get("INVITE_FROM") || Deno.env.get("EMAIL_FROM") || "Parc Pilot <onboarding@resend.dev>";
       if (!RESEND) return json({ ok: true, id: userId, emailSent: false, warn: "Compte prêt, mais RESEND_API_KEY absent → e-mail non envoyé. Configure Resend puis renvoie l'invitation." });
       const esc = (s: string) => String(s).replace(/[<>&"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c] || c));
+      // Message ÉDITABLE (Paramètres → E-mails → « invitation à un compte »), lu depuis la config société.
+      let inviteMsg = "";
+      try {
+        const sid = societe || "global";
+        const { data: st } = await admin.from("app_settings").select("data").eq("id", sid).maybeSingle();
+        const pr = (st && st.data && typeof st.data === "object" ? (st.data as Record<string, unknown>).profil : null) as Record<string, unknown> | null;
+        if (pr && pr.mailModeleInvitation) inviteMsg = String(pr.mailModeleInvitation);
+      } catch (_) { /* repli défaut */ }
+      const DEF_INVITE = "Bonjour,\n\nUn accès à Parc Pilot (ta plateforme de gestion de flotte) vient d'être créé pour toi. Clique ci-dessous pour choisir ton mot de passe et te connecter.\n\nTon identifiant : {email}";
+      const inviteBody = String((inviteMsg && inviteMsg.trim()) ? inviteMsg : DEF_INVITE)
+        .replace(/ ?\{email\}/gi, email ? " " + email : "").replace(/\n{3,}/g, "\n\n").trim();
+      const inviteBodyHtml = '<div style="white-space:pre-wrap;line-height:1.55">' + esc(inviteBody).replace(/\n/g, "<br>") + "</div>";
       // Design BRANDÉ (même en-tête sombre que le relevé km / les amendes), robuste au mode sombre Gmail
       // (background-color solide → le texte blanc reste blanc).
       // Logo Parc Pilot « en dur » (barres orange + « Parc » blanc + « Pilot » orange) — identique au site.
@@ -192,15 +204,14 @@ Deno.serve(async (req) => {
         '<div style="font-size:20px;font-weight:800;font-style:italic;margin-top:16px;line-height:1.25;color:#ffffff">Bienvenue !</div>' +
         '</div>' +
         '<div style="border:1px solid #E7EBF0;border-top:none;padding:22px;color:#0F1E3D">' +
-        '<p style="margin:0 0 16px;line-height:1.55">Bonjour,</p>' +
-        '<p style="margin:0 0 16px;line-height:1.55">Un accès à <b>Parc Pilot</b> (ta plateforme de gestion de flotte) vient d\'être créé pour toi. Clique ci-dessous pour <b>choisir ton mot de passe</b> et te connecter.</p>' +
+        inviteBodyHtml +
         '<p style="text-align:center;margin:22px 0"><a href="' + esc(actionLink) + '" style="display:inline-block;background:#0B1220;color:#ffffff;padding:14px 30px;border-radius:10px;text-decoration:none;font-weight:800;font-size:15px">Définir mon mot de passe →</a></p>' +
-        '<p style="font-size:12.5px;line-height:1.5;color:#64748b;margin:12px 0 0">Ton identifiant sera ton e-mail : <b>' + esc(email) + '</b>. Ce lien est personnel et temporaire ; s\'il a expiré, utilise « Mot de passe oublié » sur la page de connexion.</p>' +
+        '<p style="font-size:12.5px;line-height:1.5;color:#64748b;margin:12px 0 0">Ce lien est personnel et temporaire ; s\'il a expiré, utilise « Mot de passe oublié » sur la page de connexion.</p>' +
         '</div>' +
         '<div style="background-color:#0B1220;padding:18px 22px;border-radius:0 0 14px 14px;text-align:center">' +
         '<div>' + ppLogo + '</div>' +
         '</div></div>');
-      const text = "Bonjour,\n\nUn accès à Parc Pilot a été créé pour toi. Définis ton mot de passe ici :\n" + actionLink + "\n\nTon identifiant : " + email + "\n\nParc Pilot · parc-pilot.fr";
+      const text = inviteBody + "\n\nDéfinis ton mot de passe ici :\n" + actionLink + "\n\nParc Pilot · parc-pilot.fr";
       try {
         const r = await fetch("https://api.resend.com/emails", {
           method: "POST",
