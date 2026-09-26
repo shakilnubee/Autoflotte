@@ -177,7 +177,7 @@ Deno.serve(async (req) => {
         const pr = (st && st.data && typeof st.data === "object" ? (st.data as Record<string, unknown>).profil : null) as Record<string, unknown> | null;
         if (pr && pr.mailModeleInvitation) inviteMsg = String(pr.mailModeleInvitation);
       } catch (_) { /* repli défaut */ }
-      const DEF_INVITE = "Bonjour,\n\nUn accès à Parc Pilot (ta plateforme de gestion de flotte) vient d'être créé pour toi. Clique ci-dessous pour choisir ton mot de passe et te connecter.\n\nTon identifiant : {email}";
+      const DEF_INVITE = "Bonjour,\n\nBienvenue sur Parc Pilot ! 🎉 Ton accès à la plateforme de gestion de flotte est prêt.\n\nChoisis ton mot de passe en un clic (bouton juste en dessous) et tu pourras te connecter tout de suite. Tout est réuni au même endroit, simple et rapide.\n\nTon identifiant : {email}\n\nÀ très vite ! 🚗";
       const inviteBody = String((inviteMsg && inviteMsg.trim()) ? inviteMsg : DEF_INVITE)
         .replace(/ ?\{email\}/gi, email ? " " + email : "").replace(/\n{3,}/g, "\n\n").trim();
       const inviteBodyHtml = '<div style="white-space:pre-wrap;line-height:1.55">' + esc(inviteBody).replace(/\n/g, "<br>") + "</div>";
