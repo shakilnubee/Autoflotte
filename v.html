@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<script>/* pp-build */(function(){try{var B="20260921a",K="pp_build",cur=null;try{cur=localStorage.getItem(K);}catch(e){return;}if(cur===B)return;var ok=false;try{localStorage.setItem(K,B);ok=true;}catch(e){}if(!ok)return;if("serviceWorker"in navigator){try{navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){try{r.update();}catch(e){}});}).catch(function(){});}catch(e){}}if(cur===null)return;var done=function(){try{location.reload();}catch(e){}};if(window.caches&&caches.keys){caches.keys().then(function(ks){return Promise.all(ks.map(function(k){return caches.delete(k);}));}).then(done).catch(done);}else{done();}}catch(e){}})();</script>
+<script>/* pp-build */(function(){try{var B="20260927e",K="pp_build",cur=null;try{cur=localStorage.getItem(K);}catch(e){return;}if(cur===B)return;var ok=false;try{localStorage.setItem(K,B);ok=true;}catch(e){}if(!ok)return;if("serviceWorker"in navigator){try{navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){try{r.update();}catch(e){}});}).catch(function(){});}catch(e){}}if(cur===null)return;var done=function(){try{location.reload();}catch(e){}};if(window.caches&&caches.keys){caches.keys().then(function(ks){return Promise.all(ks.map(function(k){return caches.delete(k);}));}).then(done).catch(done);}else{done();}}catch(e){}})();</script>
 <!-- iOS/Safari détecte les longs numéros (n° d'avis d'amende) comme des n° de tél et les souligne
      en lien bleu. On désactive cette détection automatique sur tout le portail. -->
 <meta name="format-detection" content="telephone=no">
@@ -146,6 +146,15 @@
   .gal a.edl-doc { display:flex; align-items:center; justify-content:center; text-align:center; gap:.3rem; min-height:90px; grid-column:1/-1; border:1.5px solid var(--line); border-radius:.6rem; background:#F1FBF9; color:#0f766e; font-weight:800; font-size:.86rem; text-decoration:none; padding:.6rem; }
   .msg { margin-top:.8rem; font-size:.9rem; border-radius:.6rem; padding:.7rem .9rem; display:none; }
   .msg.err { display:block; background:#FEF2F2; color:#B91C1C; border:1px solid #FECACA; }
+  /* Un message VIDE ne doit jamais s'afficher (sinon barre rouge parasite en bas). */
+  .msg:empty { display:none !important; }
+  /* Relevé km inline (même rendu que la page km.html, sans navigation). */
+  .kmknown { font-size:.86rem; color:var(--muted); margin:.2rem 0 1rem; }
+  .kmknown b { color:var(--ink); }
+  #km-input { width:100%; font-size:1.9rem; font-weight:800; text-align:center; letter-spacing:1px; padding:.85rem .6rem; border:2px solid var(--line); border-radius:.9rem; color:var(--ink); outline:none; transition:border-color .15s, box-shadow .15s; -moz-appearance:textfield; }
+  #km-input::-webkit-outer-spin-button, #km-input::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
+  #km-input:focus { border-color:var(--accent); box-shadow:0 0 0 4px rgba(249,115,22,.14); }
+  .kmunit { text-align:center; font-size:.78rem; color:var(--muted); margin-top:.4rem; letter-spacing:.1em; text-transform:uppercase; font-weight:700; }
   .muted { color:var(--muted); font-size:.86rem; }
   .foot { text-align:center; font-size:.74rem; color:#94A3B8; padding:1rem; }
   .foot-mark { display:inline-block; vertical-align:-2px; margin-right:5px; }
@@ -343,6 +352,26 @@
             <div class="big-emoji">✅</div>
             <div class="ok-title" data-i18n="que_sent_title">Question envoyée</div>
             <div class="muted" data-i18n="que_sent_sub">Ton gestionnaire de flotte a bien reçu ta question et te répondra.</div>
+            <button class="btn block" data-back style="margin-top:1rem" data-i18n="btn_backmenu">Retour au menu</button>
+          </div>
+        </div>
+
+        <!-- RELEVÉ KM (inline, comme les autres rubriques — plus de navigation vers km.html) -->
+        <div id="v-km" class="hide">
+          <button class="back" data-back data-i18n="back">‹ Retour</button>
+          <div class="vtitle">📸 <span data-i18n="m_km_t">Relever mon kilométrage</span></div>
+          <div id="km-form-wrap">
+            <label class="f" for="km-input" id="km-label">Kilométrage actuel au compteur</label>
+            <div class="kmknown" id="km-known"></div>
+            <input id="km-input" type="number" inputmode="numeric" min="1" step="1" placeholder="ex. 45000" autocomplete="off">
+            <div class="kmunit" id="km-unit">kilomètres</div>
+            <div class="msg err" id="km-err"></div>
+            <button class="btn dark block" id="km-send" style="margin-top:1rem">Envoyer mon kilométrage</button>
+          </div>
+          <div id="km-done" class="center hide" style="padding:1rem 0">
+            <div class="big-emoji">✅</div>
+            <div class="ok-title" id="km-done-title">Merci !</div>
+            <div class="muted" id="km-done-sub">Votre kilométrage a bien été enregistré.</div>
             <button class="btn block" data-back style="margin-top:1rem" data-i18n="btn_backmenu">Retour au menu</button>
           </div>
         </div>
@@ -873,7 +902,7 @@
     var head = '<div class="box" style="background:#0f1e3d;color:#fff;margin-bottom:.7rem"><div class="kv" style="border:0"><span class="k" style="color:#c7d2e6">' + esc(t('amd_total')) + ' (' + list.length + ')</span><span class="v" style="color:#fff;font-weight:800;font-size:18px">' + eur(total) + '</span></div></div>';
     box.innerHTML = podiumHTML() + head + rows;
   }
-  var VIEWS = ['v-menu', 'v-veh', 'v-doc', 'v-sin', 'v-constat', 'v-edl', 'v-amd', 'v-vente', 'v-ventesl', 'v-guide', 'v-que', 'v-bad'];
+  var VIEWS = ['v-menu', 'v-veh', 'v-doc', 'v-sin', 'v-constat', 'v-edl', 'v-amd', 'v-vente', 'v-ventesl', 'v-guide', 'v-que', 'v-km', 'v-bad'];
   var curView = 'v-menu';
   function show(view, title, sub) {
     curView = view;
@@ -901,6 +930,7 @@
     else if (curView === 'v-vente') { renderVente(); show('v-vente', vehTitle(), ''); }
     else if (curView === 'v-guide') { renderGuide(); show('v-guide', vehTitle(), ''); }
     else if (curView === 'v-que') { show('v-que', vehTitle(), ''); }
+    else if (curView === 'v-km') { renderKm(); show('v-km', vehTitle(), kmT('sub')); }
   }
   function localeNb() { return { fr:'fr-FR', en:'en-GB', es:'es-ES', it:'it-IT', de:'de-DE', zh:'zh-CN' }[LANG] || 'fr-FR'; }
   function frDate(s) { if (!s) return '—'; var m = String(s).slice(0, 10).split('-'); return m.length === 3 ? (m[2] + '/' + m[1] + '/' + m[0]) : s; }
@@ -1102,6 +1132,54 @@
       var warn = lvl ? '⚠️ ' : '';
       return '<div class="kv"><span class="k">' + esc(r[0]) + '</span><span class="v"' + (col ? ' style="' + col + '"' : '') + '>' + warn + esc(r[1]) + '</span></div>';
     }).join('') + '</div>';
+  }
+
+  // ---- Relevé kilométrique (inline, plus de navigation vers km.html) ----
+  // Traductions propres à la rubrique km (portées de km.html → même wording, 6 langues).
+  var KM_I18N = {
+    fr: { sub:'Merci de communiquer le kilométrage de votre véhicule.', label:'Kilométrage actuel au compteur', unit:'kilomètres', km_ph:'ex. 45000', send:'Envoyer mon kilométrage', sending:'Envoi…', done_title:'Merci !', done_sub:'Votre kilométrage a bien été enregistré.', needkm:'Saisis ton kilométrage (un nombre).', sendfail:"Échec de l'envoi. Réessaie.", conn:'Connexion impossible. Réessaie.', lastknown:function(v){return 'Dernier kilométrage connu : <b>'+v+' km</b>';}, saved:function(v){return 'Kilométrage enregistré : <b>'+v+' km</b>.';} },
+    en: { sub:"Please provide your vehicle's mileage.", label:'Current odometer reading', unit:'kilometres', km_ph:'e.g. 45000', send:'Submit my mileage', sending:'Sending…', done_title:'Thank you!', done_sub:'Your mileage has been recorded.', needkm:'Enter your mileage (a number).', sendfail:'Sending failed. Please try again.', conn:'Connection failed. Please try again.', lastknown:function(v){return 'Last known mileage: <b>'+v+' km</b>';}, saved:function(v){return 'Mileage recorded: <b>'+v+' km</b>.';} },
+    es: { sub:'Indica el kilometraje de tu vehículo, por favor.', label:'Kilometraje actual del cuentakilómetros', unit:'kilómetros', km_ph:'ej. 45000', send:'Enviar mi kilometraje', sending:'Enviando…', done_title:'¡Gracias!', done_sub:'Tu kilometraje se ha registrado.', needkm:'Introduce tu kilometraje (un número).', sendfail:'Error al enviar. Inténtalo de nuevo.', conn:'No se pudo conectar. Inténtalo de nuevo.', lastknown:function(v){return 'Último kilometraje conocido: <b>'+v+' km</b>';}, saved:function(v){return 'Kilometraje registrado: <b>'+v+' km</b>.';} },
+    it: { sub:'Comunica il chilometraggio del tuo veicolo, per favore.', label:'Chilometraggio attuale dal contachilometri', unit:'chilometri', km_ph:'es. 45000', send:'Invia il mio chilometraggio', sending:'Invio…', done_title:'Grazie!', done_sub:'Il tuo chilometraggio è stato registrato.', needkm:'Inserisci il tuo chilometraggio (un numero).', sendfail:'Invio non riuscito. Riprova.', conn:'Connessione non riuscita. Riprova.', lastknown:function(v){return 'Ultimo chilometraggio noto: <b>'+v+' km</b>';}, saved:function(v){return 'Chilometraggio registrato: <b>'+v+' km</b>.';} },
+    de: { sub:'Bitte gib den Kilometerstand deines Fahrzeugs an.', label:'Aktueller Kilometerstand', unit:'Kilometer', km_ph:'z. B. 45000', send:'Kilometerstand senden', sending:'Senden…', done_title:'Danke!', done_sub:'Dein Kilometerstand wurde gespeichert.', needkm:'Gib deinen Kilometerstand ein (eine Zahl).', sendfail:'Senden fehlgeschlagen. Bitte erneut versuchen.', conn:'Verbindung fehlgeschlagen. Bitte erneut versuchen.', lastknown:function(v){return 'Letzter bekannter Kilometerstand: <b>'+v+' km</b>';}, saved:function(v){return 'Kilometerstand gespeichert: <b>'+v+' km</b>.';} },
+    zh: { sub:'请提供您车辆的里程数。', label:'当前仪表盘里程', unit:'公里', km_ph:'例如 45000', send:'提交我的里程', sending:'发送中…', done_title:'谢谢！', done_sub:'您的里程已记录。', needkm:'请输入里程（数字）。', sendfail:'发送失败，请重试。', conn:'连接失败，请重试。', lastknown:function(v){return '最近已知里程：<b>'+v+' km</b>';}, saved:function(v){return '里程已记录：<b>'+v+' km</b>。';} }
+  };
+  function kmT(k) { var o = KM_I18N[LANG] || KM_I18N.fr; return (o[k] != null) ? o[k] : (KM_I18N.fr[k] != null ? KM_I18N.fr[k] : k); }
+  function renderKm() {
+    var v = DATA.veh || {};
+    // Réinitialise les états (formulaire visible, merci caché).
+    $('km-form-wrap').classList.remove('hide'); $('km-done').classList.add('hide');
+    // Libellés traduits.
+    $('km-label').textContent = kmT('label');
+    $('km-unit').textContent = kmT('unit');
+    $('km-done-title').textContent = kmT('done_title');
+    $('km-done-sub').textContent = kmT('done_sub');
+    var send = $('km-send'); send.disabled = false; send.textContent = kmT('send');
+    var err = $('km-err'); err.textContent = ''; err.style.display = 'none';
+    var inp = $('km-input'); inp.value = ''; inp.setAttribute('placeholder', kmT('km_ph'));
+    // Dernier km connu (déjà chargé par le portail → aucune requête, affichage instantané).
+    var known = (v.km != null && v.km !== '' && !isNaN(Number(v.km))) ? Number(v.km) : null;
+    $('km-known').innerHTML = (known != null) ? kmT('lastknown')(known.toLocaleString(localeNb())) : '';
+    setTimeout(function () { try { inp.focus(); } catch (e) {} }, 150);
+  }
+  function submitKm() {
+    var km = parseInt((($('km-input').value) || '').replace(/[^0-9]/g, ''), 10);
+    var err = $('km-err'); err.textContent = ''; err.style.display = 'none';
+    if (!km || km <= 0) { err.textContent = kmT('needkm'); err.style.display = 'block'; return; }
+    var send = $('km-send'); send.disabled = true;
+    send.innerHTML = '<span class="spin" style="width:18px;height:18px;border-width:2px;vertical-align:-3px"></span> ' + esc(kmT('sending'));
+    // Même endpoint que km.html ; le portail est arrivé par le QR permanent (h) → on l'envoie en `q`.
+    fetch(FN, { method: 'POST', headers: headers(), body: JSON.stringify({ q: token, km: km }) })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (res) {
+        var d = res.d || {};
+        if (!res.ok || !d.ok) { send.disabled = false; send.textContent = kmT('send'); err.textContent = d.error || kmT('sendfail'); err.style.display = 'block'; return; }
+        // Mémorise le nouveau km localement → réouverture de la rubrique = valeur à jour, sans requête.
+        if (DATA.veh) DATA.veh.km = d.km;
+        $('km-done-sub').innerHTML = kmT('saved')(Number(d.km).toLocaleString(localeNb()));
+        $('km-form-wrap').classList.add('hide'); $('km-done').classList.remove('hide');
+      })
+      .catch(function () { send.disabled = false; send.textContent = kmT('send'); err.textContent = kmT('conn'); err.style.display = 'block'; });
   }
 
   // ---- Mes documents ----
@@ -1869,7 +1947,7 @@
 
   function route(v) {
     if (v === 'veh') { renderVeh(); show('v-veh', vehTitle(), ''); }
-    else if (v === 'km') { location.href = 'km.html?q=' + encodeURIComponent(token) + '&lang=' + LANG; }
+    else if (v === 'km') { renderKm(); show('v-km', vehTitle(), kmT('sub')); }
     else if (v === 'doc') { renderDoc(); show('v-doc', vehTitle(), t('sub_doc')); }
     else if (v === 'sin') { openSinTriage(); show('v-sin', vehTitle(), ''); }
     else if (v === 'constat') { renderConstat(); show('v-constat', vehTitle(), ''); }
@@ -1881,7 +1959,7 @@
     else if (v === 'que') { resetQueForm(); show('v-que', vehTitle(), ''); }
     // Entrer dans une sous-page = ajouter une étape d'historique → le bouton RETOUR du NAVIGATEUR
     // (et pas seulement celui de l'app) ramène au menu du portail au lieu de quitter la page.
-    if (v !== 'km' && !_fromPop) { try { history.pushState({ ppv: v }, ''); } catch (e) {} }
+    if (!_fromPop) { try { history.pushState({ ppv: v }, ''); } catch (e) {} }
   }
   // Retour/avance navigateur (ou geste « précédent ») → on restaure EXACTEMENT la vue enregistrée dans
   // l'historique (et non un reset systématique). Sous-page → menu ; menu (base) → on laisse le navigateur
@@ -1953,6 +2031,10 @@
       $('que-form-wrap').classList.add('hide'); $('que-done').classList.remove('hide');
     });
   });
+
+  // Relevé km — envoi (clic + touche Entrée).
+  $('km-send').addEventListener('click', submitKm);
+  $('km-input').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); submitKm(); } });
 
   // États des lieux — inputs photo
   function wireEdl() {
