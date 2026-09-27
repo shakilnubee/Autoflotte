@@ -228,7 +228,8 @@ async function vehAmendes(db: ReturnType<typeof createClient>, societe: string, 
     if (!mine) continue;
     const majoree = a.majoree === true || a.majoree === "true";
     const montant = (majoree && a.montant_majore != null && a.montant_majore !== "") ? Number(a.montant_majore) : (Number(a.montant) || 0);
-    out.push({ numeroAvis: String(a.numero_avis || ""), montant: isFinite(montant) ? montant : 0, date: String(a.date || ""), motif: String(a.motif || ""), statut: String(a.statut || "") });
+    const pts = Number(a.points);
+    out.push({ numeroAvis: String(a.numero_avis || ""), montant: isFinite(montant) ? montant : 0, date: String(a.date || ""), motif: String(a.motif || ""), statut: String(a.statut || ""), points: (isFinite(pts) && pts > 0) ? Math.round(pts) : 0 });
   }
   // Tri : amendes NON PAYÉES d'abord, puis le reste — et dans chaque groupe, de la + récente à la + ancienne.
   // « payée » (statut normalisé commençant par « pay ») = payée ; « à payer » → « apayer » (n'y matche pas).
