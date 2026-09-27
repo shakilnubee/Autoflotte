@@ -4140,37 +4140,12 @@ FP._MODELES_AMENDE_OBSOLETES = {
     "Bonjour {prenom},\n\nDernière étape avant de rouler ! 🚀 Signez l'état des lieux de votre {modele} ({immat}) en quelques secondes, directement depuis ce mail.",
   ],
 };
-FP.migrerModelesAmendeObsoletes = function () {
-  try {
-    const s = FP.settings && FP.settings.get ? FP.settings.get() : null;
-    if (!s || !s.profil || typeof s.profil !== 'object') return;
-    const norm = t => String(t == null ? '' : t).replace(/\r\n/g, '\n').trim();
-    let changed = false;
-    Object.keys(FP._MODELES_AMENDE_OBSOLETES).forEach(key => {
-      const cur = s.profil[key];
-      if (cur == null || String(cur).trim() === '') return;         // rien d'enregistré → défaut déjà utilisé
-      const olds = FP._MODELES_AMENDE_OBSOLETES[key].map(norm);
-      if (olds.indexOf(norm(cur)) !== -1) { s.profil[key] = ''; changed = true; }  // = ancien défaut → on vide
-    });
-    // Filet supplémentaire : tout modèle de SIGNATURE (état des lieux) encore en VOUVOIEMENT — quelle que
-    // soit la mise en forme (sauts de ligne, etc.) — repasse au défaut tutoyé. La plateforme est 100 %
-    // tutoiement ; on ne veut pas d'un « Signez… de votre… » resté enregistré d'une ancienne version.
-    try {
-      const sig = s.profil.mailModeleSignature;
-      if (sig && /Signez\s+l['’]\s*état des lieux de votre/i.test(String(sig))) { s.profil.mailModeleSignature = ''; changed = true; }
-    } catch (_) {}
-    // Idem pour l'ANNONCE et le RAPPEL de rendez-vous : l'ancienne tournure « Pense à t'organiser »
-    // (jugée un peu sèche) et le motif collé dans la phrase sont remplacés par la version gentille avec
-    // « Motif : … ». On vide donc tout modèle enregistré qui contient encore « Pense à t'organiser ».
-    try {
-      ['mailModeleRdvGarage', 'mailModeleRappelGarage'].forEach(k => {
-        const v = s.profil[k];
-        if (v && /Pense à t['’]organiser/i.test(String(v))) { s.profil[k] = ''; changed = true; }
-      });
-    } catch (_) {}
-    if (changed) FP.settings.save(s);                               // persiste (synchro tous appareils)
-  } catch (e) {}
-};
+// ⚠️ DÉSACTIVÉE (consigne utilisateur) : cette migration effaçait au chargement les modèles d'e-mail
+// ENREGISTRÉS qui ressemblaient à d'anciens textes → elle REMETTAIT tes personnalisations au défaut à
+// chaque déploiement. On la neutralise : les textes que tu enregistres dans Paramètres → E-mails sont
+// désormais CONSERVÉS tels quels, définitivement (aucune réécriture automatique). No-op volontaire.
+// (Ne PAS réactiver de nettoyage automatique des modèles e-mail sans demande explicite.)
+FP.migrerModelesAmendeObsoletes = function () { /* no-op : ne jamais écraser les modèles e-mail enregistrés */ };
 // Le cache statique data.js ne contient que PXP : si une autre société est active,
 // on le vide au démarrage (les vraies données filtrées arriveront via Supabase),
 // sinon on verrait des données PXP sur une autre société.
