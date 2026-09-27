@@ -191,15 +191,54 @@ function buildMail(opts: { prenom: string; immat: string; marque: string; link: 
   return { subject, html: mailDoc(html), text };
 }
 
+// Fichier calendrier (.ics) base64 pour joindre le rendez-vous à l'e-mail (Google / Apple / Outlook
+// proposent alors « Ajouter au calendrier »). Événement « journée entière » sur la date du RDV.
+function icsEsc(s: string) { return String(s ?? "").replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n"); }
+function buildIcs(opts: { uid: string; title: string; dateIso: string; description?: string }): string {
+  const d0 = String(opts.dateIso || "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d0)) return "";
+  const start = d0.replace(/-/g, "");
+  const nx = new Date(d0 + "T00:00:00Z"); nx.setUTCDate(nx.getUTCDate() + 1);
+  const end = nx.toISOString().slice(0, 10).replace(/-/g, "");
+  const stamp = new Date().toISOString().replace(/[-:]/g, "").slice(0, 15) + "Z";
+  const L = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Parc Pilot//Agenda//FR", "CALSCALE:GREGORIAN", "METHOD:PUBLISH",
+    "BEGIN:VEVENT", "UID:" + (opts.uid || ("pp-" + Date.now())) + "@parc-pilot.fr", "DTSTAMP:" + stamp,
+    "DTSTART;VALUE=DATE:" + start, "DTEND;VALUE=DATE:" + end, "SUMMARY:" + icsEsc(opts.title || "Rendez-vous")];
+  if (opts.description) L.push("DESCRIPTION:" + icsEsc(opts.description));
+  L.push("END:VEVENT", "END:VCALENDAR");
+  const txt = L.join("\r\n");
+  try { return btoa(unescape(encodeURIComponent(txt))); } catch { try { return btoa(txt); } catch { return ""; } }
+}
+// Lien « Ajouter à Google Agenda » (événement journée entière). Cliquable dans l'e-mail (majorité Gmail).
+function gcalUrl(opts: { title: string; dateIso: string; description?: string }): string {
+  const d0 = String(opts.dateIso || "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d0)) return "";
+  const start = d0.replace(/-/g, "");
+  const nx = new Date(d0 + "T00:00:00Z"); nx.setUTCDate(nx.getUTCDate() + 1);
+  const end = nx.toISOString().slice(0, 10).replace(/-/g, "");
+  const p = new URLSearchParams({ action: "TEMPLATE", text: opts.title || "Rendez-vous", dates: start + "/" + end });
+  if (opts.description) p.set("details", opts.description);
+  return "https://calendar.google.com/calendar/render?" + p.toString();
+}
+
 // E-mail « rappel rendez-vous garage demain » (branded, même en-tête que le relevé km, sans bouton).
 // motif = libellé humain de l'intervention (« Révision », « Contrôle technique », « Réparation »…).
-function buildCtMail(opts: { prenom: string; immat: string; marque: string; dateFr: string; nomSoc: string; logoUrl: string; motif?: string; modele?: string }) {
+function buildCtMail(opts: { prenom: string; immat: string; marque: string; dateFr: string; dateIso?: string; nomSoc: string; logoUrl: string; motif?: string; modele?: string }) {
   const { prenom, immat, dateFr, nomSoc, logoUrl } = opts;
   const motif = String(opts.motif || "Contrôle technique").trim() || "Contrôle technique";
   const motifBas = motif.toLowerCase();
   const subject = "Rappel : " + motifBas + " demain" + (immat ? " (" + immat + ")" : "");
   // Message ÉDITABLE (Paramètres → E-mails). {prenom} {immat} {motif} {date}.
   const msg = fillTags((opts.modele && String(opts.modele).trim()) ? String(opts.modele) : DEF_RAPPELGARAGE, { prenom, immat, motif, date: dateFr });
+  // Fichier agenda (.ics) du RDV (date = demain) → joint à l'e-mail + note d'explication.
+  const icsB64 = buildIcs({ uid: "rdv-" + immat + "-" + String(opts.dateIso || "").slice(0, 10), title: motif + (immat ? " · " + immat : ""), dateIso: String(opts.dateIso || ""), description: immat ? ("Véhicule : " + immat) : "" });
+  const gUrl = gcalUrl({ title: motif + (immat ? " · " + immat : ""), dateIso: String(opts.dateIso || ""), description: immat ? ("Véhicule : " + immat) : "" });
+  const calBlock = (gUrl || icsB64)
+    ? '<div style="text-align:center;margin:18px 0 2px">'
+      + (gUrl ? '<a href="' + gUrl + '" style="display:inline-block;background:#0B1220;color:#ffffff;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:800;font-size:14px">📅 Ajouter à mon agenda</a>' : '')
+      + '</div>'
+      + (icsB64 ? '<p style="font-size:12px;color:#94A3B8;text-align:center;margin:6px 0 0">Ou ouvre le fichier agenda joint (Apple / Outlook).</p>' : '')
+    : "";
   const plate = immat
     ? '<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:separate;white-space:nowrap"><tr>'
       + '<td style="background:#1B48C4;color:#fff;font-family:Arial,sans-serif;font-weight:800;font-size:11px;padding:8px 7px;border:2px solid #0b0b0b;border-right:none;border-radius:7px 0 0 7px">F</td>'
@@ -215,11 +254,12 @@ function buildCtMail(opts: { prenom: string; immat: string; marque: string; date
     + "</div>"
     + '<div style="border:1px solid #E7EBF0;border-top:none;padding:22px">'
     + bodyText(msg)
+    + calBlock
     + "</div>"
     + ppFooter(nomSoc)
     + "</div>";
   const text = msg + "\n\n" + (nomSoc || "Parc Pilot");
-  return { subject, html: mailDoc(html), text };
+  return { subject, html: mailDoc(html), text, ics: icsB64 };
 }
 
 Deno.serve(async (req) => {
@@ -450,9 +490,10 @@ Deno.serve(async (req) => {
       // Un e-mail par motif dû demain (en pratique 1 seul ; CT + rdv le même jour = 2, rare).
       for (const tg of targets) {
         if (dryRun) { ctBump(soc, "sent"); ctDetails.push({ societe: soc, immat: veh.immat || "", to: toList, motif: tg.motif, status: "dry-run" }); continue; }
-        const mail = buildCtMail({ prenom, immat: veh.immat || "", marque: ((veh.marque || "") + " " + (veh.modele || "")).trim(), dateFr, nomSoc, logoUrl, motif: tg.motif, modele: String(p.mailModeleRappelGarage || "") });
+        const mail = buildCtMail({ prenom, immat: veh.immat || "", marque: ((veh.marque || "") + " " + (veh.modele || "")).trim(), dateFr, dateIso: demain, nomSoc, logoUrl, motif: tg.motif, modele: String(p.mailModeleRappelGarage || "") });
         const payload: Record<string, unknown> = { from, to: toList, subject: mail.subject, html: mail.html, text: mail.text };
         if (replyTo) payload.reply_to = replyTo;
+        if (mail.ics) payload.attachments = [{ filename: "rendez-vous.ics", content: mail.ics, content_type: "text/calendar" }];
         try {
           const r = await fetch("https://api.resend.com/emails", { method: "POST", headers: { Authorization: `Bearer ${RESEND_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
           if (!r.ok) { ctBump(soc, "failed"); ctDetails.push({ societe: soc, immat: veh.immat || "", motif: tg.motif, status: "resend-echec", error: (await r.text().catch(() => "")).slice(0, 200) }); }

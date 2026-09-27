@@ -14279,7 +14279,31 @@ FP.ics = {
       setTimeout(() => { try { URL.revokeObjectURL(url); } catch (_) {} }, 4000);
       if (FP.toast) FP.toast('📅 Événement téléchargé — ouvre-le pour l\'ajouter à ton agenda');
     } catch (e) { if (FP.notifyError) FP.notifyError('Impossible de générer l\'événement'); }
+  },
+  // Lien « Ajouter à Google Agenda » (événement journée entière). Cliquable dans un e-mail.
+  googleUrl(ev) {
+    ev = ev || {};
+    const iso = String(ev.date || '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return '';
+    const start = iso.replace(/-/g, '');
+    const nx = new Date(iso + 'T00:00:00Z'); nx.setUTCDate(nx.getUTCDate() + 1);
+    const end = nx.toISOString().slice(0, 10).replace(/-/g, '');
+    const p = new URLSearchParams({ action: 'TEMPLATE', text: ev.title || 'Rendez-vous', dates: start + '/' + end });
+    if (ev.description) p.set('details', ev.description);
+    if (ev.location) p.set('location', ev.location);
+    return 'https://calendar.google.com/calendar/render?' + p.toString();
   }
+};
+// Bloc HTML « 📅 Ajouter à mon agenda » pour les e-mails de rendez-vous : un bouton cliquable
+// (Google Agenda) + une mention du fichier .ics joint (Apple / Outlook). Vide si pas de date valide.
+FP.calendarBtnHtml = function (ev, opts) {
+  opts = opts || {};
+  const url = (FP.ics && FP.ics.googleUrl) ? FP.ics.googleUrl(ev) : '';
+  if (!url) return '';
+  return '<div style="text-align:center;margin:18px 0 2px">'
+    + '<a href="' + url + '" style="display:inline-block;background:#0B1220;color:#ffffff;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:800;font-size:14px">📅 Ajouter à mon agenda</a>'
+    + '</div>'
+    + (opts.ics === false ? '' : '<p style="font-size:12px;color:#94A3B8;text-align:center;margin:6px 0 0">Ou ouvre le fichier agenda joint (Apple / Outlook).</p>');
 };
 
 FP.mailBrand = function (o) {
@@ -14505,9 +14529,12 @@ FP.sendMailTest = async function (key, to) {
   FP.registerMail({
     key: 'rdv-garage', label: 'Annonce rendez-vous garage', group: 'Kilométrage',
     sample: () => ({ prenom: 'Alex', immat: 'AA-123-AA', motif: 'Révision', date: '05/10/2026' }),
-    build: (d) => { const t = tpl('mailModeleRdvGarage', 'rdvgarage', { prenom: d.prenom, immat: d.immat, motif: d.motif, date: d.date }); return {
+    build: (d) => { const t = tpl('mailModeleRdvGarage', 'rdvgarage', { prenom: d.prenom, immat: d.immat, motif: d.motif, date: d.date });
+      const iso = (function (s) { const m = /^(\d{2})\/(\d{2})\/(\d{4})/.exec(String(s || '')); return m ? (m[3] + '-' + m[2] + '-' + m[1]) : String(s || '').slice(0, 10); })(d.date);
+      const cal = FP.calendarBtnHtml ? FP.calendarBtnHtml({ title: (d.motif || 'Rendez-vous') + (d.immat ? ' · ' + d.immat : ''), date: iso, description: d.immat ? ('Véhicule : ' + d.immat) : '' }) : '';
+      return {
       subject: (d.motif || 'Rendez-vous garage') + (d.date ? ' le ' + d.date : '') + (d.immat ? ' (' + d.immat + ')' : ''),
-      html: FP.mailShell({ brand: d.nomSoc, logoUrl: d.logoUrl, title: (d.motif || 'Rendez-vous garage'), bodyHtml: bodyText(t) }),
+      html: FP.mailShell({ brand: d.nomSoc, logoUrl: d.logoUrl, title: (d.motif || 'Rendez-vous garage'), bodyHtml: bodyText(t) + cal }),
       text: t
     }; }
   });
@@ -14516,9 +14543,12 @@ FP.sendMailTest = async function (key, to) {
   FP.registerMail({
     key: 'rappel-entretien', label: 'Rappel rendez-vous garage (la veille)', group: 'Kilométrage',
     sample: () => ({ prenom: 'Alex', immat: 'AA-123-AA', motif: 'Révision', link: '#' }),
-    build: (d) => { const t = tpl('mailModeleRappelGarage', 'rappelgarage', { prenom: d.prenom, immat: d.immat, motif: d.motif }); return {
+    build: (d) => { const t = tpl('mailModeleRappelGarage', 'rappelgarage', { prenom: d.prenom, immat: d.immat, motif: d.motif });
+      const demain = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+      const cal = FP.calendarBtnHtml ? FP.calendarBtnHtml({ title: (d.motif || 'Rendez-vous') + (d.immat ? ' · ' + d.immat : ''), date: demain, description: d.immat ? ('Véhicule : ' + d.immat) : '' }) : '';
+      return {
       subject: 'Rappel : ' + String(d.motif).toLowerCase() + ' demain' + (d.immat ? ' (' + d.immat + ')' : ''),
-      html: FP.mailShell({ brand: d.nomSoc, logoUrl: d.logoUrl, title: esc(d.motif) + ' demain', bodyHtml: bodyText(t) }),
+      html: FP.mailShell({ brand: d.nomSoc, logoUrl: d.logoUrl, title: esc(d.motif) + ' demain', bodyHtml: bodyText(t) + cal }),
       text: t
     }; }
   });
