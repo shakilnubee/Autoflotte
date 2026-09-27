@@ -158,10 +158,13 @@ function fillTags(tpl: string, o: Record<string, unknown>): string {
 function bodyText(t: string): string { return '<div style="white-space:pre-wrap;line-height:1.55">' + esc(t).replace(/\n/g, "<br>") + "</div>"; }
 const DEF_RELEVEKM = "Bonjour {prenom},\n\nMerci d'indiquer le kilométrage actuel de ton véhicule {immat}. C'est rapide : un clic, un nombre, terminé.";
 const DEF_RAPPELGARAGE = "Bonjour {prenom},\n\nPetit rappel : un rendez-vous est prévu demain pour le véhicule {immat}. 🗓️\nMotif : {motif}\n\nBelle journée, et à très vite ! 🙂";
+// Objets (titres) ÉDITABLES côté site (Paramètres → E-mails) — mêmes défauts que FP.MAIL_OBJET_DEFAUT.
+const DEF_OBJ_RELEVEKM = "Relevé kilométrique — {immat}";
+const DEF_OBJ_RAPPELGARAGE = "Rappel : {motif} demain ({immat})";
 
-function buildMail(opts: { prenom: string; immat: string; marque: string; link: string; nomSoc: string; logoUrl: string; relance: boolean; modele?: string }) {
+function buildMail(opts: { prenom: string; immat: string; marque: string; link: string; nomSoc: string; logoUrl: string; relance: boolean; modele?: string; objet?: string }) {
   const { prenom, immat, marque, link, nomSoc, logoUrl, relance } = opts;
-  const subject = "Relevé kilométrique" + (immat ? " (" + immat + ")" : "") + (relance ? " (rappel)" : "");
+  const subject = fillTags((opts.objet && String(opts.objet).trim()) ? String(opts.objet) : DEF_OBJ_RELEVEKM, { prenom, immat }) + (relance ? " (rappel)" : "");
   const title = relance ? "Petit rappel : relevé kilométrique" : "Relevé kilométrique demandé";
   // Message ÉDITABLE (Paramètres → E-mails). {prenom} {immat}. Repli = texte par défaut.
   const msg = fillTags((opts.modele && String(opts.modele).trim()) ? String(opts.modele) : DEF_RELEVEKM, { prenom, immat });
@@ -223,11 +226,10 @@ function gcalUrl(opts: { title: string; dateIso: string; description?: string })
 
 // E-mail « rappel rendez-vous garage demain » (branded, même en-tête que le relevé km, sans bouton).
 // motif = libellé humain de l'intervention (« Révision », « Contrôle technique », « Réparation »…).
-function buildCtMail(opts: { prenom: string; immat: string; marque: string; dateFr: string; dateIso?: string; nomSoc: string; logoUrl: string; motif?: string; modele?: string }) {
+function buildCtMail(opts: { prenom: string; immat: string; marque: string; dateFr: string; dateIso?: string; nomSoc: string; logoUrl: string; motif?: string; modele?: string; objet?: string }) {
   const { prenom, immat, dateFr, nomSoc, logoUrl } = opts;
   const motif = String(opts.motif || "Contrôle technique").trim() || "Contrôle technique";
-  const motifBas = motif.toLowerCase();
-  const subject = "Rappel : " + motifBas + " demain" + (immat ? " (" + immat + ")" : "");
+  const subject = fillTags((opts.objet && String(opts.objet).trim()) ? String(opts.objet) : DEF_OBJ_RAPPELGARAGE, { prenom, immat, motif });
   // Message ÉDITABLE (Paramètres → E-mails). {prenom} {immat} {motif} {date}.
   const msg = fillTags((opts.modele && String(opts.modele).trim()) ? String(opts.modele) : DEF_RAPPELGARAGE, { prenom, immat, motif, date: dateFr });
   // Fichier agenda (.ics) du RDV (date = demain) → joint à l'e-mail + note d'explication.
@@ -361,7 +363,7 @@ Deno.serve(async (req) => {
     const nomSoc = String((data.societe && data.societe.nom) || "").trim();
     const prenom = String(chauffeur || veh.chauffeur || "").trim().split(/\s+/)[0] || "";
     const link = BASE + "?t=" + token;
-    const mail = buildMail({ prenom, immat: veh.immat || "", marque: ((veh.marque || "") + " " + (veh.modele || "")).trim(), link, nomSoc, logoUrl, relance, modele: String(p.mailModeleReleveKm || "") });
+    const mail = buildMail({ prenom, immat: veh.immat || "", marque: ((veh.marque || "") + " " + (veh.modele || "")).trim(), link, nomSoc, logoUrl, relance, modele: String(p.mailModeleReleveKm || ""), objet: String(p.mailObjetRelevekm || "") });
     const payload: Record<string, unknown> = { from, to: [email], subject: mail.subject, html: mail.html, text: mail.text };
     if (replyTo) payload.reply_to = replyTo;
     try {
@@ -490,7 +492,7 @@ Deno.serve(async (req) => {
       // Un e-mail par motif dû demain (en pratique 1 seul ; CT + rdv le même jour = 2, rare).
       for (const tg of targets) {
         if (dryRun) { ctBump(soc, "sent"); ctDetails.push({ societe: soc, immat: veh.immat || "", to: toList, motif: tg.motif, status: "dry-run" }); continue; }
-        const mail = buildCtMail({ prenom, immat: veh.immat || "", marque: ((veh.marque || "") + " " + (veh.modele || "")).trim(), dateFr, dateIso: demain, nomSoc, logoUrl, motif: tg.motif, modele: String(p.mailModeleRappelGarage || "") });
+        const mail = buildCtMail({ prenom, immat: veh.immat || "", marque: ((veh.marque || "") + " " + (veh.modele || "")).trim(), dateFr, dateIso: demain, nomSoc, logoUrl, motif: tg.motif, modele: String(p.mailModeleRappelGarage || ""), objet: String(p.mailObjetRappelgarage || "") });
         const payload: Record<string, unknown> = { from, to: toList, subject: mail.subject, html: mail.html, text: mail.text };
         if (replyTo) payload.reply_to = replyTo;
         if (mail.ics) payload.attachments = [{ filename: "rendez-vous.ics", content: mail.ics, content_type: "text/calendar" }];

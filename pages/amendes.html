@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260927d">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260927e">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260927d"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260927e"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260927d">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260927e">
 <style>
   .kpi-link { cursor: pointer; transition: transform .12s, box-shadow .12s; }
   .kpi-link:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(15,23,42,.10); }
@@ -484,8 +484,8 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260927d"></script>
-<script src="../assets/js/supabase-client.js?v=20260927d"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260927e"></script>
+<script src="../assets/js/supabase-client.js?v=20260927e"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -501,11 +501,11 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260927d"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260927e"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20260927d"></script>
+<script src="../assets/js/app.min.js?v=20260927e"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -1038,7 +1038,13 @@
       return;
     }
     const to = lookupEmail(a.prenom);
-    const subjectBase = `CONTRAVENTION${a.numeroAvis ? ' ' + a.numeroAvis : ''}`;
+    // Objet ÉDITABLE (Paramètres → E-mails → « Objet — amendes »), balises {avis}{plaque}. Les 3
+    // e-mails d'amende partagent le même objet → ils restent groupés (le fil est de toute façon
+    // garanti par References/In-Reply-To, l'objet peut donc changer sans casser le regroupement).
+    const _amEn = !!(window.FP && FP.condLangue && FP.condLangue(a.prenom) === 'en');
+    const subjectBase = (window.FP && FP.mailObjet)
+      ? (FP.mailObjet(_amEn ? 'amende_en' : 'amende', { avis: a.numeroAvis, plaque: (FP.amendePlaque ? FP.amendePlaque(a) : (a.immatriculation || a.plaque || '')) }) || `CONTRAVENTION${a.numeroAvis ? ' ' + a.numeroAvis : ''}`)
+      : `CONTRAVENTION${a.numeroAvis ? ' ' + a.numeroAvis : ''}`;
     // Une relance doit arriver DANS LA SUITE du 1er e-mail (même fil). On préfixe « Re: » et,
     // surtout, on ancre TOUS les e-mails d'une même amende sur un identifiant RACINE déterministe
     // (dérivé de l'id de l'amende) via les en-têtes RFC References/In-Reply-To → Gmail les regroupe
@@ -1091,7 +1097,7 @@
         let _logo = ''; try { if (FP.hostSocieteLogo) _logo = await FP.hostSocieteLogo(); } catch (e) {}
         let _soc = ''; try { _soc = (FP.settings.get().societe && FP.settings.get().societe.nom) || ''; } catch (e) {}
         const _plaque = (FP.amendePlaque ? FP.amendePlaque(a) : (a.immatriculation || a.plaque || ''));
-        if (FP.mailBrand) html = FP.mailBrand({ title: opts.title || 'Avis de contravention', prenom: a.prenom || '', plaque: _plaque, montant: a.montant, numeroAvis: a.numeroAvis, nomSoc: _soc, logoUrl: _logo, bodyHtml: _bodyHtml });
+        if (FP.mailBrand) html = FP.mailBrand({ title: opts.title || 'Avis de contravention', prenom: a.prenom || '', plaque: _plaque, vehicule: (function(){try{const v=FP.vehByImmat&&FP.vehByImmat(_plaque);return v?((v.marque||'')+' '+(v.modele||'')).trim():'';}catch(e){return '';}})(), montant: a.montant, numeroAvis: a.numeroAvis, nomSoc: _soc, logoUrl: _logo, bodyHtml: _bodyHtml });
       } catch (e) { html = _bodyHtml; }
       // Plus de lien dans le corps du message : l'avis de contravention est en PIÈCE JOINTE.
       try {
@@ -1198,7 +1204,10 @@
     if (!EXPEDITEUR || !(window.FP && FP.sendEmail)) return 'no-config';
     const to = lookupEmail(a.prenom);
     if (!to) return 'no-mail';
-    const subjectBase = `CONTRAVENTION${a.numeroAvis ? ' ' + a.numeroAvis : ''}`;
+    const _amEn = !!(window.FP && FP.condLangue && FP.condLangue(a.prenom) === 'en');
+    const subjectBase = (window.FP && FP.mailObjet)
+      ? (FP.mailObjet(_amEn ? 'amende_en' : 'amende', { avis: a.numeroAvis, plaque: (FP.amendePlaque ? FP.amendePlaque(a) : (a.immatriculation || a.plaque || '')) }) || `CONTRAVENTION${a.numeroAvis ? ' ' + a.numeroAvis : ''}`)
+      : `CONTRAVENTION${a.numeroAvis ? ' ' + a.numeroAvis : ''}`;
     const subject = opts.reply ? ('Re: ' + subjectBase) : subjectBase;
     const _mailDom = (String(EXPEDITEUR).split('@')[1] || String(_prof.mailDomaineEnvoi || '').replace(/^@/, '') || 'parc-pilot.fr').trim();
     const _rootId = `<pp-amende-${a.id}@${_mailDom}>`;
@@ -1220,7 +1229,7 @@
       let _logo = ''; try { if (FP.hostSocieteLogo) _logo = await FP.hostSocieteLogo(); } catch (e) {}
       let _soc = ''; try { _soc = (FP.settings.get().societe && FP.settings.get().societe.nom) || ''; } catch (e) {}
       const _plaque = (FP.amendePlaque ? FP.amendePlaque(a) : (a.immatriculation || a.plaque || ''));
-      if (FP.mailBrand) html = FP.mailBrand({ title: opts.reply ? 'Rappel de contravention' : 'Contravention à régler', prenom: a.prenom || '', plaque: _plaque, montant: a.montant, numeroAvis: a.numeroAvis, nomSoc: _soc, logoUrl: _logo, bodyHtml: _bodyHtml });
+      if (FP.mailBrand) html = FP.mailBrand({ title: opts.reply ? 'Rappel de contravention' : 'Contravention à régler', prenom: a.prenom || '', plaque: _plaque, vehicule: (function(){try{const v=FP.vehByImmat&&FP.vehByImmat(_plaque);return v?((v.marque||'')+' '+(v.modele||'')).trim():'';}catch(e){return '';}})(), montant: a.montant, numeroAvis: a.numeroAvis, nomSoc: _soc, logoUrl: _logo, bodyHtml: _bodyHtml });
     } catch (e) { html = _bodyHtml; }
     try {
       await FP.sendEmail({ to, cc: COPIE_MAIL, subject, html, text: sigBody, replyTo: EXPEDITEUR, attachments, headers });
