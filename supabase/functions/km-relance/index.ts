@@ -85,7 +85,8 @@ function resolveEmail(chauffeur: string, list: any[]): string {
   return String((c && c.email) || "").trim();
 }
 // Hors flotte (même liste que FP.horsFlotte côté site) : on ne relance pas ces véhicules.
-const HORS_FLOTTE = new Set(["vendu", "vendue", "à vendre", "a vendre", "a-vendre", "cédé", "cede", "cédée", "hors service", "hors-service", "hs", "archive", "archivé", "archivée", "restitué", "restitue"]);
+// ⚠️ « À vendre » N'EST PAS hors flotte (véhicule encore possédé → traité comme un véhicule normal).
+const HORS_FLOTTE = new Set(["vendu", "vendue", "cédé", "cede", "cédée", "cedee", "hors service", "hors-service", "hs", "archive", "archivé", "archivée", "restitué", "restitue", "restituée", "restituee"]);
 const horsFlotte = (statut: unknown) => HORS_FLOTTE.has(String(statut ?? "").toLowerCase().trim());
 const uuid = () => (crypto.randomUUID ? crypto.randomUUID().replace(/-/g, "") : (Date.now().toString(36) + Math.random().toString(36).slice(2, 14)));
 
