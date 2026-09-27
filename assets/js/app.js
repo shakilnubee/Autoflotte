@@ -378,6 +378,10 @@ FP.tvsDetail = (v) => {
 // estVendu = véhicule qui ne t'appartient plus (sorti du parc). Utilisé pour la
 // FLOTTE / le parc / la TVS (une voiture "à vendre" est encore possédée → comptée).
 FP.estVendu = (v) => { const s = ((v && v.statut) || '').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim(); return s === 'vendu' || s === 'vendue'; };
+// « Définitivement cédé » = vraiment parti (vendu / cédé / hors service / archivé / restitué) — MAIS
+// PAS « à vendre » : un véhicule encore en ta possession (même en vente) doit garder son suivi de CT
+// (un CT valide est requis pour le vendre). Utilisé pour le CONTRÔLE TECHNIQUE (alerte + tâches).
+FP.estCede = (v) => { const s = ((v && v.statut) || '').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim(); return ['vendu', 'vendue', 'cede', 'cedee', 'hors service', 'hors-service', 'hs', 'archive', 'archivee', 'restitue', 'restituee'].includes(s); };
 // horsFlotte = plus à suivre au quotidien (vendu, à vendre, hors service, cédé, archivé, restitué).
 // Utilisé pour les ALERTES / échéances / CT (on n'alerte pas sur une voiture en cours de vente).
 FP.horsFlotte = (v) => ['vendu', 'vendue', 'à vendre', 'a vendre', 'a-vendre', 'cédé', 'cede', 'cédée', 'hors service', 'hors-service', 'hs', 'archive', 'archivé', 'archivée', 'restitué', 'restitue'].includes(((v && v.statut) || '').toString().toLowerCase().trim());
@@ -7538,7 +7542,7 @@ FP.buildAlertes = (data) => {
 
   // --- Contrôles techniques ---
   (data.vehicules || []).forEach(v => {
-    if (horsFlotte(v)) return;
+    if (FP.estCede(v)) return; // vraiment parti (vendu/cédé/HS/archivé/restitué) — MAIS on garde « à vendre » (CT requis pour vendre)
     if (FP.ctIgnored(v)) return; // véhicule étranger / CT ignoré → pas d'alerte
     if (!v.prochainCT || v.prochainCT === '—') return;
     const d = new Date(v.prochainCT);
