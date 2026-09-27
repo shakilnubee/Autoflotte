@@ -2477,7 +2477,11 @@ FP.kmCollecte = {
     const T = (L === 'en')
       ? { subject: 'Mileage reading', hi: 'Hello', title: 'Mileage reading requested', ask1: 'Please provide the <b>current mileage</b> of your vehicle', ask2: '. It only takes a second: one tap, one number, done.', btn: 'Enter my mileage →', fb: 'If the button does not work, copy this link:', askTxt: 'Please provide the current mileage of your vehicle', clickTxt: 'Open this link:' }
       : { subject: 'Relevé kilométrique', hi: 'Bonjour', title: 'Relevé kilométrique demandé', ask1: "Merci d'indiquer le <b>kilométrage actuel</b> de ton véhicule", ask2: ". C'est rapide : un clic, un nombre, terminé.", btn: 'Indiquer mon kilométrage →', fb: 'Si le bouton ne fonctionne pas, copie ce lien :', askTxt: "Merci d'indiquer le kilométrage actuel de ton véhicule", clickTxt: 'Clique sur ce lien :' };
-    const subject = T.subject + (v.immat ? ' (' + v.immat + ')' : '');   // sujet = texte brut (pas d'échappement HTML)
+    // Objet : FR = ÉDITABLE (Paramètres → E-mails → « Objet — relevé km »), balises {immat}{prenom} ;
+    // EN = objet anglais par défaut. Repli sur l'ancien format si le helper n'est pas dispo.
+    const subject = (L !== 'en' && FP.mailObjet)
+      ? (FP.mailObjet('relevekm', { immat: v.immat, prenom: cPrenom }) || (T.subject + (v.immat ? ' (' + v.immat + ')' : '')))
+      : (T.subject + (v.immat ? ' (' + v.immat + ')' : ''));   // sujet = texte brut (pas d'échappement HTML)
     const socName = nomSoc ? FP.esc(nomSoc) : '';
     // Logo société HÉBERGÉ (URL http) — jamais le data-URI (cassé dans les e-mails). Rempli par
     // FP.hostSocieteLogo() appelé dans send() AVANT la construction du mail.
@@ -3875,7 +3879,8 @@ FP.fillTags = function (tpl, o) {
   o = o || {};
   let s = String(tpl == null ? '' : tpl);
   const first = String(o.prenom || '').trim().split(/\s+/)[0] || '';
-  const map = { prenom: first, plaque: o.plaque, immat: o.immat, motif: o.motif, date: o.date, email: o.email };
+  const _avis = (o.avis != null ? o.avis : o.numeroAvis);
+  const map = { prenom: first, plaque: o.plaque, immat: o.immat, motif: o.motif, date: o.date, email: o.email, modele: o.modele, avis: _avis, numeroAvis: _avis };
   Object.keys(map).forEach(k => {
     const v = String(map[k] == null ? '' : map[k]).trim();
     s = s.replace(new RegExp('\\{' + k + '\\}', 'gi'), v);   // remplacement DIRECT (pas d'espace ajouté)
@@ -3895,6 +3900,31 @@ FP.mailModeleProfil = function (profilKey, defKey) {
   const v = prof[profilKey]; if (v && String(v).trim()) return String(v);
   return FP.MAIL_DEFAUT[defKey] || '';
 };
+// ===== OBJET (titre) de chaque e-mail — ÉDITABLE dans Paramètres → E-mails =====
+// Défauts par type d'e-mail. Balises {…} remplies par FP.fillTags ({prenom}{plaque}{immat}{motif}
+// {date}{email}{avis}{modele}). ⚠️ AMENDE : les 3 e-mails (paiement/désignation/relance) PARTAGENT
+// le même objet « CONTRAVENTION {avis} » → ils restent groupés dans la boîte du destinataire
+// (le fil est de toute façon garanti par les en-têtes References/In-Reply-To, l'objet peut donc
+// changer sans casser le regroupement).
+FP.MAIL_OBJET_DEFAUT = {
+  amende: 'CONTRAVENTION {avis}',
+  amende_en: 'FINE {avis}',
+  signature: "Signature de l'état des lieux — {immat}",
+  bienvenue: "Bienvenue à bord 🚗 — ton espace véhicule",
+  relevekm: 'Relevé kilométrique — {immat}',
+  rdvgarage: '{motif} le {date} ({immat})',
+  rappelgarage: 'Rappel : {motif} demain ({immat})',
+  invitation: 'Bienvenue sur Parc Pilot 🎉 — ton accès',
+};
+// Objet e-mail ACTIF (personnalisé société sinon défaut), balises déjà remplies. `defKey` = clé de
+// MAIL_OBJET_DEFAUT ; le champ profil correspondant est `mailObjet<DefKey>` (1re lettre en maj).
+FP.mailObjet = function (defKey, tags) {
+  let prof = {}; try { prof = FP.societeProfil ? FP.societeProfil() : {}; } catch (e) {}
+  const pk = 'mailObjet' + String(defKey).charAt(0).toUpperCase() + String(defKey).slice(1);
+  const raw = (prof[pk] && String(prof[pk]).trim()) ? String(prof[pk]) : (FP.MAIL_OBJET_DEFAUT[defKey] || '');
+  const out = FP.fillTags ? FP.fillTags(raw, tags || {}) : raw;
+  return String(out || '').trim();
+};
 // Champs du profil société (rendu générique : le formulaire de Paramètres itère dessus).
 // Un champ avec `default` est PRÉ-REMPLI avec ce texte quand la valeur est vide (l'utilisateur le voit).
 FP.PROFIL_CHAMPS = [
@@ -3913,6 +3943,9 @@ FP.PROFIL_CHAMPS = [
   // ⚠️ Les LOUEURS (BPCE, Ayvens…) se gèrent dans l'onglet CONTRATS (liste multi-loueurs
   // settings.loueurs), PAS ici. On n'expose donc PAS loueurNom/proprietaireLeasing dans le
   // formulaire Paramètres (les valeurs restent en base pour la rétro-compat / le repli PXP).
+  // Objet (titre) PARTAGÉ par les 3 e-mails d'amende (paiement/désignation/relance) — ils restent
+  // ainsi groupés chez le destinataire. Balises : {avis} (n° d'avis), {plaque}.
+  { key: 'mailObjetAmende',      label: "Objet e-mail — amendes (paiement / désignation / relance)", type: 'text', ph: 'Balises : {avis}, {plaque}.', default: FP.MAIL_OBJET_DEFAUT.amende },
   { key: 'mailModelePaiement',   label: "Modèle e-mail — demande de paiement",     type: 'textarea', ph: 'Écris {prenom} pour insérer le prénom.', default: FP.MAIL_DEFAUT.paiement },
   { key: 'mailModeleDesignation',label: "Modèle e-mail — demande de désignation",  type: 'textarea', ph: 'Écris {prenom}.', default: FP.MAIL_DEFAUT.designation },
   { key: 'mailModeleRelance',    label: "Modèle e-mail — relance",                 type: 'textarea', ph: 'Écris {prenom}.', default: FP.MAIL_DEFAUT.relance },
@@ -3920,12 +3953,18 @@ FP.PROFIL_CHAMPS = [
   { key: 'mailModelePaiement_en',   label: "E-mail EN — payment request",      type: 'textarea', ph: 'Use {prenom} for the first name.', default: FP.MAIL_DEFAUT.paiement_en, lang: 'en' },
   { key: 'mailModeleDesignation_en',label: "E-mail EN — driver designation",   type: 'textarea', ph: 'Use {prenom}.', default: FP.MAIL_DEFAUT.designation_en, lang: 'en' },
   { key: 'mailModeleRelance_en',    label: "E-mail EN — reminder",             type: 'textarea', ph: 'Use {prenom}.', default: FP.MAIL_DEFAUT.relance_en, lang: 'en' },
+  { key: 'mailObjetSignature',   label: "Objet e-mail — signature état des lieux", type: 'text', ph: 'Balises : {immat}, {modele}, {prenom}.', default: FP.MAIL_OBJET_DEFAUT.signature },
   { key: 'mailModeleSignature',  label: "Modèle e-mail — demande de signature (état des lieux)", type: 'textarea', ph: 'Message envoyé au conducteur pour signer. Balises : {prenom}, {immat}, {modele}, {date}. Le bouton « Signer le document » et les infos du véhicule sont ajoutés automatiquement (mise en page soignée).', default: 'Bonjour {prenom},\n\nDernière étape avant de rouler ! 🚀 Signe l\'état des lieux de ta {modele} ({immat}) en quelques secondes, directement depuis ce mail.' },
   // ── Autres e-mails éditables (message seul ; logo/plaque/bouton ajoutés automatiquement) ──
+  { key: 'mailObjetBienvenue',     label: "Objet e-mail — bienvenue conducteur",   type: 'text', ph: 'Balises : {prenom}, {plaque}.', default: FP.MAIL_OBJET_DEFAUT.bienvenue },
   { key: 'mailModeleBienvenue',    label: "Modèle e-mail — bienvenue conducteur (QR)",     type: 'textarea', ph: 'Balises : {prenom}, {plaque}. Le bouton « Accéder à mon espace » est ajouté automatiquement.', default: FP.MAIL_DEFAUT.bienvenue },
+  { key: 'mailObjetRelevekm',      label: "Objet e-mail — demande de relevé km",   type: 'text', ph: 'Balises : {prenom}, {immat}.', default: FP.MAIL_OBJET_DEFAUT.relevekm },
   { key: 'mailModeleReleveKm',     label: "Modèle e-mail — demande de relevé km",          type: 'textarea', ph: 'Balises : {prenom}, {immat}. Le bouton « Indiquer mon kilométrage » est ajouté automatiquement.', default: FP.MAIL_DEFAUT.relevekm },
+  { key: 'mailObjetRdvgarage',     label: "Objet e-mail — annonce rendez-vous garage", type: 'text', ph: 'Balises : {immat}, {date}, {motif}, {prenom}.', default: FP.MAIL_OBJET_DEFAUT.rdvgarage },
   { key: 'mailModeleRdvGarage',    label: "Modèle e-mail — annonce d'un rendez-vous garage",       type: 'textarea', ph: 'Balises : {prenom}, {immat}, {motif}, {date}. Envoyé quand tu programmes le rendez-vous sur la fiche véhicule.', default: FP.MAIL_DEFAUT.rdvgarage },
+  { key: 'mailObjetRappelgarage',  label: "Objet e-mail — rappel rendez-vous (la veille)", type: 'text', ph: 'Balises : {immat}, {motif}, {prenom}.', default: FP.MAIL_OBJET_DEFAUT.rappelgarage },
   { key: 'mailModeleRappelGarage', label: "Modèle e-mail — rappel rendez-vous garage (la veille)", type: 'textarea', ph: 'Balises : {prenom}, {immat}, {motif}. Envoyé automatiquement la veille du rendez-vous.', default: FP.MAIL_DEFAUT.rappelgarage },
+  { key: 'mailObjetInvitation',    label: "Objet e-mail — invitation à un compte",  type: 'text', ph: 'Balises : {email}.', default: FP.MAIL_OBJET_DEFAUT.invitation },
   { key: 'mailModeleInvitation',   label: "Modèle e-mail — invitation à un compte",        type: 'textarea', ph: 'Balises : {email}. Le bouton « Définir mon mot de passe » est ajouté automatiquement.', default: FP.MAIL_DEFAUT.invitation },
   // ⚠️ Le champ « Signature (bas des e-mails d'amende) » a été RETIRÉ (2026-09-25) : les e-mails
   //    partent désormais via la plateforme avec un pied de page brandé (société · via Parc Pilot),
@@ -9102,8 +9141,13 @@ FP.ulysRenderPanel = function (el) {
       // Véhicule = celui résolu par matchBadge (immat Ulys OU n° de badge saisi sur la fiche véhicule =
       // settings.vehBadge). ⚠️ Ne PAS conditionner l'affichage à la seule immat Ulys : un badge sans
       // immat côté Ulys mais rattaché à un véhicule dans PP (Dépôt PXP…) doit quand même montrer la plaque.
+      // Véhicule non résolu (Ulys sans immat sur ce badge, ou immat hors flotte) → on propose de le
+      // RELIER MANUELLEMENT à un véhicule de la flotte : on écrit le n° de badge sur la fiche véhicule
+      // (settings.vehBadge, même stockage que « Badge télépéage ») → le rapprochement se fait ensuite
+      // tout seul (matchBadge étape 2), même quand Ulys ne donne pas l'immat (cas « Dépôt PXP »).
       const vehCell = m.veh ? FP.lienVehicule(m.veh.immat)
-        : (det.immatriculation ? (esc(det.immatriculation) + ' <span class="fp-ech warn" style="font-size:.6rem">hors flotte</span>') : '—');
+        : ((det.immatriculation ? (esc(det.immatriculation) + ' <span class="fp-ech warn" style="font-size:.6rem">hors flotte</span> ') : '')
+          + '<button type="button" class="btn btn-outline" style="padding:2px 8px;font-size:11px" data-uls-linkveh="' + esc(b.badgeNumber) + '">Relier au véhicule…</button>');
       return '<tr>'
         + '<td style="font-family:monospace;font-size:.8rem">' + esc(b.badgeNumber || '—') + '</td>'
         + '<td><span class="fp-ech ' + (actif ? 'ok' : 'neutral') + '">' + esc(b.state || '—') + '</span></td>'
@@ -9131,7 +9175,7 @@ FP.ulysRenderPanel = function (el) {
               ? '<div style="overflow-x:auto"><table class="fp-table" style="width:100%"><thead><tr>'
                 + '<th>N° badge</th><th>Statut</th><th>Véhicule</th><th>Affectation Ulys</th><th>Conducteur (auto)</th><th>Comm.</th>'
                 + '</tr></thead><tbody>' + rows + '</tbody></table></div>'
-                + '<div class="text-xs text-slate-400 mt-2">Rapprochement automatique : par immatriculation (→ véhicule → conducteur, y compris via l\'<b>historique d\'affectation</b> pour un véhicule vendu) ou par le nom de l\'affectation. « Relier » (ou « Relier à… » pour choisir/créer un conducteur) enregistre le n° de badge sur la fiche conducteur — la conso se rattache ensuite toute seule. Un <b>même conducteur peut porter plusieurs badges</b> (ex. « Dépôt PXP ») : chaque « Relier » <b>ajoute</b> un badge sans effacer les autres. Tu peux <b>replier</b> ce panneau (les mêmes infos sont dans « Cartes & badges »).</div>'
+                + '<div class="text-xs text-slate-400 mt-2">Rapprochement automatique : par immatriculation (→ véhicule → conducteur, y compris via l\'<b>historique d\'affectation</b> pour un véhicule vendu) ou par le nom de l\'affectation. « Relier » (ou « Relier à… » pour choisir/créer un conducteur) enregistre le n° de badge sur la fiche conducteur — la conso se rattache ensuite toute seule. Un <b>même conducteur peut porter plusieurs badges</b> (ex. « Dépôt PXP ») : chaque « Relier » <b>ajoute</b> un badge sans effacer les autres. Si la colonne <b>Véhicule</b> reste vide (Ulys ne donne pas toujours la plaque du badge), clique <b>« Relier au véhicule… »</b> et choisis la voiture : le n° de badge s\'enregistre sur sa fiche et la plaque s\'affiche automatiquement. Tu peux <b>replier</b> ce panneau (les mêmes infos sont dans « Cartes & badges »).</div>'
               : '<div class="text-sm text-slate-500">Aucun badge chargé. Clique <b>« Synchroniser »</b> pour récupérer tes badges Ulys via l\'API.</div>')
         ))
       + '</div>';
@@ -9167,6 +9211,29 @@ FP.ulysRenderPanel = function (el) {
       // « ➕ Créer « <nom> » » (un seul clic). Sinon, champ vide comme avant.
       if (assign) { inp.value = assign; }
       try { inp.focus(); } catch (e) {}
+    }));
+    // Relier un badge NON RAPPROCHÉ à un VÉHICULE (choisi dans la flotte, recherche par plaque). Écrit
+    // le n° de badge sur la fiche véhicule (vehBadge) → matchBadge étape 2 le résout ensuite tout seul,
+    // même quand Ulys ne fournit pas l'immat du badge (cas d'un véhicule « pool » comme Dépôt PXP).
+    el.querySelectorAll('[data-uls-linkveh]').forEach(b => b.addEventListener('click', () => {
+      const num = b.getAttribute('data-uls-linkveh');
+      const vehs = (window.FP_DATA && FP_DATA.vehicules || []).slice()
+        .sort((x, y) => String(x.immat || '').localeCompare(String(y.immat || '')));
+      if (!vehs.length) { FP.toast && FP.toast('Aucun véhicule en flotte.'); return; }
+      const sel = document.createElement('select');
+      sel.style.cssText = 'width:210px;padding:3px 7px;border:1px solid var(--fp-border);border-radius:6px;font-size:12px';
+      sel.innerHTML = '<option value="">Choisir un véhicule…</option>'
+        + vehs.map(v => '<option value="' + esc(v.id) + '">' + esc((v.immat || '?') + ' — ' + ((v.marque || '') + ' ' + (v.modele || '')).trim()) + '</option>').join('');
+      b.replaceWith(sel);
+      sel.addEventListener('change', () => {
+        const vid = sel.value; if (!vid) return;
+        const v = vehs.find(x => String(x.id) === String(vid)); if (!v) return;
+        if (FP.addNumCarteVehicule && FP.addNumCarteVehicule(v, 'vehBadge', num)) {
+          FP.toast && FP.toast('Badge relié au véhicule ' + (v.immat || '') + ' ✓'); draw();
+        }
+      });
+      if (FP.searchSelect) { try { FP.searchSelect(sel, { placeholder: 'Tape une plaque…' }); } catch (e) {} }
+      try { sel.focus(); } catch (e) {}
     }));
     const inv = el.querySelector('#uls-api-invoices');
     if (inv) inv.addEventListener('click', async () => {
@@ -11291,7 +11358,12 @@ FP.edl = {
   </div>
   <div style="text-align:center;font-size:11px;color:#cbd5e1;margin-top:10px">— ${esc(data.socNom || 'Gestion de flotte')} · via Parc Pilot</div>
 </div>`;
-              return { link, subject: (s.role === 'societe' ? 'À signer pour la société — état des lieux ' : 'À signer — état des lieux ') + data.immat, html, text: 'Signer l\'état des lieux : ' + link };
+              // Objet CONDUCTEUR = ÉDITABLE (Paramètres → E-mails → « Objet — signature EDL »), balises
+              // {immat}{modele}{prenom} ; le signataire SOCIÉTÉ garde son objet dédié (rôle différent).
+              const _subjSign = (s.role === 'societe')
+                ? ('À signer pour la société — état des lieux ' + data.immat)
+                : ((FP.mailObjet ? FP.mailObjet('signature', { immat: data.immat, modele: data.modele, prenom: prenomS }) : '') || ('À signer — état des lieux ' + data.immat));
+              return { link, subject: _subjSign, html, text: 'Signer l\'état des lieux : ' + link };
             };
             const minOrdre = Math.min.apply(null, signersList.map(s => s.ordre));
             const rec = {
@@ -14320,6 +14392,7 @@ FP.mailBrand = function (o) {
     +   '<div>' + brand + '</div>'
     +   (o.title ? '<div style="font-size:19px;font-weight:800;font-style:italic;margin-top:14px;line-height:1.25;color:#ffffff">' + esc(o.title) + '</div>' : '')
     +   (plate ? '<div style="margin-top:16px">' + plate + '</div>' : '')
+    +   (o.vehicule ? '<div style="font-size:13px;color:#CBD5E1;margin-top:8px;font-weight:600">' + esc(o.vehicule) + '</div>' : '')
     +   (prenom ? '<div style="margin-top:16px"><div style="font-size:10px;color:#94A3B8;text-transform:uppercase;letter-spacing:1px;font-weight:700">Destinataire</div><div style="font-size:16px;font-weight:700;color:#ffffff;margin-top:3px">' + esc(prenom) + '</div></div>' : '')
     +   infoBlock
     + '</div>'
@@ -14403,7 +14476,10 @@ FP.renderMailAmende = function (kind, a, ctx) {
     prenom, plaque, montant: a.montant, numeroAvis: a.numeroAvis,
     nomSoc: ctx.nomSoc || '', logoUrl: ctx.logoUrl || '', bodyHtml
   });
-  const subjectBase = 'CONTRAVENTION' + (a.numeroAvis ? ' ' + a.numeroAvis : '');
+  // Objet ÉDITABLE (Paramètres → E-mails → « Objet — amendes »), partagé par les 3 types → même fil.
+  const _amEn = !!(FP.condLangue && FP.condLangue(prenom) === 'en');
+  const _defSubj = 'CONTRAVENTION' + (a.numeroAvis ? ' ' + a.numeroAvis : '');
+  const subjectBase = (FP.mailObjet ? (FP.mailObjet(_amEn ? 'amende_en' : 'amende', { avis: a.numeroAvis, plaque }) || _defSubj) : _defSubj);
   return { subject: (kind === 'relance' ? 'Re: ' : '') + subjectBase, html, text: bodyText };
 };
 
@@ -14471,7 +14547,7 @@ FP.sendMailTest = async function (key, to) {
     key: 'bienvenue-conducteur', label: 'Bienvenue à bord (conducteur · QR)', group: 'Comptes',
     sample: () => ({ prenom: 'Alex', plaque: 'AA-123-AA', portail: '#' }),
     build: (d) => { const t = tpl('mailModeleBienvenue', 'bienvenue', { prenom: d.prenom, plaque: d.plaque }); return {
-      subject: 'Bienvenue à bord 🚗 · l\'espace véhicule',
+      subject: (FP.mailObjet ? FP.mailObjet('bienvenue', { prenom: d.prenom, plaque: d.plaque }) : '') || 'Bienvenue à bord 🚗 · l\'espace véhicule',
       html: FP.mailBrand({ title: 'Bienvenue à bord', prenom: d.prenom, plaque: d.plaque, nomSoc: d.nomSoc, logoUrl: d.logoUrl,
         bodyHtml: bodyText(t), buttonHtml: btn(d.portail, 'Accéder à mon espace →') }),
       text: t + (d.portail && d.portail !== '#' ? '\n\nTon espace : ' + d.portail : '')
@@ -14483,7 +14559,7 @@ FP.sendMailTest = async function (key, to) {
     note: "Différent du « Bienvenue à bord » conducteur : celui-ci ouvre un COMPTE (connexion). Envoyé au nom de Parc Pilot → l'envoi réel nécessite le domaine parc-pilot.fr vérifié dans Resend.",
     sample: () => ({ email: 'alex.martin@exemple.fr', link: '#' }),
     build: (d) => { const t = tpl('mailModeleInvitation', 'invitation', { email: d.email }); return {
-      subject: 'Ton accès à Parc Pilot · définis ton mot de passe',
+      subject: (FP.mailObjet ? FP.mailObjet('invitation', { email: d.email }) : '') || 'Ton accès à Parc Pilot · définis ton mot de passe',
       html: FP.mailShell({ brand: 'Parc Pilot', logoUrl: '', title: 'Bienvenue !',
         bodyHtml: bodyText(t), buttonHtml: btn(d.link, 'Définir mon mot de passe →') }),
       text: t + '\n\n' + d.link + '\n\nParc Pilot · parc-pilot.fr'
@@ -14494,7 +14570,7 @@ FP.sendMailTest = async function (key, to) {
     key: 'releve-km', label: 'Relevé kilométrique', group: 'Kilométrage',
     sample: () => ({ prenom: 'Alex', immat: 'AA-123-AA', link: '#', relance: false }),
     build: (d) => { const t = tpl('mailModeleReleveKm', 'relevekm', { prenom: d.prenom, immat: d.immat }); return {
-      subject: 'Relevé kilométrique' + (d.immat ? ' (' + d.immat + ')' : ''),
+      subject: (FP.mailObjet ? FP.mailObjet('relevekm', { prenom: d.prenom, immat: d.immat }) : '') || ('Relevé kilométrique' + (d.immat ? ' (' + d.immat + ')' : '')),
       html: FP.mailShell({ brand: d.nomSoc, logoUrl: d.logoUrl, title: 'Relevé kilométrique demandé',
         bodyHtml: bodyText(t), buttonHtml: btn(d.link, 'Indiquer mon kilométrage →') }),
       text: t + '\n\n' + d.link
@@ -14508,7 +14584,7 @@ FP.sendMailTest = async function (key, to) {
       const iso = (function (s) { const m = /^(\d{2})\/(\d{2})\/(\d{4})/.exec(String(s || '')); return m ? (m[3] + '-' + m[2] + '-' + m[1]) : String(s || '').slice(0, 10); })(d.date);
       const cal = FP.calendarBtnHtml ? FP.calendarBtnHtml({ title: (d.motif || 'Rendez-vous') + (d.immat ? ' · ' + d.immat : ''), date: iso, description: d.immat ? ('Véhicule : ' + d.immat) : '' }) : '';
       return {
-      subject: (d.motif || 'Rendez-vous garage') + (d.date ? ' le ' + d.date : '') + (d.immat ? ' (' + d.immat + ')' : ''),
+      subject: (FP.mailObjet ? FP.mailObjet('rdvgarage', { motif: d.motif, date: d.date, immat: d.immat, prenom: d.prenom }) : '') || ((d.motif || 'Rendez-vous garage') + (d.date ? ' le ' + d.date : '') + (d.immat ? ' (' + d.immat + ')' : '')),
       html: FP.mailShell({ brand: d.nomSoc, logoUrl: d.logoUrl, title: (d.motif || 'Rendez-vous garage'), bodyHtml: bodyText(t) + cal }),
       text: t
     }; }
@@ -14522,7 +14598,7 @@ FP.sendMailTest = async function (key, to) {
       const demain = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
       const cal = FP.calendarBtnHtml ? FP.calendarBtnHtml({ title: (d.motif || 'Rendez-vous') + (d.immat ? ' · ' + d.immat : ''), date: demain, description: d.immat ? ('Véhicule : ' + d.immat) : '' }) : '';
       return {
-      subject: 'Rappel : ' + String(d.motif).toLowerCase() + ' demain' + (d.immat ? ' (' + d.immat + ')' : ''),
+      subject: (FP.mailObjet ? FP.mailObjet('rappelgarage', { motif: d.motif, immat: d.immat, prenom: d.prenom }) : '') || ('Rappel : ' + String(d.motif).toLowerCase() + ' demain' + (d.immat ? ' (' + d.immat + ')' : '')),
       html: FP.mailShell({ brand: d.nomSoc, logoUrl: d.logoUrl, title: esc(d.motif) + ' demain', bodyHtml: bodyText(t) + cal }),
       text: t
     }; }
@@ -14536,7 +14612,7 @@ FP.sendMailTest = async function (key, to) {
       let raw = def; try { const p = FP.societeProfil ? FP.societeProfil() : {}; if (p.mailModeleSignature && String(p.mailModeleSignature).trim()) raw = String(p.mailModeleSignature); } catch (e) {}
       const t = FP.fillTags(raw.replace(/\{modele\}/gi, d.modele || ''), { prenom: d.prenom, immat: d.immat });
       return {
-        subject: 'État des lieux à signer (' + d.immat + ')',
+        subject: (FP.mailObjet ? FP.mailObjet('signature', { immat: d.immat, modele: d.modele, prenom: d.prenom }) : '') || ('État des lieux à signer (' + d.immat + ')'),
         html: FP.mailShell({ brand: d.nomSoc, logoUrl: d.logoUrl, title: 'État des lieux à signer', bodyHtml: bodyText(t), buttonHtml: btn(d.link, 'Signer le document →') }),
         text: t + '\n\n' + d.link
       };

@@ -171,11 +171,13 @@ Deno.serve(async (req) => {
       const esc = (s: string) => String(s).replace(/[<>&"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c] || c));
       // Message ÉDITABLE (Paramètres → E-mails → « invitation à un compte »), lu depuis la config société.
       let inviteMsg = "";
+      let inviteObjet = "";
       try {
         const sid = societe || "global";
         const { data: st } = await admin.from("app_settings").select("data").eq("id", sid).maybeSingle();
         const pr = (st && st.data && typeof st.data === "object" ? (st.data as Record<string, unknown>).profil : null) as Record<string, unknown> | null;
         if (pr && pr.mailModeleInvitation) inviteMsg = String(pr.mailModeleInvitation);
+        if (pr && pr.mailObjetInvitation) inviteObjet = String(pr.mailObjetInvitation);
       } catch (_) { /* repli défaut */ }
       const DEF_INVITE = "Bonjour,\n\nBienvenue sur Parc Pilot ! 🎉 Ton accès à la plateforme de gestion de flotte est prêt.\n\nChoisis ton mot de passe en un clic (bouton juste en dessous) et tu pourras te connecter tout de suite. Tout est réuni au même endroit, simple et rapide.\n\nTon identifiant : {email}\n\nÀ très vite ! 🚗";
       const inviteBody = String((inviteMsg && inviteMsg.trim()) ? inviteMsg : DEF_INVITE)
@@ -213,11 +215,14 @@ Deno.serve(async (req) => {
         '<div>' + ppLogo + '</div>' +
         '</div></div>');
       const text = inviteBody + "\n\nDéfinis ton mot de passe ici :\n" + actionLink + "\n\nParc Pilot · parc-pilot.fr";
+      // Objet ÉDITABLE (Paramètres → E-mails → « Objet — invitation »), balise {email} ; repli défaut.
+      const inviteSubject = String((inviteObjet && inviteObjet.trim()) ? inviteObjet : "Ton accès à Parc Pilot · définis ton mot de passe")
+        .replace(/ ?\{email\}/gi, email ? " " + email : "").replace(/[ \t]{2,}/g, " ").trim();
       try {
         const r = await fetch("https://api.resend.com/emails", {
           method: "POST",
           headers: { "Authorization": `Bearer ${RESEND}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ from, to: [email], subject: "Ton accès à Parc Pilot · définis ton mot de passe", html, text }),
+          body: JSON.stringify({ from, to: [email], subject: inviteSubject, html, text }),
         });
         const rd = await r.json().catch(() => ({}));
         if (!r.ok) return json({ ok: true, id: userId, emailSent: false, warn: "Compte prêt, mais e-mail non envoyé : " + (rd?.message || "erreur Resend") + " (domaine d'envoi vérifié ?)." });
