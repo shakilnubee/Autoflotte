@@ -7859,6 +7859,11 @@ FP.buildAlertes = (data) => {
     // Suivi flotte : FP.kmCollecte.aJour (délai « valable » + date de cycle + règle « QR compte après
     // relance »). Fini le calcul de cycle en double : tout part du même endroit.
     const _KC = FP.kmCollecte;
+    // ⚡ ANTI-FLASH (bug vécu : « 52 relevés km à renseigner » qui clignote puis disparaît) : tant que
+    // FP.kmCollecte n'est PAS chargé (_cache null), on NE calcule PAS les alertes relevé km — sinon
+    // AUCUN relevé n'est encore connu → TOUS les véhicules apparaissent « jamais renseigné ». Une fois
+    // la table km_requests chargée (kmCollecte.load → re-render), on affiche le VRAI compte (souvent 0).
+    if (_KC && _KC._cache != null) {
     (data.vehicules || []).forEach(v => {
       if (horsFlotte(v)) return;
       if (FP.kmSuivi && !FP.kmSuivi(v)) return;      // véhicule décoché du suivi km → pas d'alerte
@@ -7875,6 +7880,7 @@ FP.buildAlertes = (data) => {
     });
     if (relKmWarn.length) out.push({ niveau: 'warn', categorie: 'Relevé km', message: `${relKmWarn.length} relevé${relKmWarn.length > 1 ? 's' : ''} km à faire`, detail: 'Kilométrage à mettre à jour (échéance dépassée).', sort: 480, muteKey: 'relevekm-warn', vehicules: relKmWarn });
     if (relKmInfo.length) out.push({ niveau: 'info', categorie: 'Relevé km', message: `${relKmInfo.length} relevé${relKmInfo.length > 1 ? 's' : ''} km à renseigner`, detail: 'Kilométrage jamais saisi ou à rafraîchir.', sort: 1000, muteKey: 'relevekm-info', vehicules: relKmInfo });
+    }
 
     // RELANCE : demande de km ENVOYÉE PAR MAIL au chauffeur mais SANS réponse depuis X jours.
     // Source = table km_requests (chargée par FP.kmCollecte.load() sur la page). Si non chargée,
@@ -15224,7 +15230,10 @@ FP.relances = {
 
   // --- KM à relancer (MÊMES primitives que l'onglet « Relevé KM ») ---
   km() {
-    const KC = FP.kmCollecte; if (!KC) return []; const out = [];
+    // ⚡ ANTI-FLASH : tant que la table km_requests n'est pas chargée (_cache null), on ne sait PAS qui
+    // a répondu → renvoyer [] plutôt que de compter toute la flotte « jamais » (badge Relances qui
+    // affichait 55 puis retombait à 5). Le re-render après kmCollecte.load() donne le vrai compte.
+    const KC = FP.kmCollecte; if (!KC || KC._cache == null) return []; const out = [];
     const seuil = (FP.notifCfg ? FP.notifCfg().releveKmJours : 0) || 45; const today = new Date();
     (data.vehicules || []).forEach(v => {
       if (FP.horsFlotte && FP.horsFlotte(v)) return; if (FP.kmSuivi && !FP.kmSuivi(v)) return;
