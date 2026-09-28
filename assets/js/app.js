@@ -3928,6 +3928,7 @@ FP.MAIL_DEFAUT = {
   // ===== Autres e-mails (tous ÉDITABLES dans Paramètres → E-mails). La mise en page (logo, plaque,
   // bouton) reste fixe ; SEUL le message ci-dessous est modifiable. Balises entre {…}. =====
   bienvenue: `Bonjour {prenom},\n\nBienvenue à bord ! 🚗 Ta voiture {plaque} t'attend, et elle a un petit secret : un QR code collé à l'intérieur.\n\nScanne-le (ou clique sur le bouton juste en dessous) et tu as tout sous la main en 10 secondes :\n• 📸 Envoyer ton kilométrage\n• 📄 Retrouver tes documents (carte grise, assurance, assistance)\n• 🚨 Signaler un souci ou un accident\n• 📋 Faire l'état des lieux en photos\n\nGarde-le précieusement… et bonne route ! 🙌`,
+  bienvenue_en: `Hello {prenom},\n\nWelcome on board! 🚗 Your car {plaque} is waiting for you, and it has a little secret: a QR code stuck inside.\n\nScan it (or tap the button just below) and everything is at your fingertips in 10 seconds:\n• 📸 Send your mileage\n• 📄 Find your documents (registration, insurance, assistance)\n• 🚨 Report an issue or an accident\n• 📋 Do the condition report with photos\n\nKeep it handy… and safe travels! 🙌`,
   relevekm: `Bonjour {prenom},\n\nMerci d'indiquer le kilométrage actuel de ton véhicule {immat}. C'est rapide : un clic, un nombre, terminé.`,
   // Annonce d'un rendez-vous garage (envoyée QUAND on programme le RDV) — avec la DATE.
   rdvgarage: `Bonjour {prenom},\n\nUn rendez-vous est prévu pour le véhicule {immat} le {date}. 🗓️\nMotif : {motif}\n\nTu recevras un petit rappel la veille, pas d'inquiétude 🙂\nEt n'hésite pas si tu as la moindre question !`,
@@ -14340,8 +14341,11 @@ FP.msg = {
     // une chaîne HTML prête, une fonction(text)→html, ou absent (on habille alors le message courant).
     if (opts.email) { const eb = q('#fp-msg-email'); if (eb) eb.addEventListener('click', async () => {
       if (!(window.FP && FP.sendEmail)) { if (FP.toast) FP.toast('Envoi e-mail indisponible'); return; }
+      // ⚠️ RÈGLE : dans un E-MAIL, jamais d'URL brute → on la remplace par un lien « cliquez ici ».
+      //    (Le SMS/WhatsApp, lui, garde l'URL en clair via `text` — un lien n'y est pas cliquable.)
+      const _linkify = (s) => esc(s).replace(/\n/g, '<br>').replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" style="color:#0EA5A0;font-weight:700;text-decoration:underline">cliquez ici</a>');
       const html = (typeof opts.emailHtml === 'function') ? opts.emailHtml(tx())
-        : (opts.emailHtml || (FP.mailBrand ? FP.mailBrand({ title: opts.emailSubject || opts.title || '', prenom: opts.nom || '', nomSoc: opts.emailNomSoc || '', logoUrl: opts.emailLogo || '', bodyHtml: '<div style="white-space:pre-wrap;line-height:1.5">' + esc(tx()).replace(/\n/g, '<br>') + '</div>' }) : ('<div style="white-space:pre-wrap">' + esc(tx()).replace(/\n/g, '<br>') + '</div>')));
+        : (opts.emailHtml || (FP.mailBrand ? FP.mailBrand({ title: opts.emailSubject || opts.title || '', prenom: opts.nom || '', nomSoc: opts.emailNomSoc || '', logoUrl: opts.emailLogo || '', bodyHtml: '<div style="white-space:pre-wrap;line-height:1.5">' + _linkify(tx()) + '</div>' }) : ('<div style="white-space:pre-wrap">' + _linkify(tx()) + '</div>')));
       const oldTxt = eb.textContent; eb.disabled = true; eb.textContent = 'Envoi…';
       try {
         await FP.sendEmail(Object.assign({ to: opts.email, subject: opts.emailSubject || opts.title || 'Message', html: html, text: tx() }, opts.emailOpts || {}));
@@ -14681,12 +14685,20 @@ FP.sendMailTest = async function (key, to) {
   FP.registerMail({
     key: 'bienvenue-conducteur', label: 'Bienvenue à bord (conducteur · QR)', group: 'Comptes',
     sample: () => ({ prenom: 'Alex', plaque: 'AA-123-AA', portail: '#' }),
-    build: (d) => { const t = tpl('mailModeleBienvenue', 'bienvenue', { prenom: d.prenom, plaque: d.plaque }); return {
-      subject: (FP.mailObjet ? FP.mailObjet('bienvenue', { prenom: d.prenom, plaque: d.plaque }) : '') || 'Bienvenue à bord 🚗 · l\'espace véhicule',
-      html: FP.mailBrand({ title: 'Bienvenue à bord', prenom: d.prenom, plaque: d.plaque, nomSoc: d.nomSoc, logoUrl: d.logoUrl,
-        bodyHtml: bodyText(t), buttonHtml: btn(d.portail, 'Accéder à mon espace →') }),
-      text: t + (d.portail && d.portail !== '#' ? '\n\nTon espace : ' + d.portail : '')
-    }; }
+    build: (d) => {
+      // Bilingue : si le conducteur est en « English » (d.lang), on prend le modèle EN par défaut
+      //   (pas de modèle EN personnalisé pour la bienvenue) + libellés EN. Sinon FR (modèle éditable).
+      const en = (d.lang === 'en');
+      const t = en ? FP.fillTags((FP.MAIL_DEFAUT.bienvenue_en || FP.MAIL_DEFAUT.bienvenue || ''), { prenom: d.prenom, plaque: d.plaque })
+                   : tpl('mailModeleBienvenue', 'bienvenue', { prenom: d.prenom, plaque: d.plaque });
+      return {
+        subject: en ? 'Welcome on board 🚗 · your vehicle space'
+                    : ((FP.mailObjet ? FP.mailObjet('bienvenue', { prenom: d.prenom, plaque: d.plaque }) : '') || 'Bienvenue à bord 🚗 · l\'espace véhicule'),
+        html: FP.mailBrand({ title: en ? 'Welcome on board' : 'Bienvenue à bord', prenom: d.prenom, plaque: d.plaque, nomSoc: d.nomSoc, logoUrl: d.logoUrl,
+          bodyHtml: bodyText(t), buttonHtml: btn(d.portail, en ? 'Access my space →' : 'Accéder à mon espace →') }),
+        text: t + (d.portail && d.portail !== '#' ? ('\n\n' + (en ? 'Your space: ' : 'Ton espace : ') + d.portail) : '')
+      };
+    }
   });
   // 2b) INVITATION À UN COMPTE (admin/gestionnaire qui se CONNECTE) — au nom de Parc Pilot — cf. manage-users
   FP.registerMail({

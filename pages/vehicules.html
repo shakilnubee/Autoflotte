@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260928k">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260928l">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260928k"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260928l"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260928k">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260928l">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -1121,8 +1121,8 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260928k"></script>
-<script src="../assets/js/supabase-client.js?v=20260928k"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260928l"></script>
+<script src="../assets/js/supabase-client.js?v=20260928l"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -1138,13 +1138,13 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260928k"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260928l"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
-<script src="../assets/js/fleet-docs.js?v=20260928k"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260928k"></script>
+<script src="../assets/js/fleet-docs.js?v=20260928l"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260928l"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20260928k"></script>
+<script src="../assets/js/app.min.js?v=20260928l"></script>
 <script>
   lucide.createIcons();
 
@@ -4429,7 +4429,8 @@
         const email = emailOf(v);
         const prenom = String(v.chauffeur).trim().split(/\s+/)[0];
         let portail = ''; try { const qd = await FP.qr.dataFor(v); portail = (qd && qd.url) || ''; } catch (e) {}
-        const m = await FP.buildMail('bienvenue-conducteur', { prenom, plaque: v.immat || '', portail });
+        const lang = (FP.condLangue ? FP.condLangue(v.chauffeur) : '') || '';   // e-mail dans la langue du conducteur
+        const m = await FP.buildMail('bienvenue-conducteur', { prenom, plaque: v.immat || '', portail, lang });
         if (!m) throw new Error('mail indisponible');
         await FP.sendEmail({ to: email, subject: m.subject, html: m.html, text: m.text });
         ok++;
@@ -5701,25 +5702,30 @@
       try { const qd = await FP.qr.dataFor(v); if (qd && qd.url) { portail = qd.url; const tok = decodeURIComponent((portail.split('h=')[1] || '')); if (tok) { kmLink = 'https://parc-pilot.fr/km.html?q=' + encodeURIComponent(tok); venteLink = portail + '&vue=vente'; } } } catch (e) {}
       const ctTxt = v.prochainCT ? (FP.date ? FP.date(v.prochainCT) : v.prochainCT) : '';
       const aVendre = /a[\s-]?vendre/.test((v.statut || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''));
+      // Bilingue : messages dans la LANGUE DU CONDUCTEUR (FR défaut, EN si sa fiche est en « English »).
+      const en = !!(FP.condLangue && FP.condLangue(chauffeur) === 'en');
       const templates = [];
       const nbp = String(plaque || '').replace(/-/g, '‑').replace(/ /g, ' ');
-      if (portail) templates.push({ label: '🔑 Accès véhicule', text: `Bonjour ${prenom},\n🔑 Voici l'espace du véhicule ${nbp} 🎉 kilométrage, documents et petits soucis, tout au même endroit 👇\n${portail}` });
-      if (portail) templates.push({ label: '🪪 Carte grise', text: `Bonjour ${prenom},\n🪪 La carte grise du véhicule ${nbp} attend sagement ici — ouvrir le lien puis « Mes documents » 👇\n${portail}` });
-      if (kmLink) templates.push({ label: '📸 Relance km', text: `Bonjour ${prenom},\n📸 Un petit coup d'œil au compteur du véhicule ${nbp} ? 😊 Ça file en 30 secondes, c'est par ici 👇\n${kmLink}` });
-      if (ctTxt) templates.push({ label: '🔧 CT bientôt', text: `Bonjour ${prenom},\n🔧 Le contrôle technique du véhicule ${nbp} approche à grands pas (échéance le ${ctTxt}) ⏳ — un petit rendez-vous à caler ! 📅` });
-      templates.push({ label: '🛠️ Révision', text: `Bonjour ${prenom},\n🛠️ Le véhicule ${nbp} réclame bientôt un petit passage au garage 🚗 (révision / entretien à prévoir).` });
-      if (aVendre && venteLink) templates.push({ label: '🏷️ Annonce', text: `Bonjour,\n🏷️ Bonne affaire en vue ! Le véhicule ${nbp} est à vendre — photos et caractéristiques par ici 👇\n${venteLink}` });
-      const defText = templates.length ? templates[0].text : `Bonjour ${prenom},`;
+      if (en) {
+        if (portail) templates.push({ label: '🔑 Vehicle access', text: `Hello ${prenom},\n🔑 Here's your vehicle ${nbp} space 🎉 mileage, documents and small issues, all in one place 👇\n${portail}` });
+        if (portail) templates.push({ label: '🪪 Registration', text: `Hello ${prenom},\n🪪 The registration document of vehicle ${nbp} is waiting here — open the link then "My documents" 👇\n${portail}` });
+        if (kmLink) templates.push({ label: '📸 Mileage', text: `Hello ${prenom},\n📸 A quick look at the odometer of vehicle ${nbp}? 😊 Takes 30 seconds, right here 👇\n${kmLink}` });
+        if (ctTxt) templates.push({ label: '🔧 MOT due', text: `Hello ${prenom},\n🔧 The technical inspection (MOT) of vehicle ${nbp} is coming up (due ${ctTxt}) ⏳ — time to book it! 📅` });
+        templates.push({ label: '🛠️ Service', text: `Hello ${prenom},\n🛠️ Vehicle ${nbp} will soon need a service 🚗 (maintenance to schedule).` });
+        if (aVendre && venteLink) templates.push({ label: '🏷️ For sale', text: `Hello,\n🏷️ Great deal! Vehicle ${nbp} is for sale — photos and specs here 👇\n${venteLink}` });
+      }
+      if (!en && portail) templates.push({ label: '🔑 Accès véhicule', text: `Bonjour ${prenom},\n🔑 Voici l'espace du véhicule ${nbp} 🎉 kilométrage, documents et petits soucis, tout au même endroit 👇\n${portail}` });
+      if (!en && portail) templates.push({ label: '🪪 Carte grise', text: `Bonjour ${prenom},\n🪪 La carte grise du véhicule ${nbp} attend sagement ici — ouvrir le lien puis « Mes documents » 👇\n${portail}` });
+      if (!en && kmLink) templates.push({ label: '📸 Relance km', text: `Bonjour ${prenom},\n📸 Un petit coup d'œil au compteur du véhicule ${nbp} ? 😊 Ça file en 30 secondes, c'est par ici 👇\n${kmLink}` });
+      if (!en && ctTxt) templates.push({ label: '🔧 CT bientôt', text: `Bonjour ${prenom},\n🔧 Le contrôle technique du véhicule ${nbp} approche à grands pas (échéance le ${ctTxt}) ⏳ — un petit rendez-vous à caler ! 📅` });
+      if (!en) templates.push({ label: '🛠️ Révision', text: `Bonjour ${prenom},\n🛠️ Le véhicule ${nbp} réclame bientôt un petit passage au garage 🚗 (révision / entretien à prévoir).` });
+      if (!en && aVendre && venteLink) templates.push({ label: '🏷️ Annonce', text: `Bonjour,\n🏷️ Bonne affaire en vue ! Le véhicule ${nbp} est à vendre — photos et caractéristiques par ici 👇\n${venteLink}` });
+      const defText = templates.length ? templates[0].text : (en ? `Hello ${prenom},` : `Bonjour ${prenom},`);
       // ⚠️ RÈGLE : partout SMS + WhatsApp + EMAIL. On passe l'e-mail du conducteur + la marque société →
-      //    FP.msg affiche le bouton « 📧 Email » (e-mail brandé, les liens du message deviennent cliquables).
+      //    FP.msg affiche le bouton « 📧 Email » (e-mail brandé ; l'URL du message y devient « cliquez ici »).
       FP.msg.open({
         phone: tel, nom: prenom || plaque, title: 'Prévenir — ' + plaque, text: defText, templates,
-        email, emailSubject: 'Votre véhicule ' + plaque, emailNomSoc: _soc, emailLogo: _logo,
-        emailHtml: (t) => {
-          const body = (FP.esc ? FP.esc(t) : String(t || '')).replace(/\n/g, '<br>').replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" style="color:#0EA5A0;font-weight:700">$1</a>');
-          const inner = '<div style="white-space:pre-wrap;line-height:1.55">' + body + '</div>';
-          return FP.mailBrand ? FP.mailBrand({ title: 'Votre véhicule ' + plaque, prenom, nomSoc: _soc, logoUrl: _logo, bodyHtml: inner }) : inner;
-        }
+        email, emailSubject: (en ? 'Your vehicle ' : 'Votre véhicule ') + plaque, emailNomSoc: _soc, emailLogo: _logo
       });
     }); }
   { const _qh = $('btn-qr-hub'); if (_qh) _qh.addEventListener('click', openQrHub); }
