@@ -301,6 +301,18 @@ fleet-app/
    PDF/CSV rappelle la période. Déjà branché : Total Fleet & Ulys (mois + dates, exports suivent la période).
    ⚠️ **Tout NOUVEau tableau daté / export / bilan DOIT suivre ce schéma** (jamais un export « tout » figé).
 
+0septies. ⚠️ **PRÉVENIR UN CONDUCTEUR = 3 CANAUX TOUJOURS (SMS + WhatsApp + E-MAIL)** (consigne
+   explicite, permanente) : partout où on « prévient / relance / envoie un message » à un conducteur
+   (accès véhicule, carte grise, relevé km, CT, révision, amende, annonce…), il faut TOUJOURS proposer
+   les **3 canaux : SMS, WhatsApp ET E-mail** — jamais seulement SMS/WhatsApp. Source unique =
+   **`FP.msg.open({phone, email, emailSubject, emailNomSoc, emailLogo, emailHtml, text, templates})`**
+   (app.js) : le bouton **📧 Email** s'affiche dès qu'on lui passe `email` (e-mail brandé via `FP.mailBrand`,
+   liens rendus cliquables). ⚠️ **Tout NOUVEAU point d'envoi DOIT passer `email` (+ marque société) à
+   `FP.msg.open`** — même pour les nouvelles fonctionnalités. Et **prévoir un ENVOI GROUPÉ** (à tous les
+   conducteurs du périmètre) quand ça a du sens (modèle : bouton « Envoyer l'accès à tous » sur Véhicules,
+   via `FP.buildMail` + `FP.sendEmail`, avec barre de progression + résumé envoyés/sans-e-mail/échecs — cf.
+   règle anti-perte silencieuse : jamais un « ✓ » menteur).
+
 1. **Tailwind précompilé** — pour éviter le délai du CDN à chaque page, Tailwind est compilé en local dans `assets/css/tailwind.css` (les pages le chargent via `<link>`, plus de `cdn.tailwindcss.com`). ⚠️ Après toute modif de classes Tailwind dans le HTML/JS, REBUILD : `npx tailwindcss@3.4.17 -c tailwind.config.js -i assets/css/_tw-input.css -o assets/css/tailwind.css --minify` (sinon les nouvelles classes ne seront pas stylées). ⚠️ **`brochure.html` et `prix.html` utilisent désormais le Tailwind LOCAL** (ajoutés à `content` dans `tailwind.config.js`) → à inclure dans le REBUILD. Seule `logos.html` reste sur le CDN. Ces deux pages sont en **thème sombre « 21st »** via une classe `.sheet-dark` (styles inline, autonomes) ; dans `prix.html` l'**aide-mémoire interne** (`#sheet-interne`) reste volontairement CLAIR et `display:none` (jamais montré au client). Les PDF client sont dans `presentation/` (`Parc-Pilot-Brochure.pdf`, `Parc-Pilot-Tarifs.pdf`) et les boutons **« Télécharger en PDF »** de `brochure.html`/`prix.html` pointent dessus (`<a download>` = beau design en 1 clic). ⚠️ **À REGÉNÉRER quand le contenu de brochure/prix change** (sinon le PDF téléchargé est périmé), via Chromium headless : `"/opt/pw-browsers/chromium-1194/chrome-linux/chrome" --headless=new --no-sandbox --virtual-time-budget=12000 --no-pdf-header-footer --print-to-pdf-no-header --print-to-pdf="presentation/Parc-Pilot-Brochure.pdf" "file://$PWD/brochure.html"` (idem prix.html → Parc-Pilot-Tarifs.pdf). Le mode impression masque les boutons flottants et l'aide-mémoire interne.
 1bis. ⚠️ **JS MINIFIÉ — `app.js` & `fleet-views.js`** (perf chargement mobile) : les pages chargent
    **`assets/js/app.min.js`** et **`assets/js/fleet-views.min.js`** (versions minifiées, ~2× plus légères

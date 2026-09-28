@@ -682,6 +682,7 @@
         </select>
 
         <button id="btn-km-mail" class="btn btn-outline text-sm ml-auto" title="Envoyer par e-mail une demande de relevé kilométrique aux chauffeurs du groupe affiché QUI N'ONT PAS ENCORE RÉPONDU (les véhicules déjà à jour sont ignorés) — le chauffeur répond en un clic"><i data-lucide="mail" class="w-4 h-4"></i> Demander le km par mail</button>
+        <button id="btn-acces-mail" class="btn btn-outline text-sm" title="Envoyer d'un coup l'e-mail d'ACCÈS (espace véhicule · QR : km, documents, signalement, état des lieux) à TOUS les conducteurs du groupe affiché (ou de la sélection) qui ont un e-mail"><i data-lucide="send" class="w-4 h-4"></i> Envoyer l'accès à tous</button>
         <button id="btn-completer-cg" class="btn btn-outline text-sm" title="Lire les cartes grises déjà stockées et remplir automatiquement les champs manquants (carburant, CO₂, puissance, masse, VIN, dates)"><i data-lucide="wand-sparkles" class="w-4 h-4"></i> Compléter depuis les cartes grises</button>
         <button id="btn-fiche-groupe" class="btn btn-outline text-sm" title="Télécharger la liste des véhicules du groupe affiché (ou Tous) en PDF"><i data-lucide="file-down" class="w-4 h-4"></i> Télécharger la fiche</button>
         <button id="btn-qr-hub" class="btn btn-outline text-sm" title="Tous les QR à imprimer / partager : QR de la liste des véhicules à vendre, et QR de chaque véhicule (PDF). D'autres s'ajouteront ici."><i data-lucide="qr-code" class="w-4 h-4"></i> QR codes</button>
@@ -795,7 +796,7 @@
     <button class="btn btn-outline text-sm justify-center" id="drawer-qr" title="QR UNIQUE à coller dans la voiture : le conducteur le scanne → menu Relevé km · Déclarer un sinistre · Infos du véhicule. Un seul autocollant, permanent."><i data-lucide="qr-code" class="w-4 h-4"></i> QR véhicule</button>
     <button class="btn btn-outline text-sm justify-center" id="drawer-qr-vente" title="QR de l'ANNONCE de vente : à imprimer/coller sur la vitre. Scanné → l'annonce (photos + caractéristiques + prix). Apparaît quand le véhicule est « à vendre »." hidden><i data-lucide="qr-code" class="w-4 h-4"></i> QR vente</button>
     <button class="btn btn-outline text-sm justify-center" id="drawer-qr-edl" title="QR « état des lieux » : le conducteur le scanne → arrive directement sur l'écran EDL (photos prise / restitution + km). Chaque EDL est relié au conducteur affecté et remonte sur les fiches."><i data-lucide="qr-code" class="w-4 h-4"></i> QR état des lieux</button>
-    <button class="btn btn-outline text-sm justify-center" id="drawer-sms" title="Prévenir le conducteur par SMS / WhatsApp (accès, carte grise, relance km, CT, révision, annonce)"><i data-lucide="message-circle" class="w-4 h-4"></i> SMS / WhatsApp</button>
+    <button class="btn btn-outline text-sm justify-center" id="drawer-sms" title="Prévenir le conducteur par SMS / WhatsApp / e-mail (accès, carte grise, relance km, CT, révision, annonce)"><i data-lucide="message-circle" class="w-4 h-4"></i> Prévenir (SMS / WhatsApp / mail)</button>
     <button aria-label="Supprimer" class="btn text-sm text-red-600 hover:bg-red-50" id="drawer-delete"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
   </div>
 </aside>
@@ -4396,6 +4397,48 @@
     try { if (drawerVehId && $('drawer').classList.contains('open')) openDrawer(drawerVehId); } catch (e) {}
   }
 
+  // ===== Envoi GROUPÉ de l'e-mail d'ACCÈS (espace véhicule · QR) à tous les conducteurs =====
+  // Même e-mail brandé que le « Prévenir → Accès véhicule », envoyé d'un coup à tout le périmètre
+  // (sélection cochée sinon groupe affiché). ⚠️ Anti-perte silencieuse : on compte et on AFFICHE les
+  // échecs et les conducteurs sans e-mail (jamais un « ✓ » menteur).
+  { const b = $('btn-acces-mail'); if (b) {
+    const peut = (FP.isAdmin && FP.isAdmin()) || (FP.isGestionnaire && FP.isGestionnaire());
+    if (!peut || !(window.FP && FP.sendEmail && FP.buildMail)) { b.style.display = 'none'; }
+    else b.addEventListener('click', () => sendAccesLot().catch(e => { console.error(e); alert('Erreur pendant l\'envoi.'); }));
+  } }
+  async function sendAccesLot() {
+    const emailOf = (v) => { try { const c = FP.conducteurContact ? FP.conducteurContact(v.chauffeur) : {}; return c.email || ''; } catch (e) { return ''; } };
+    const sel = data.vehicules.filter(v => state.selectedIds.has(v.id));
+    const grp = state.groupe;
+    let base = sel.length ? sel : data.vehicules.filter(v => grp === 'all' ? !FP.estVendu(v) : FP.vehGroupes(v).includes(grp));
+    base = base.filter(v => !FP.estVendu(v) && v.chauffeur && String(v.chauffeur).trim() && String(v.chauffeur).trim() !== '—');
+    if (!base.length) { alert('Aucun véhicule avec un conducteur dans ce périmètre.'); return; }
+    const avecMail = base.filter(v => emailOf(v));
+    const sansMail = base.filter(v => !emailOf(v));
+    if (!avecMail.length) { alert('Aucun conducteur de ce périmètre n\'a d\'e-mail enregistré (complète les fiches conducteurs).'); return; }
+    const portee = sel.length ? `${avecMail.length} véhicule(s) sélectionné(s)` : (grp === 'all' ? `${avecMail.length} véhicule(s)` : `${avecMail.length} véhicule(s) du groupe « ${FP.groupeLabel(grp)} »`);
+    let msg = `Envoyer l'e-mail d'ACCÈS (espace véhicule · QR) à ${portee} ?\n\nChaque conducteur reçoit le lien de SON véhicule (km, documents, signalement, état des lieux).`;
+    if (sansMail.length) msg += `\n\n⚠️ ${sansMail.length} conducteur(s) sans e-mail seront ignorés (${sansMail.slice(0, 4).map(v => v.chauffeur).join(', ')}${sansMail.length > 4 ? '…' : ''}).`;
+    if (FP.confirm && !(await FP.confirm(msg))) return;
+    const bz = FP.busy ? FP.busy('Envoi… 0/' + avecMail.length) : null;
+    let ok = 0, ko = 0;
+    for (let i = 0; i < avecMail.length; i++) {
+      const v = avecMail[i];
+      if (bz) bz.update('Envoi… ' + i + '/' + avecMail.length);
+      try {
+        const email = emailOf(v);
+        const prenom = String(v.chauffeur).trim().split(/\s+/)[0];
+        let portail = ''; try { const qd = await FP.qr.dataFor(v); portail = (qd && qd.url) || ''; } catch (e) {}
+        const m = await FP.buildMail('bienvenue-conducteur', { prenom, plaque: v.immat || '', portail });
+        if (!m) throw new Error('mail indisponible');
+        await FP.sendEmail({ to: email, subject: m.subject, html: m.html, text: m.text });
+        ok++;
+      } catch (e) { console.error('[acces lot]', e); ko++; }
+    }
+    const resume = `📧 ${ok} e-mail(s) d'accès envoyé(s)` + (ko ? ` · ⚠️ ${ko} échec(s)` : '') + (sansMail.length ? ` · ${sansMail.length} sans e-mail ignoré(s)` : '');
+    if (bz) { if (ko) bz.fail(resume); else bz.done(resume); } else if (FP.toast) FP.toast(resume);
+  }
+
   { const b = $('btn-fiche-groupe'); if (b) b.addEventListener('click', () => {
       // Si des véhicules sont COCHÉS → la fiche ne prend QUE ceux-là (priorité à la sélection).
       const sel = data.vehicules.filter(v => state.selectedIds.has(v.id));
@@ -5645,9 +5688,15 @@
   { const _sms = $('drawer-sms'); if (_sms) _sms.addEventListener('click', async () => {
       const v = data.vehicules.find(x => x.id === drawerVehId); if (!v || !(window.FP && FP.msg)) return;
       const chauffeur = (v.chauffeur && v.chauffeur !== '—') ? String(v.chauffeur).trim() : '';
-      const tel = (FP.conducteurContact ? (FP.conducteurContact(chauffeur).tel || '') : '');
+      const _contact = FP.conducteurContact ? FP.conducteurContact(chauffeur) : {};
+      const tel = _contact.tel || '';
+      const email = _contact.email || '';   // → bouton « Email » dans FP.msg (règle : SMS + WhatsApp + Email toujours)
       const prenom = chauffeur ? chauffeur.split(/\s+/)[0] : '';
       const plaque = v.immat || '';
+      // Société (nom + logo) pour un e-mail brandé propre (même rendu que les autres e-mails).
+      let _soc = ''; try { _soc = (FP.settings.get().societe && FP.settings.get().societe.nom) || ''; } catch (e) {}
+      if (!_soc || /^parc\s*pilot$/i.test(_soc)) { try { _soc = (FP.activeSociete && FP.activeSociete()) || ''; } catch (e) {} }
+      let _logo = ''; try { const _p = FP.societeProfil ? FP.societeProfil() : {}; _logo = _p.logoUrl || _p.logoDataUrl || ''; } catch (e) {}
       let portail = '', kmLink = '', venteLink = '';
       try { const qd = await FP.qr.dataFor(v); if (qd && qd.url) { portail = qd.url; const tok = decodeURIComponent((portail.split('h=')[1] || '')); if (tok) { kmLink = 'https://parc-pilot.fr/km.html?q=' + encodeURIComponent(tok); venteLink = portail + '&vue=vente'; } } } catch (e) {}
       const ctTxt = v.prochainCT ? (FP.date ? FP.date(v.prochainCT) : v.prochainCT) : '';
@@ -5661,7 +5710,17 @@
       templates.push({ label: '🛠️ Révision', text: `Bonjour ${prenom},\n🛠️ Le véhicule ${nbp} réclame bientôt un petit passage au garage 🚗 (révision / entretien à prévoir).` });
       if (aVendre && venteLink) templates.push({ label: '🏷️ Annonce', text: `Bonjour,\n🏷️ Bonne affaire en vue ! Le véhicule ${nbp} est à vendre — photos et caractéristiques par ici 👇\n${venteLink}` });
       const defText = templates.length ? templates[0].text : `Bonjour ${prenom},`;
-      FP.msg.open({ phone: tel, nom: prenom || plaque, title: 'Prévenir — ' + plaque, text: defText, templates });
+      // ⚠️ RÈGLE : partout SMS + WhatsApp + EMAIL. On passe l'e-mail du conducteur + la marque société →
+      //    FP.msg affiche le bouton « 📧 Email » (e-mail brandé, les liens du message deviennent cliquables).
+      FP.msg.open({
+        phone: tel, nom: prenom || plaque, title: 'Prévenir — ' + plaque, text: defText, templates,
+        email, emailSubject: 'Votre véhicule ' + plaque, emailNomSoc: _soc, emailLogo: _logo,
+        emailHtml: (t) => {
+          const body = (FP.esc ? FP.esc(t) : String(t || '')).replace(/\n/g, '<br>').replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" style="color:#0EA5A0;font-weight:700">$1</a>');
+          const inner = '<div style="white-space:pre-wrap;line-height:1.55">' + body + '</div>';
+          return FP.mailBrand ? FP.mailBrand({ title: 'Votre véhicule ' + plaque, prenom, nomSoc: _soc, logoUrl: _logo, bodyHtml: inner }) : inner;
+        }
+      });
     }); }
   { const _qh = $('btn-qr-hub'); if (_qh) _qh.addEventListener('click', openQrHub); }
   { const _qhc = $('qrhub-close'); if (_qhc) _qhc.addEventListener('click', () => $('qrhub-backdrop').classList.remove('open')); }
