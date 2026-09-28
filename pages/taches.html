@@ -1034,6 +1034,21 @@
     if (r.freq === 'annuel'){ const mm = anchor.getMonth(); return new Date(y, mm, Math.min(anchor.getDate(), daysInMonth(y, mm))); }
     return null;
   }
+  // Date du début de la PROCHAINE période (mois/semaine/trim./année suivante) à partir de `now`.
+  function nextPeriodDate(freq, now){ now = midnight(now || new Date()); const d = new Date(now);
+    if (freq === 'hebdomadaire') d.setDate(d.getDate() + 7);
+    else if (freq === 'trimestriel') d.setMonth(d.getMonth() + 3);
+    else if (freq === 'annuel') d.setFullYear(d.getFullYear() + 1);
+    else d.setMonth(d.getMonth() + 1);
+    return d; }
+  // Prochaine échéance du rappel (période suivante), ancrée sur r.dateDebut si défini.
+  function nextDueRappel(r, now){ return dueDateRappel(r, nextPeriodDate(r.freq, now)); }
+  // Libellé « revient … » : la date précise si un jour est choisi, sinon le nom de la période suivante.
+  function revientTxt(r, now){
+    const nd = nextDueRappel(r, now);
+    if (nd) return 'le ' + FP.date(nd.getFullYear() + '-' + pad2(nd.getMonth() + 1) + '-' + pad2(nd.getDate()));
+    return periodLabel(r.freq, nextPeriodDate(r.freq, now));
+  }
   // Statut d'affichage : { notStarted, upcoming, due } selon la date du jour.
   function statutRappel(r, now){
     now = midnight(now || new Date());
@@ -1051,11 +1066,17 @@
     box.innerHTML = list.map(r => {
       const pk = periodKey(r.freq), done = rappelDone(r.id, pk), lbl = periodLabel(r.freq);
       const st = statutRappel(r);
-      // Pastille « jour choisi » : à venir (pas encore le jour) en orange, sinon échéance normale.
+      // Pastille de statut. ⚠️ Quand c'est FAIT pour la période, on affiche « ✓ fait · revient le … »
+      // (et JAMAIS « à faire ») pour lever la confusion « c'est coché mais ça dit encore à faire ».
       let jourPill = '';
-      if (!done && st.notStarted) jourPill = `<span class="fp-ech" style="background:#fff7ed;color:#c2410c;border:1px solid #fed7aa">⏳ à partir du ${escapeHtml(FP.date(r.dateDebut))}</span>`;
-      else if (!done && st.upcoming && st.due) jourPill = `<span class="fp-ech" style="background:#fff7ed;color:#c2410c;border:1px solid #fed7aa">🔜 le ${escapeHtml(FP.date(st.due.getFullYear() + '-' + pad2(st.due.getMonth() + 1) + '-' + pad2(st.due.getDate())))}</span>`;
+      if (done) {
+        const doneIso = (getFaits()[r.id] || {})[pk];
+        jourPill = `<span class="fp-ech" style="background:#dcfce7;color:#166534;border:1px solid #bbf7d0">✓ fait${doneIso ? ' le ' + escapeHtml(FP.date(doneIso)) : ''} · revient ${escapeHtml(revientTxt(r))}</span>`;
+      }
+      else if (st.notStarted) jourPill = `<span class="fp-ech" style="background:#fff7ed;color:#c2410c;border:1px solid #fed7aa">⏳ à partir du ${escapeHtml(FP.date(r.dateDebut))}</span>`;
+      else if (st.upcoming && st.due) jourPill = `<span class="fp-ech" style="background:#fff7ed;color:#c2410c;border:1px solid #fed7aa">🔜 le ${escapeHtml(FP.date(st.due.getFullYear() + '-' + pad2(st.due.getMonth() + 1) + '-' + pad2(st.due.getDate())))}</span>`;
       else if (r.dateDebut && st.due) jourPill = `<span class="fp-ech warn">📅 à faire · échéance le ${escapeHtml(FP.date(st.due.getFullYear() + '-' + pad2(st.due.getMonth() + 1) + '-' + pad2(st.due.getDate())))}</span>`;
+      else jourPill = `<span class="fp-ech warn">📅 à faire ce mois-ci</span>`;
       const dim = (!done && (st.notStarted || st.upcoming)) ? 'opacity:.62;' : '';
       return `<div class="task-card ${done ? 'done' : ''}" style="padding:.6rem .8rem;${dim}">
         <input type="checkbox" class="task-check" data-rap="${escapeHtml(r.id)}" data-pk="${escapeHtml(pk)}" ${done ? 'checked' : ''} title="Cocher quand c'est fait pour cette période">
