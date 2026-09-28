@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260928i">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260928j">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260928i"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260928j"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260928i">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260928j">
 <style>
   .field-label { font-size: .78rem; font-weight: 600; color: var(--fp-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .35rem; }
   .field-input { width: 100%; padding: .6rem .8rem; border: 1px solid var(--fp-border); border-radius: .55rem; font-size: .9rem; background: white; }
@@ -791,8 +791,8 @@
 <!-- Toast -->
 <div class="toast" id="toast">Enregistré ✓</div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260928i"></script>
-<script src="../assets/js/supabase-client.js?v=20260928i"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260928j"></script>
+<script src="../assets/js/supabase-client.js?v=20260928j"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -808,10 +808,10 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260928i"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260928j"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
-<script src="../assets/js/app.min.js?v=20260928i"></script>
+<script src="../assets/js/app.min.js?v=20260928j"></script>
 <script>
   lucide.createIcons();
   const $ = (id) => document.getElementById(id);
@@ -1167,10 +1167,22 @@
     const cur = (FP.activeSociete ? FP.activeSociete() : 'PXP');
     if (String(cur).toLowerCase() === match.toLowerCase() && FP.setActiveSociete) FP.setActiveSociete('PXP');
     if (FP.removeSociete) FP.removeSociete(match);
-    // Supprime les comptes de cette société (jamais soi-même ni un CEO).
-    for (const u of accs) { try { await FP.supabase.functions.invoke('manage-users', { body: { action: 'delete', id: u.id } }); } catch (e) {} }
+    // Supprime les comptes de cette société (jamais soi-même ni un CEO). ⚠️ On VÉRIFIE chaque suppression :
+    // `functions.invoke` ne LÈVE PAS sur une erreur serveur → sans contrôle, un compte NON supprimé
+    // resterait actif (il pourrait encore se connecter) alors qu'on affiche « supprimé ». On collecte les
+    // échecs et on PRÉVIENT le CEO (sécurité) au lieu d'un faux succès.
+    const failedAccs = [];
+    for (const u of accs) {
+      try {
+        const res = await FP.supabase.functions.invoke('manage-users', { body: { action: 'delete', id: u.id } });
+        if (res && (res.error || (res.data && res.data.error))) failedAccs.push(u.email || u.id);
+      } catch (e) { failedAccs.push(u.email || u.id); }
+    }
     // Persiste la liste CÔTÉ SERVEUR avant de recharger (sinon la reload coupe la sauvegarde → retour).
     await _flushSettingsSafe();
+    if (failedAccs.length) {
+      alert('⚠️ Société retirée, mais ' + failedAccs.length + ' compte(s) n\'ont PAS pu être supprimés :\n\n• ' + failedAccs.join('\n• ') + '\n\nCes accès peuvent ENCORE se connecter. Réessaie de les supprimer depuis « Utilisateurs & accès ».');
+    }
     location.reload();
   }
   // 🛟 RÉCUPÉRATION de réglages : lit les anciens enregistrements serveur (surtout la ligne héritée

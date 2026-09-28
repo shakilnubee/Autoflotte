@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260928i">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260928j">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260928i"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260928j"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260928i">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260928j">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -641,8 +641,8 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260928i"></script>
-<script src="../assets/js/supabase-client.js?v=20260928i"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260928j"></script>
+<script src="../assets/js/supabase-client.js?v=20260928j"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -658,11 +658,11 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260928i"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260928j"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20260928i"></script>
+<script src="../assets/js/app.min.js?v=20260928j"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -2151,15 +2151,18 @@
       //    la main. Anti-doublon par nom de fichier. (Cohérent avec le modal LLD qui lit + attache déjà.)
       let docMsg = '';
       try {
+        // ⚠️ Accepte le PDF ET la PHOTO de l'offre (JPG/PNG/HEIC…) : une offre prise en photo ne doit
+        //    pas être lue puis « oubliée » sans document joint. uploadScan gère aussi les images.
         const isPdf = /pdf/i.test(file.type || '') || /\.pdf$/i.test(file.name || '');
-        if (leaseEditImmat && FP.uploadScan && isPdf) {
+        const isImg = /^image\//.test(file.type || '') || /\.(jpe?g|png|heic|heif|webp)$/i.test(file.name || '');
+        if (leaseEditImmat && FP.uploadScan && (isPdf || isImg)) {
           const exist = bpceDocs(leaseEditImmat);
           if (exist.some(d => d && d.name === (file.name || ''))) { docMsg = '📎 Ce document est déjà rangé dans le contrat.'; }
           else {
             show(lu + '📎 Enregistrement du document…', '#475569');
             const url = await FP.uploadScan(file, 'contrats-leasing');
-            if (url) { const list = exist.slice(); list.push({ url, name: file.name || 'Offre de leasing.pdf' }); setBpceDocs(leaseEditImmat, list); try { renderLeasing(); } catch (e) {} docMsg = '📎 Document rangé dans le contrat.'; }
-            else docMsg = '(document non enregistré, réessaie)';
+            if (url) { const list = exist.slice(); list.push({ url, name: file.name || (isPdf ? 'Offre de leasing.pdf' : 'Offre de leasing') }); setBpceDocs(leaseEditImmat, list); try { renderLeasing(); } catch (e) {} docMsg = '📎 Document rangé dans le contrat.'; }
+            else docMsg = '⚠️ document non enregistré (réessaie)';
           }
         }
       } catch (e) { console.warn('[lease offre doc]', e); docMsg = '(document non enregistré)'; }

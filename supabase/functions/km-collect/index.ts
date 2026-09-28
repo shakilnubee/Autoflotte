@@ -425,26 +425,33 @@ async function portalConfig(db: ReturnType<typeof createClient>, societe: string
 }
 
 // Upload de photos envoyées en base64 (data URL) par le conducteur → bucket public "scans".
-async function uploadPhotos(db: ReturnType<typeof createClient>, photos: unknown, folder: string): Promise<string[]> {
+// ⚠️ Le cap (20) DOIT rester ALIGNÉ sur EDL_MAX_PHOTOS côté client (v.html) — sinon le serveur
+//    jetterait EN SILENCE les photos au-delà (bug vécu : cap serveur 8 qui annulait la hausse client).
+// Renvoie AUSSI le nb reçu (`sent`) et le nb réellement enregistré (`saved`) via l'objet retourné,
+// pour que le client puisse PRÉVENIR l'utilisateur si des photos n'ont pas pu être enregistrées.
+const PHOTO_CAP = 20;
+const PHOTO_MAX_BYTES = 12_000_000;   // 12 Mo/fichier (le repli HEIC brut du client peut être lourd)
+async function uploadPhotosDetail(db: ReturnType<typeof createClient>, photos: unknown, folder: string): Promise<{ urls: string[]; sent: number; saved: number; dropped: number }> {
   const urls: string[] = [];
-  if (!Array.isArray(photos)) return urls;
+  if (!Array.isArray(photos)) return { urls, sent: 0, saved: 0, dropped: 0 };
+  const sent = photos.length;
   let i = 0;
-  for (const raw of photos.slice(0, 8)) {
+  for (const raw of photos.slice(0, PHOTO_CAP)) {
     const s = String(raw || "");
     const m = s.match(/^data:([^;]+);base64,(.+)$/);
     if (!m) continue;
     const mime = m[1] || "image/jpeg";
-    const ext = mime.includes("png") ? "png" : (mime.includes("webp") ? "webp" : (mime.includes("pdf") ? "pdf" : "jpg"));
+    const ext = mime.includes("png") ? "png" : (mime.includes("webp") ? "webp" : (mime.includes("pdf") ? "pdf" : (mime.includes("heic") || mime.includes("heif") ? "heic" : "jpg")));
     let bytes: Uint8Array;
     try { bytes = Uint8Array.from(atob(m[2]), (c) => c.charCodeAt(0)); } catch { continue; }
-    if (bytes.length > 8_000_000) continue;              // garde-fou : 8 Mo max par fichier
+    if (bytes.length > PHOTO_MAX_BYTES) continue;         // garde-fou taille par fichier
     const path = folder + "/" + Date.now().toString(36) + "-" + (i++) + "-" + Math.round(bytes.length % 99991) + "." + ext;
     const up = await db.storage.from("scans").upload(path, bytes, { contentType: mime, upsert: false });
     if (up.error) continue;
     const pub = db.storage.from("scans").getPublicUrl(path);
     if (pub && pub.data && pub.data.publicUrl) urls.push(pub.data.publicUrl);
   }
-  return urls;
+  return { urls, sent, saved: urls.length, dropped: Math.max(0, sent - urls.length) };
 }
 
 function genId(prefix: string) {
@@ -700,7 +707,8 @@ Deno.serve(async (req) => {
         const type = String(body.type || "sinistre").trim() === "probleme" ? "probleme" : "sinistre";
         const description = String(body.description || "").trim();
         if (!description) return json({ error: "Décris brièvement ce qui s'est passé." }, 400);
-        const photos = await uploadPhotos(db, body.photos, "declarations/" + (qr.plaque || "veh"));
+        const _up = await uploadPhotosDetail(db, body.photos, "declarations/" + (qr.plaque || "veh"));
+        const photos = _up.urls;
         const rec = {
           id: genId("dc"), vehicule_id: qr.vehicule_id, plaque: qr.plaque || "", societe: qr.societe || "PXP",
           type, date_incident: String(body.dateIncident || "").slice(0, 120), lieu: String(body.lieu || "").slice(0, 240),
@@ -714,7 +722,7 @@ Deno.serve(async (req) => {
           body: `${qr.plaque || "Véhicule"} — un conducteur vient de faire une déclaration.`,
           url: "./pages/sinistres.html", tag: "decl-" + (qr.vehicule_id || ""),
         });
-        return json({ ok: true, type, photos: photos.length });
+        return json({ ok: true, type, photos: photos.length, saved: _up.saved, sent: _up.sent, dropped: _up.dropped });
       }
 
       // === État des lieux : photos de restitution envoyées par le conducteur ===
@@ -724,7 +732,8 @@ Deno.serve(async (req) => {
         const { qr, err } = await loadQr(db, qtok0);
         if (err) return json({ error: err }, 404);
         const sens = String(body.sens || "restitution").trim() === "prise" ? "prise" : "restitution";
-        const photos = await uploadPhotos(db, body.photos, "etat-des-lieux/" + (qr.plaque || "veh"));
+        const _up = await uploadPhotosDetail(db, body.photos, "etat-des-lieux/" + (qr.plaque || "veh"));
+        const photos = _up.urls;
         if (!photos.length) return json({ error: "Ajoute au moins une photo." }, 400);
         // Le sens vit dans `label` ('Entrée'/'Sortie') — même convention que la fiche véhicule.
         const label = sens === "restitution" ? "Sortie" : "Entrée";
@@ -783,7 +792,7 @@ Deno.serve(async (req) => {
           body: `${qr.plaque || "Véhicule"} — ${photos.length} photo(s) · ${label === "Sortie" ? "restitution" : "prise en main"}${kmValid ? ` · ${kmEdl.toLocaleString("fr-FR")} km` : ""}.`,
           url: "./pages/notifications.html?tab=alertes", tag: "edl-" + (qr.vehicule_id || ""),
         });
-        return json({ ok: true, sens, photos: photos.length, km: kmValid ? kmEdl : null });
+        return json({ ok: true, sens, photos: photos.length, saved: _up.saved, sent: _up.sent, dropped: _up.dropped, km: kmValid ? kmEdl : null });
       }
 
       // === Question / demande du conducteur (portail QR) ===
@@ -796,7 +805,8 @@ Deno.serve(async (req) => {
         if (err) return json({ error: err }, 404);
         const question = String(body.description || "").trim();
         if (!question) return json({ error: "Écris ta question." }, 400);
-        const photos = await uploadPhotos(db, body.photos, "questions/" + (qr.plaque || "veh"));
+        const _up = await uploadPhotosDetail(db, body.photos, "questions/" + (qr.plaque || "veh"));
+        const photos = _up.urls;
         const ins = await db.from("declarations_conducteur").insert({
           id: genId("dc"), vehicule_id: qr.vehicule_id, plaque: qr.plaque || "", societe: qr.societe || "PXP",
           type: "question",
@@ -809,7 +819,7 @@ Deno.serve(async (req) => {
           body: `${qr.plaque || "Véhicule"} — ${question.slice(0, 90)}`,
           url: "./pages/notifications.html?tab=alertes", tag: "question-" + (qr.vehicule_id || ""),
         });
-        return json({ ok: true, type: "question", photos: photos.length });
+        return json({ ok: true, type: "question", photos: photos.length, saved: _up.saved, sent: _up.sent, dropped: _up.dropped });
       }
 
       const qtok = String(body.q || "").trim();
