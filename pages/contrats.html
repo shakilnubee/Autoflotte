@@ -1412,54 +1412,31 @@
   }
 
   // ----- Exporter un ÉTAT DE PARC propre (PDF imprimable) à partir de nos données -----
+  // Export « État de parc — assurance » via le générateur STANDARD FP.fiche : aperçu + CHOIX DES
+  // COLONNES + bouton « Télécharger le PDF » + Imprimer (comme tous les autres exports de la plateforme,
+  // règle #8). Les colonnes sont mémorisées par l'utilisateur (settings.ficheCols['etat-parc-assurance']).
   function exportEtatParc(){
+    if (!(FP.fiche && FP.fiche.open)) { alert('Export indisponible — recharge la page (Ctrl+Maj+R).'); return; }
     let nomSoc = ''; try { nomSoc = (FP.settings.get().societe && FP.settings.get().societe.nom) || ''; } catch (e) {}
     if (!nomSoc || /^parc\s*pilot$/i.test(nomSoc)) nomSoc = (FP.activeSociete ? FP.activeSociete() : '') || 'Flotte';
-    const esc = s => escC(s == null ? '' : s);
-    const today = new Date().toLocaleDateString('fr-FR');
     const list = vehicules.slice().sort((a, b) => (a.immat || '').localeCompare(b.immat || ''));
-    let totHT = 0, totTTC = 0, nbP = 0;
-    const rows = list.map((v, i) => {
-      const pr = vehPrime(v);
-      if (pr) { nbP++; if (pr.ht != null) totHT += pr.ht; if (pr.ttc != null) totTTC += pr.ttc; }
-      return `<tr>
-        <td class="n">${i + 1}</td>
-        <td class="im">${esc(v.immat || '—')}</td>
-        <td>${esc(((v.marque || '') + ' ' + (v.modele || '')).trim() || '—')}</td>
-        <td class="vin">${esc(v.vin || '—')}</td>
-        <td>${esc(v.chauffeur && v.chauffeur !== '—' ? v.chauffeur : '—')}</td>
-        <td>${v.dateMiseEnCirculation ? esc(FP.dateNum(v.dateMiseEnCirculation)) : '—'}</td>
-        <td>${esc(v.statut || '—')}</td>
-        <td class="e">${pr && pr.ht != null ? FP.euro(pr.ht) : '—'}</td>
-        <td class="e">${pr && pr.ttc != null ? FP.euro(pr.ttc) : '<span style="color:#b45309">à compléter</span>'}</td>
-      </tr>`;
-    }).join('');
-    const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>État de parc — ${esc(nomSoc)}</title>
-      <style>
-        *{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;box-sizing:border-box}
-        body{margin:0;padding:28px 30px;color:#0f172a}
-        .hd{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #F97316;padding-bottom:12px;margin-bottom:16px}
-        .hd h1{margin:0;font-size:20px} .hd .s{color:#64748b;font-size:12px;margin-top:3px}
-        .hd .r{text-align:right;font-size:12px;color:#64748b}
-        table{width:100%;border-collapse:collapse;font-size:11px}
-        th,td{border:1px solid #e2e8f0;padding:5px 7px;text-align:left;vertical-align:top}
-        th{background:#0B1220;color:#fff;font-size:10px;text-transform:uppercase;letter-spacing:.04em}
-        td.n{color:#94a3b8;text-align:right} td.im{font-family:monospace;font-weight:700} td.vin{font-family:monospace;font-size:9.5px}
-        td.e{text-align:right;white-space:nowrap} tr:nth-child(even) td{background:#f8fafc}
-        tfoot td{background:#FFF7ED;font-weight:800;border-top:2px solid #F97316}
-        .note{margin-top:10px;font-size:10px;color:#94a3b8}
-        @media print{@page{size:A4 landscape;margin:12mm} body{padding:0}}
-      </style></head><body>
-      <div class="hd"><div><h1>État de parc — assurance</h1><div class="s">${esc(nomSoc)} · ${list.length} véhicule(s) · ${nbP} prime(s) renseignée(s)</div></div>
-        <div class="r">Édité le ${today}<br>Parc Pilot</div></div>
-      <table><thead><tr><th>N°</th><th>Immatriculation</th><th>Marque / modèle</th><th>VIN</th><th>Conducteur</th><th>1re immat.</th><th>Statut</th><th style="text-align:right">Prime HT/an</th><th style="text-align:right">Prime TTC/an</th></tr></thead>
-      <tbody>${rows}</tbody>
-      <tfoot><tr><td colspan="7" style="text-align:right">TOTAL ANNUEL</td><td class="e">${FP.euro(totHT)}</td><td class="e">${FP.euro(totTTC)}</td></tr></tfoot></table>
-      <div class="note">Document généré depuis Parc Pilot. « à compléter » = prime non encore renseignée pour ce véhicule.</div>
-      <script>window.onload=function(){setTimeout(function(){window.print()},300)}<\/script>
-      </body></html>`;
-    const w = window.open('', '_blank'); if (!w) { alert('Autorise les fenêtres pop-up pour générer le PDF.'); return; }
-    w.document.write(html); w.document.close();
+    if (!list.length) { if (FP.toast) FP.toast('Aucun véhicule à exporter.'); return; }
+    FP.fiche.open({
+      key: 'etat-parc-assurance',
+      title: 'État de parc — assurance · ' + nomSoc,
+      rows: list,
+      cols: [
+        { id: 'immat',     label: 'Immatriculation', def: true,  mono: true, get: v => v.immat || '—' },
+        { id: 'modele',    label: 'Marque / modèle',  def: true,  get: v => ((v.marque || '') + ' ' + (v.modele || '')).trim() || '—' },
+        { id: 'vin',       label: 'VIN',              def: true,  mono: true, get: v => v.vin || '—' },
+        { id: 'chauffeur', label: 'Conducteur',       def: true,  get: v => (v.chauffeur && v.chauffeur !== '—') ? v.chauffeur : '—' },
+        { id: 'premImmat', label: '1re immat.',       def: true,  align: 'left', get: v => v.dateMiseEnCirculation ? FP.dateNum(v.dateMiseEnCirculation) : '—' },
+        { id: 'statut',    label: 'Statut',           def: true,  get: v => v.statut || '—' },
+        { id: 'assureur',  label: 'Assureur',         def: false, get: v => { try { return (typeof assureurLabel === 'function' ? assureurLabel(v) : '') || '—'; } catch (e) { return '—'; } } },
+        { id: 'primeHT',   label: 'Prime HT/an',      def: true,  align: 'right', get: v => { const p = vehPrime(v); return (p && p.ht != null) ? FP.euro(p.ht) : '—'; }, sum: v => { const p = vehPrime(v); return (p && p.ht != null) ? p.ht : 0; } },
+        { id: 'primeTTC',  label: 'Prime TTC/an',     def: true,  align: 'right', get: v => { const p = vehPrime(v); return (p && p.ttc != null) ? FP.euro(p.ttc) : 'à compléter'; }, tint: val => /compléter/.test(val) ? [180, 83, 9] : null, sum: v => { const p = vehPrime(v); return (p && p.ttc != null) ? p.ttc : 0; } },
+      ],
+    });
   }
 
   // ----- Ajouter UNE prime d'assurance (par véhicule) : dépôt du document + lecture auto -----
