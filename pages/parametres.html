@@ -1253,14 +1253,28 @@
     location.reload();
   }
   // Formulaire du profil (champs générés depuis FP.PROFIL_CHAMPS)
+  // ⚠️ REGROUPÉ EN SECTIONS DÉPLIABLES (demande utilisateur : trop de mails = trop de scroll). Chaque
+  //    section « objet + modèle(s) » d'un même e-mail est repliée par défaut → on ouvre ce qu'on veut
+  //    éditer. TOUS les champs restent dans le DOM (même repliés) → saveSociete lit toujours tout.
+  const MAIL_GROUPS = [
+    { key: 'envoi',    label: '⚙️ Adresse d\'envoi & domaine', open: true,  keys: ['mailExpediteur', 'mailCopie', 'mailDomaineEnvoi'] },
+    { key: 'amendes',  label: '🎫 Amendes (paiement · désignation · relance)', keys: ['mailObjetAmende', 'mailModelePaiement', 'mailModeleDesignation', 'mailModeleRelance', 'mailModelePaiement_en', 'mailModeleDesignation_en', 'mailModeleRelance_en'] },
+    { key: 'acces',    label: '🚗 Conducteur — accès & relevé km', keys: ['mailObjetBienvenue', 'mailModeleBienvenue', 'mailObjetRelevekm', 'mailModeleReleveKm'] },
+    { key: 'garage',   label: '🔧 Rendez-vous garage (annonce · rappel la veille)', keys: ['mailObjetRdvgarage', 'mailModeleRdvGarage', 'mailObjetRappelgarage', 'mailModeleRappelGarage'] },
+    { key: 'edl',      label: '📋 États des lieux (signataire · signature)', keys: ['edlSignataireNom', 'edlSignataireEmail', 'mailObjetSignature', 'mailModeleSignature'] },
+    { key: 'relances', label: '📣 Relances (CT · entretien · garage · km · amende)', keys: ['mailObjetRelanceCt', 'mailModeleRelanceCt', 'mailObjetRelanceEntretien', 'mailModeleRelanceEntretien', 'mailObjetRelanceGarage', 'mailModeleRelanceGarage', 'mailObjetRelanceKm', 'mailModeleRelanceKm', 'mailObjetRelanceAmende', 'mailModeleRelanceAmende'] },
+    { key: 'compte',   label: '👤 Invitation à un compte (accès plateforme)', keys: ['mailObjetInvitation', 'mailModeleInvitation'] },
+  ];
   function renderProfilForm() {
     const box = $('profil-form'); if (!box) return;
     const champs = (FP.PROFIL_CHAMPS || []);
+    const byKey = {}; champs.forEach(c => { byKey[c.key] = c; });
     const p = (function(){ try { return FP.settings.get().profil || {}; } catch(e){ return {}; } })();
     const eff = (FP.societeProfil ? FP.societeProfil() : {}); // valeurs effectives (avec défauts PXP)
     const escAttr = s => String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;');
     const escHtml = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    box.innerHTML = champs.map(c => {
+    const fieldHtml = (c) => {
+      if (!c) return '';
       // Une valeur VIDE stockée (ex. champ enregistré à blanc) ne doit PAS bloquer le défaut effectif
       // (eff = FP.societeProfil, qui pré-remplit p.ex. le signataire EDL) → on la traite comme absente.
       let raw = String((p[c.key] != null && String(p[c.key]).trim() !== '') ? p[c.key] : (eff[c.key] || ''));
@@ -1271,8 +1285,22 @@
       const field = (c.type === 'textarea')
         ? `<textarea class="field-input" id="prof-${c.key}" rows="5" placeholder="${ph}" style="resize:vertical;font-family:inherit;line-height:1.4">${escHtml(raw)}</textarea>`
         : `<input class="field-input" id="prof-${c.key}" type="${c.type === 'email' ? 'email' : 'text'}" placeholder="${ph}" value="${escAttr(raw)}" />`;
-      return `<div><div class="field-label">${c.label}</div>${field}</div>`;
-    }).join('');
+      return `<div style="margin-bottom:.7rem"><div class="field-label">${c.label}</div>${field}</div>`;
+    };
+    const placed = new Set();
+    let html = '';
+    MAIL_GROUPS.forEach(g => {
+      const inner = g.keys.map(k => { placed.add(k); return fieldHtml(byKey[k]); }).filter(Boolean).join('');
+      if (!inner) return;
+      html += `<details class="mail-grp"${g.open ? ' open' : ''} style="border:1px solid var(--fp-border,#e5e7eb);border-radius:12px;margin-bottom:.6rem;overflow:hidden">
+        <summary style="cursor:pointer;list-style:none;padding:.7rem .9rem;font-weight:800;color:var(--fp-primary);background:var(--fp-bg,#f8fafc);display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <span>${g.label}</span><span class="mail-grp-chev" style="color:var(--fp-muted,#94a3b8);font-size:.8rem">▾</span></summary>
+        <div style="padding:.85rem .9rem 1rem">${inner}</div></details>`;
+    });
+    // Champs éventuels non classés (nouveau champ ajouté sans groupe) → section « Autres ».
+    const leftover = champs.filter(c => !placed.has(c.key)).map(fieldHtml).join('');
+    if (leftover) html += `<details class="mail-grp" open style="border:1px solid var(--fp-border,#e5e7eb);border-radius:12px;margin-bottom:.6rem;overflow:hidden"><summary style="cursor:pointer;padding:.7rem .9rem;font-weight:800;color:var(--fp-primary)">Autres</summary><div style="padding:.85rem .9rem 1rem">${leftover}</div></details>`;
+    box.innerHTML = html;
   }
   function loadSociete() {
     const s = FP.settings.get().societe;
