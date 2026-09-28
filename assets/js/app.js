@@ -5848,10 +5848,12 @@ FP.NAV_SUBMENUS = {
   ],
   'notifications.html': [
     { label: 'Alertes', tab: 'alertes' },
+    { label: 'Relances', tab: 'relances' },
     // « Points à vérifier » retiré (consigne utilisateur) : les anomalies de conso sont centralisées
     // dans l'onglet CONTRÔLE (source unique). L'ancien onglet 'verif' reste inaccessible côté UI.
     { label: 'Renouvellements', tab: 'echeances' },
     { label: 'À compléter', tab: 'complet' },
+    { label: 'Suivi flotte', tab: 'suivi' },
     { label: 'Décisions', tab: 'decisions' },
   ],
 };
