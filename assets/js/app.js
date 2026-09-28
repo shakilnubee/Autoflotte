@@ -15121,7 +15121,11 @@ FP.suivi = {
   removePersoCol(id) { const s = FP.settings.get(); s.suiviColsPerso = (s.suiviColsPerso || []).filter(c => c.id !== id); FP.settings.save(s); },
   override(vid, k) { try { return (((FP.settings.get().suiviFlotte) || {})[vid] || {})[k]; } catch (e) { return undefined; } },
   setOverride(vid, k, val) { const s = FP.settings.get(); s.suiviFlotte = s.suiviFlotte || {}; s.suiviFlotte[vid] = s.suiviFlotte[vid] || {}; if (!val) delete s.suiviFlotte[vid][k]; else s.suiviFlotte[vid][k] = val; if (!Object.keys(s.suiviFlotte[vid]).length) delete s.suiviFlotte[vid]; FP.settings.save(s); },
-  state(v, col, ctx) { const ov = FP.suivi.override(v.id, col.k); if (ov === 'ignore') return 'ignore'; if (ov === 'fait') return 'fait'; const a = col.auto(v, ctx || {}); if (a === 'na') return 'na'; return a ? 'fait' : 'todo'; },
+  // Remet À ZÉRO les cases COCHÉES À LA MAIN d'un véhicule (fait/non-fait/non-suivi) → tout revient en
+  // automatique. Utilisé quand on affecte un NOUVEAU conducteur (on refait le suivi complet). Les colonnes
+  // AUTO (carte grise, assurance, leasing…) restent lues depuis la fiche, elles ne dépendent pas d'ici.
+  resetVehicule(vid) { try { const s = FP.settings.get(); if (s.suiviFlotte && s.suiviFlotte[vid]) { delete s.suiviFlotte[vid]; FP.settings.save(s); return true; } } catch (e) {} return false; },
+  state(v, col, ctx) { const ov = FP.suivi.override(v.id, col.k); if (ov === 'ignore') return 'ignore'; if (ov === 'nonfait') return 'todo'; if (ov === 'fait') return 'fait'; const a = col.auto(v, ctx || {}); if (a === 'na') return 'na'; return a ? 'fait' : 'todo'; },
   isComplete(v, ctx) { return FP.suivi.allCols().every(col => FP.suivi.state(v, col, ctx) !== 'todo'); },
   counts(vehs, ctx) { const a = (vehs || []).filter(v => !(FP.horsFlotte && FP.horsFlotte(v))); let c = 0; a.forEach(v => { if (FP.suivi.isComplete(v, ctx)) c++; }); return { total: a.length, complets: c, incomplets: a.length - c }; },
   _ctxP: null,
