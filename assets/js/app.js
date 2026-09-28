@@ -5874,12 +5874,19 @@ FP.normPrenom = (s) => (s || '').toString().trim().split(/\s+/)[0].toLowerCase()
 // sinon le 1er mot du nom. (À NE PAS utiliser là où le nom complet est voulu : fiche, exports, EDL légal.)
 FP.prenomAffiche = function (nameOrKey) {
   if (!nameOrKey) return '';
+  const s = String(nameOrKey).trim();
+  if (!s || s === '—') return s;
   try {
-    const c = (FP.conducteurs && FP.conducteurs.find) ? FP.conducteurs.find(nameOrKey) : null;
+    const c = (FP.conducteurs && FP.conducteurs.find) ? FP.conducteurs.find(s) : null;
     if (c && c.prenom && String(c.prenom).trim()) return String(c.prenom).trim();
-    if (c && c.nom && String(c.nom).trim()) { /* nom sans prénom → on retombe sur le 1er mot ci-dessous */ }
   } catch (e) {}
-  return String(nameOrKey).trim().split(/\s+/)[0] || '';
+  // Étiquettes qui ne sont PAS des personnes (Siège, Dépôt PXP, Navette…) → garder le libellé ENTIER
+  // (sinon « Dépôt PXP » deviendrait « Dépôt »). On ne coupe au 1er mot QUE pour un vrai nom de personne.
+  try {
+    const low = s.toLowerCase();
+    if ((FP.NON_CHAUFFEURS || []).some(x => { const xl = String(x).toLowerCase(); return low === xl || low.startsWith(xl + ' '); })) return s;
+  } catch (e) {}
+  return s.split(/\s+/)[0] || '';
 };
 // ⚠️ HELPER CANONIQUE — nom COMPLET normalisé (prénom + nom, accents/casse/espaces neutralisés).
 // Sert à distinguer deux homonymes de prénom (« Jean Dupont » ≠ « Jean Martin ») SANS casser le
@@ -9722,7 +9729,9 @@ FP.lienVehicule = function (immat, label) {
 };
 FP.lienConducteur = function (name, label) {
   const raw = (name == null ? '' : String(name)).trim();
-  const txt = FP._escLien(label != null ? label : raw);
+  // Règle GLOBALE : on affiche le PRÉNOM SEUL du conducteur (source unique FP.prenomAffiche) — sauf si
+  // l'appelant impose un `label`. Le lien pointe toujours vers la fiche complète du conducteur.
+  const txt = FP._escLien(label != null ? label : (FP.prenomAffiche ? FP.prenomAffiche(raw) : raw));
   const excl = ['', '—', 'x', 'X', 'Siège', 'Dépôt', 'Navette', 'VENDU', 'Fenwick'];
   if (excl.includes(raw)) return txt;
   const key = raw.split(/\s+/)[0].toLowerCase();
