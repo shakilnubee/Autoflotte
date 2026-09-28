@@ -174,7 +174,7 @@
     <!-- Classement coût au km -->
     <div class="card p-5 mb-6">
       <h3 class="font-bold text-slate-900 mb-1 flex items-center gap-2"><i data-lucide="gauge" class="w-4 h-4" style="color:#F97316"></i> Classement coût au km <span class="text-xs font-normal text-slate-400">(<span id="perkm-periode">toutes années</span>)</span></h3>
-      <p class="text-xs text-slate-400 mb-4">Coût total (factures + carburant + péages + assurance + TVS + amendes) rapporté au kilométrage. Véhicules sans km exclus.</p>
+      <p class="text-xs text-slate-400 mb-4">Coût total (factures + carburant + péages + assurance + TVS + amendes) rapporté au kilométrage. Véhicules de moins de 1 000 km exclus (coût/km non fiable quand le véhicule a très peu roulé).</p>
       <div class="grid md:grid-cols-2 gap-6">
         <div>
           <div class="text-xs font-bold uppercase tracking-wide text-red-600 mb-2">🔺 Les plus chères au km</div>
@@ -694,6 +694,10 @@
     const _primeFlotte = Number(_cfgSt.assurancePrimeAnnuelle) || 0;
     const _nbOwned = (data.vehicules || []).filter(v => !FP.estVendu(v)).length || 1;
     const _assurRepli = (!_hasPerVehPrime && _primeFlotte > 0) ? (_primeFlotte / _nbOwned) : 0;
+    // ⚠️ Seuil km minimal pour le COÛT AU KM : en dessous, le ratio (coût ÷ km) est dominé par les frais
+    // fixes / un km non renseigné et n'a AUCUN sens (ex. un véhicule à 1 km ressortait à 1357 €/km).
+    // Un véhicule sous ce seuil est EXCLU du coût/km (podium ET colonne €/km du tableau) → « — ».
+    const MIN_KM_PERKM = 1000;
     tcoData = data.vehicules.map(v => {
       const fv = fact.filter(f => FP.normImmat(f.vehiculeImmat) === FP.normImmat(v.immat)); // match plaque tolérant (tirets/espaces/OCR)
       // Leasing : le loyer fait foi via l'OFFRE (Contrats), les factures 'leasing' ne sont qu'une preuve.
@@ -768,7 +772,7 @@
       // €/km : coût cumulé ÷ km compteur cumulé → n'a de sens qu'en « toutes années » ; sinon 0 (« — »).
       // Dénominateur = FP.kmActuel (source unique, comme la fiche véhicule), pas v.km brut.
       const kmA = FP.kmActuel ? FP.kmActuel(v) : (Number(v.km) || 0);
-      return { id: v.id, immat: v.immat, modele: `${v.marque} ${v.modele}`.trim(), km: kmA, fact: factTotal, assur, tvs, amendes, total, perKm: (annee === 'all' && kmA > 0) ? total / kmA : 0, nb: fv.length, achatDate: achatF ? achatF.date : '' };
+      return { id: v.id, immat: v.immat, modele: `${v.marque} ${v.modele}`.trim(), km: kmA, fact: factTotal, assur, tvs, amendes, total, perKm: (annee === 'all' && kmA >= MIN_KM_PERKM) ? total / kmA : 0, nb: fv.length, achatDate: achatF ? achatF.date : '' };
     }).sort((a, b) => b.total - a.total);
     renderTcoTable();
     renderPodiumPerKm(annee);
