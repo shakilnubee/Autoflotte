@@ -1726,6 +1726,58 @@ FP.coutExploitAnnee = (v, annee, factures) => {
 // révision (le véhicule ne peut pas rouler moins que son dernier relevé). À utiliser partout où on AFFICHE
 // « km actuel », pour que même des données non réconciliées (data.js figé) montrent la bonne valeur.
 FP.kmActuel = (v) => Math.max(Number(v && v.km) || 0, Number(v && v.kmDernierReleve) || 0);
+// ⚠️ HELPER CANONIQUE — KM ANNUEL RÉEL (estimé) d'un véhicule, pour le bilan CO₂ (et tout calcul « /an »).
+// Bien plus juste que le forfait 15 000 km : on prend le VRAI rythme du véhicule, dans cet ordre :
+//   1) RELEVÉS KM (source unique FP.kmCollecte) : ≥2 relevés espacés d'au moins 30 j → (Δkm ÷ Δjours)×365.
+//   2) MOYENNE À VIE : km au compteur ÷ ancienneté (depuis la 1re mise en circulation).
+//   3) REPLI : 15 000 km/an (moyenne conventionnelle) si aucune donnée exploitable.
+// Bornes de sécurité 500–80 000 km/an pour écarter les valeurs aberrantes (saisie/OCR douteux).
+FP.KM_AN_DEFAUT = 15000;
+FP.kmAnnuel = function (v) {
+  if (!v) return FP.KM_AN_DEFAUT;
+  const _ok = (x) => (isFinite(x) && x >= 500 && x <= 80000) ? Math.round(x) : null;
+  try {
+    // 1) Rythme réel via les relevés km
+    const KC = FP.kmCollecte;
+    if (KC && KC.recusDe) {
+      const reads = (KC.recusDe(v) || [])
+        .filter(r => r && r.used_at && r.km_recu != null)
+        .map(r => ({ t: new Date(r.used_at).getTime(), km: Number(r.km_recu) }))
+        .filter(r => isFinite(r.t) && isFinite(r.km))
+        .sort((a, b) => a.t - b.t);
+      if (reads.length >= 2) {
+        const first = reads[0], last = reads[reads.length - 1];
+        const dDays = (last.t - first.t) / 86400000, dKm = last.km - first.km;
+        if (dDays >= 30 && dKm > 0) { const r = _ok(dKm / dDays * 365); if (r) return r; }
+      }
+    }
+  } catch (e) {}
+  try {
+    // 2) Moyenne « à vie » : compteur ÷ ancienneté
+    const km = FP.kmActuel ? FP.kmActuel(v) : (Number(v.km) || 0);
+    const dmc = v.dateMiseEnCirculation ? new Date(v.dateMiseEnCirculation) : null;
+    if (km > 0 && dmc && !isNaN(dmc)) {
+      const ageAns = (Date.now() - dmc.getTime()) / (365.25 * 86400000);
+      if (ageAns >= 0.5) { const r = _ok(km / ageAns); if (r) return r; }
+    }
+  } catch (e) {}
+  return FP.KM_AN_DEFAUT;   // 3) repli conventionnel
+};
+// Comment le km/an a été obtenu (pour l'afficher / l'expliquer) : 'releves' | 'anciennete' | 'defaut'.
+FP.kmAnnuelSource = function (v) {
+  try {
+    const KC = FP.kmCollecte;
+    if (KC && KC.recusDe) {
+      const reads = (KC.recusDe(v) || []).filter(r => r && r.used_at && r.km_recu != null)
+        .map(r => ({ t: new Date(r.used_at).getTime(), km: Number(r.km_recu) })).filter(r => isFinite(r.t) && isFinite(r.km)).sort((a, b) => a.t - b.t);
+      if (reads.length >= 2) { const f = reads[0], l = reads[reads.length - 1]; const dD = (l.t - f.t) / 86400000, dK = l.km - f.km; if (dD >= 30 && dK > 0) { const an = dK / dD * 365; if (an >= 500 && an <= 80000) return 'releves'; } }
+    }
+    const km = FP.kmActuel ? FP.kmActuel(v) : (Number(v.km) || 0);
+    const dmc = v.dateMiseEnCirculation ? new Date(v.dateMiseEnCirculation) : null;
+    if (km > 0 && dmc && !isNaN(dmc)) { const a = (Date.now() - dmc.getTime()) / (365.25 * 86400000); if (a >= 0.5) { const an = km / a; if (an >= 500 && an <= 80000) return 'anciennete'; } }
+  } catch (e) {}
+  return 'defaut';
+};
 // ⚠️ HELPERS CANONIQUES — statut d'un emprunt. « en cours » = pas encore rendu (dateRetour absente ou
 // sentinelle inconnue). À utiliser partout (page Emprunts, dashboard, fiche véhicule) — sinon deux écrans
 // divergent sur « ce véhicule est-il sorti ? ».
@@ -8730,7 +8782,7 @@ FP.rapportDirection = (data) => {
   const topMax = topCouts.length ? topCouts[0][1] : 0;
 
   const tvsTotal = FP.tvsAnnuelleFlotte(vehs);
-  let co2G = 0; actifs.forEach(v => { const carb = (v.carburant || '').toLowerCase(); if (/lectri|hydrog/.test(carb)) return; const c = Number(v.co2); if (Number.isFinite(c) && c > 0) co2G += c * 15000; });
+  let co2G = 0; actifs.forEach(v => { const carb = (v.carburant || '').toLowerCase(); if (/lectri|hydrog/.test(carb)) return; const c = Number(v.co2); if (Number.isFinite(c) && c > 0) co2G += c * (FP.kmAnnuel ? FP.kmAnnuel(v) : 15000); });
   const co2T = co2G / 1e6;
   const nbElec = actifs.filter(v => /lectri|hydrog|hybrid/.test((v.carburant || '').toLowerCase())).length;
 
@@ -8851,7 +8903,8 @@ FP.rapportRSE = (data) => {
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   let soc = 'PXP'; try { soc = localStorage.getItem('fp_societe') || 'PXP'; if (soc === '__all__') soc = 'Toutes sociétés'; } catch (e) {}
   const today = new Date().toLocaleDateString('fr-FR');
-  const KM_AN = 15000;
+  const KM_AN = (FP.KM_AN_DEFAUT || 15000);
+  const kmAnOf = (v) => (FP.kmAnnuel ? FP.kmAnnuel(v) : KM_AN);   // km annuel RÉEL par véhicule (source unique)
   const eur = (n) => FP.euro ? FP.euro(n) : Math.round(n) + ' €';
   const num = (n) => FP.num ? FP.num(n) : String(n);
   const isElec = (v) => /lectri|hydrog/.test((v.carburant || '').toLowerCase());
@@ -8861,15 +8914,15 @@ FP.rapportRSE = (data) => {
   const nbElec = vehs.filter(isElec).length, nbHyb = vehs.filter(isHyb).length;
   const nbPropres = nbElec + nbHyb;
   const pctPropre = vehs.length ? Math.round(nbPropres / vehs.length * 100) : 0;
-  let co2G = 0, nCo2 = 0; vehs.forEach(v => { if (isElec(v)) return; const c = Number(v.co2); if (Number.isFinite(c) && c > 0) { co2G += c * KM_AN; nCo2++; } });
+  let co2G = 0, nCo2 = 0, sumC = 0; vehs.forEach(v => { if (isElec(v)) return; const c = Number(v.co2); if (Number.isFinite(c) && c > 0) { co2G += c * kmAnOf(v); sumC += c; nCo2++; } });
   const co2T = co2G / 1e6;
-  const co2Moy = nCo2 ? Math.round(co2G / nCo2 / KM_AN) : 0;
+  const co2Moy = nCo2 ? Math.round(sumC / nCo2) : 0;   // émissions moyennes g/km (indépendant du km/an)
 
   const parCarb = {}; vehs.forEach(v => { const c = (v.carburant || '—').toString().trim() || '—'; parCarb[c] = (parCarb[c] || 0) + 1; });
   const carbRows = Object.entries(parCarb).sort((a, b) => b[1] - a[1]).map(([k, n]) =>
     `<tr><td>${esc(k)}</td><td style="text-align:right">${n}</td><td style="text-align:right">${vehs.length ? Math.round(n / vehs.length * 100) : 0}%</td></tr>`).join('');
   const topRows = vehs.filter(v => !isElec(v) && Number(v.co2) > 0).sort((a, b) => Number(b.co2) - Number(a.co2)).slice(0, 6).map(v =>
-    `<tr><td>${esc(v.immat)}</td><td>${esc(((v.marque || '') + ' ' + (v.modele || '')).trim())}</td><td style="text-align:right">${num(v.co2)} g/km</td><td style="text-align:right">${(Number(v.co2) * KM_AN / 1e6).toFixed(2)} t/an</td></tr>`).join('') || '<tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:12px">Aucun véhicule thermique avec CO₂ renseigné.</td></tr>';
+    `<tr><td>${esc(v.immat)}</td><td>${esc(((v.marque || '') + ' ' + (v.modele || '')).trim())}</td><td style="text-align:right">${num(v.co2)} g/km</td><td style="text-align:right">${(Number(v.co2) * kmAnOf(v) / 1e6).toFixed(2)} t/an</td></tr>`).join('') || '<tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:12px">Aucun véhicule thermique avec CO₂ renseigné.</td></tr>';
 
   const kpi = (l, v, s, c) => `<div class="kpi"><div class="kl">${esc(l)}</div><div class="kv" style="color:${c || '#0F1E3D'}">${v}</div>${s ? `<div class="ks">${esc(s)}</div>` : ''}</div>`;
 
@@ -8897,7 +8950,7 @@ FP.rapportRSE = (data) => {
       </div>
       <div class="grid">
         ${kpi('Parc actif', num(vehs.length), 'véhicules', '#0F1E3D')}
-        ${kpi('CO₂ estimé', co2T.toFixed(1) + ' t/an', 'base ' + num(KM_AN) + ' km/an', '#DC2626')}
+        ${kpi('CO₂ estimé', co2T.toFixed(1) + ' t/an', 'km réel par véhicule', '#DC2626')}
         ${kpi('Émission moyenne', num(co2Moy) + ' g/km', 'véhicules thermiques', '#0F1E3D')}
         ${kpi('Flotte électrifiée', pctPropre + ' %', nbElec + ' élec. + ' + nbHyb + ' hybr.', '#047857')}
       </div>
@@ -8905,7 +8958,7 @@ FP.rapportRSE = (data) => {
       <table><thead><tr><th>Énergie</th><th style="text-align:right">Véhicules</th><th style="text-align:right">Part</th></tr></thead><tbody>${carbRows}</tbody></table>
       <div class="sec-t">Véhicules les plus émetteurs</div>
       <table><thead><tr><th>Immat.</th><th>Modèle</th><th style="text-align:right">CO₂</th><th style="text-align:right">Estimé</th></tr></thead><tbody>${topRows}</tbody></table>
-      <div class="note"><b>Méthode :</b> émissions estimées sur ${num(KM_AN)} km/an et le CO₂ (carte grise, champ V.7) de chaque véhicule thermique ; les véhicules électriques/hydrogène sont comptés à 0 g/km à l'usage. <b>Loi LOM :</b> les flottes de plus de 100 véhicules ont une obligation croissante de véhicules à faibles émissions au renouvellement — la part électrifiée ci-dessus suit cette trajectoire.</div>
+      <div class="note"><b>Méthode :</b> « du réservoir à la roue » — pour chaque véhicule thermique, CO₂ homologué (carte grise, champ V.7) × son <b>kilométrage annuel réel</b> (mesuré via les relevés km, ou compteur ÷ ancienneté ; à défaut ${num(KM_AN)} km/an). Les véhicules électriques/hydrogène sont comptés à 0 g/km à l'usage. <b>Loi LOM :</b> les flottes de plus de 100 véhicules ont une obligation croissante de véhicules à faibles émissions au renouvellement — la part électrifiée ci-dessus suit cette trajectoire.</div>
       <div class="foot">Généré par Parc Pilot — gestion de flotte · ${esc(soc)} · ${esc(today)}. Estimations à but indicatif (RSE / reporting interne).</div>
       <scr` + `ipt>setTimeout(function(){try{window.print()}catch(e){}},450)</scr` + `ipt>
     </body></html>`;

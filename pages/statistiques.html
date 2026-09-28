@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260928s">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260928t">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260928s"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260928t"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260928s">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260928t">
 <style>
   .chart-wrap { position: relative; height: 280px; }
   .chart-wrap-sm { position: relative; height: 220px; }
@@ -207,8 +207,9 @@
 
     <!-- Bilan CO₂ / RSE -->
     <div class="card p-5 mb-6">
-      <h3 class="font-bold text-slate-900 mb-1 flex items-center gap-2"><i data-lucide="leaf" class="w-4 h-4" style="color:#10B981"></i> Bilan CO₂ / RSE <span class="text-xs font-normal text-slate-400">(estimation sur 15 000 km/an)</span></h3>
-      <p class="text-xs text-slate-400 mb-4">Estimation « du réservoir à la roue » basée sur le CO₂ homologué (WLTP, champ V.7 de la carte grise) × 15 000 km/an. Les véhicules électriques comptent 0 à l'usage. Renseigne le CO₂ des véhicules pour affiner.</p>
+      <h3 class="font-bold text-slate-900 mb-1 flex items-center gap-2"><i data-lucide="leaf" class="w-4 h-4" style="color:#10B981"></i> Bilan CO₂ / RSE <span class="text-xs font-normal text-slate-400">(sur le km réel de chaque véhicule)</span></h3>
+      <p class="text-xs text-slate-400 mb-1">Méthode « du réservoir à la roue » (norme officielle) : pour chaque véhicule, <b>CO₂ homologué (WLTP, champ V.7 de la carte grise) × son kilométrage annuel RÉEL</b>. Le km/an réel vient des <b>relevés km</b> (rythme mesuré) ou, à défaut, du <b>compteur ÷ ancienneté</b> ; s'il manque tout, on retombe sur 15 000 km/an. Électriques &amp; hydrogène = 0 à l'usage.</p>
+      <p class="text-xs text-slate-400 mb-4" id="co2-methode-note"></p>
       <div class="flex items-center gap-6 flex-wrap">
         <div id="co2-donut" style="flex:0 0 auto"></div>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 flex-1" style="min-width:280px">
@@ -315,8 +316,8 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260928s"></script>
-<script src="../assets/js/supabase-client.js?v=20260928s"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260928t"></script>
+<script src="../assets/js/supabase-client.js?v=20260928t"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -332,10 +333,10 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260928s"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260928t"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
-<script src="../assets/js/app.min.js?v=20260928s"></script>
+<script src="../assets/js/app.min.js?v=20260928t"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -373,9 +374,11 @@
       }
     } catch (e) {}
   }
-  // Bilan CO₂ / RSE — estimation annuelle (réservoir→roue) sur 15 000 km/an
+  // Bilan CO₂ / RSE — estimation annuelle (réservoir→roue) sur le KM ANNUEL RÉEL de chaque véhicule
+  // (relevés km / ancienneté, source unique FP.kmAnnuel), avec repli 15 000 km/an si aucune donnée.
   function renderCO2() {
-    const KM_AN = 15000;
+    const KM_AN = (window.FP && FP.KM_AN_DEFAUT) || 15000;
+    let usesReal = 0, usesDefault = 0;   // pour préciser combien de véhicules ont un km réel
     const vs = (data.vehicules || []).filter(v => {
       const cat = (v.categorie || '').toLowerCase();
       if (/moto|utilit|engin|remorque/.test(cat)) return false;      // non concernés
@@ -395,7 +398,13 @@
       const raw = v.co2;
       const hasCo2 = raw !== null && raw !== undefined && String(raw).trim() !== '' && Number.isFinite(Number(raw)) && Number(raw) >= 0;
       const c = Number(raw);
-      if (hasCo2) { if (c > 0) totalG += c * KM_AN; sumCo2 += c; nCo2++; }
+      if (hasCo2) {
+        // KM ANNUEL RÉEL du véhicule (relevés km / ancienneté), sinon 15 000 (source unique FP.kmAnnuel).
+        const kmAn = (window.FP && FP.kmAnnuel) ? FP.kmAnnuel(v) : KM_AN;
+        if ((window.FP && FP.kmAnnuelSource) && FP.kmAnnuelSource(v) !== 'defaut') usesReal++; else usesDefault++;
+        if (c > 0) totalG += c * kmAn;
+        sumCo2 += c; nCo2++;
+      }
       else if (!IG.has('co2:' + v.id)) missingVehs.push(v); // « à compléter » sauf si ignoré
     });
     const missing = missingVehs.length;
@@ -407,6 +416,11 @@
     set('kpi-co2-moy', moy + ' g');
     set('kpi-co2-elec', pctElec + ' %');
     set('kpi-co2-elec-sub', `${elec}/${vs.length} véhicule${elec > 1 ? 's' : ''}`);
+    // Précision méthode : combien de véhicules calculés sur leur km RÉEL vs le repli 15 000 km/an.
+    { const note = $('co2-methode-note');
+      if (note) note.innerHTML = usesReal
+        ? `✅ ${usesReal} véhicule${usesReal > 1 ? 's' : ''} calculé${usesReal > 1 ? 's' : ''} sur leur <b>km réel</b>${usesDefault ? ` · ${usesDefault} sur 15 000 km/an par défaut (peu de relevés / ancienneté inconnue)` : ''}. Plus tu fais de <b>relevés km</b>, plus le bilan est précis.`
+        : (nCo2 ? `Aucun km réel exploitable pour l'instant → tout est estimé sur 15 000 km/an. Fais des <b>relevés km</b> (au moins 2 par véhicule) pour un bilan basé sur le vrai kilométrage.` : ''); }
     set('kpi-co2-missing', String(missing));
     const donut = $('co2-donut');
     if (donut && FP.donutHTML) { donut.innerHTML = FP.donutHTML(pctElec, { size: 108, color: '#10B981', label: pctElec + '%' }); }
