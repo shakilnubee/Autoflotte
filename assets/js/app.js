@@ -766,11 +766,12 @@ FP.releveKm = (function () {
       const lastDate = last ? new Date(last.used_at) : null;
       const daysSince = lastDate ? Math.floor((today - lastDate) / 86400000) : null;
       // Statut = même règle que les Relances (source unique) : un scan QR ne compte que s'il suit une
-      // relance mail. Le dernier relevé AFFICHÉ (date + canal) reste, lui, le plus récent tout canal.
+      // relance mail, et « à jour » = relevé daté APRÈS le cutoff (délai + date de cycle). Le dernier
+      // relevé AFFICHÉ (date + canal) reste, lui, le plus récent tout canal.
       const lastCompte = (KC && KC.recusComptesDe) ? (KC.recusComptesDe(v)[0] || null) : last;
-      const cDays = lastCompte ? Math.floor((today - new Date(lastCompte.used_at)) / 86400000) : null;
+      const cutoff = (KC && KC._cutoff) ? KC._cutoff() : (today.getTime() - seuil * 86400000);
       let statut;
-      if (lastCompte && cDays <= seuil) statut = 'ajour';
+      if (lastCompte && new Date(lastCompte.used_at).getTime() >= cutoff) statut = 'ajour';
       else if (pending) statut = 'attente';
       else if (readings.length) statut = 'relancer';
       else statut = 'jamais';
@@ -915,13 +916,13 @@ FP.releveKm = (function () {
         <div class="rk-card">
           <div class="rk-head" style="margin-bottom:12px"><div class="rk-title"><i data-lucide="sliders-horizontal" class="w-5 h-5" style="color:var(--fp-accent)"></i> Réglages des rappels km</div></div>
           <div class="rk-cfg">
-            <div class="f"><label>Rappel « à faire » tous les (jours)</label><input id="rk-seuil" type="number" min="1" step="1" value="${seuil}"></div>
+            <div class="f"><label>Un relevé reste valable (jours)</label><input id="rk-seuil" type="number" min="1" step="1" value="${seuil}"></div>
             <div class="f"><label>Relance auto par mail si sans réponse (jours)</label><input id="rk-relance" type="number" min="1" step="1" value="${relance}"></div>
-            <div class="f"><label>Date de début du cycle (option.)</label><input id="rk-debut" type="date" value="${cfg.releveKmDebut || ''}"></div>
+            <div class="f"><label>Tout le monde redonne son km à partir du…</label><input id="rk-debut" type="date" value="${cfg.releveKmDebut || ''}"></div>
             <button class="rk-btn" id="rk-save"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer</button>
             <span id="rk-save-st" style="font-size:.8rem;color:var(--fp-muted)"></span>
           </div>
-          <p style="font-size:.78rem;color:var(--fp-muted);margin:10px 0 0">Synchronisé sur tous tes appareils. Ces réglages pilotent l'alerte « relevé km à faire » ET la <b>relance automatique par mail</b> : si un chauffeur ne répond pas au bout du délai ci-dessus, le site lui <b>renvoie tout seul</b> la demande (quelques rappels max, puis il te laisse la main). Tu peux aussi les modifier dans Paramètres → Configuration.</p>
+          <p style="font-size:.78rem;color:var(--fp-muted);margin:10px 0 0">Synchronisé sur tous tes appareils. <b>« Un relevé reste valable X jours »</b> = un véhicule est « à jour » tant qu'il a donné son km il y a moins de X jours ; passé ce délai il repasse « à faire ». <b>C'est une durée de validité, pas un « tout le monde doit répondre »</b> : plus le nombre est grand, plus les véhicules restent « à jour » longtemps. 👉 Pour <b>forcer TOUTE la flotte à redonner son km</b>, mets la <b>date du jour</b> dans « Tout le monde redonne son km à partir du… » : tous ceux qui n'ont pas donné leur km depuis cette date repassent « à faire ». La <b>relance auto par mail</b> renvoie tout seul la demande à ceux qui ne répondent pas au bout du délai. Réglages aussi dans Paramètres → Configuration.</p>
         </div>
         <div class="rk-card">
           <div class="rk-head">
@@ -931,7 +932,7 @@ FP.releveKm = (function () {
               ${avecMail ? `<button class="rk-btn" id="rk-ask-all"><i data-lucide="send" class="w-4 h-4"></i> Demander aux manquants (${avecMail})</button>` : ''}
             </div>
           </div>
-          <p style="font-size:.8rem;color:var(--fp-muted);margin:2px 0 14px">« À jour » = relevé reçu il y a ≤ ${seuil} j. Clique une ligne pour voir l'historique et le km par période. Le QR à coller dans chaque voiture se génère depuis la fiche véhicule (bouton « QR km »). <b>Décoche un véhicule</b> pour ne plus jamais demander son km.</p>
+          <p style="font-size:.8rem;color:var(--fp-muted);margin:2px 0 14px">« À jour » = relevé reçu il y a ≤ ${seuil} j${cfg.releveKmDebut ? ' (et après le ' + (function(){try{return FP.date(cfg.releveKmDebut);}catch(e){return cfg.releveKmDebut;}})() + ')' : ''}. Clique une ligne pour voir l'historique et le km par période. Le QR à coller dans chaque voiture se génère depuis la fiche véhicule (bouton « QR km »). <b>Décoche un véhicule</b> pour ne plus jamais demander son km.</p>
           <div class="rk-list">
             ${loading ? '<div class="rk-empty">Chargement des relevés…</div>' : (sorted.length ? sorted.map(rowHTML).join('') : '<div class="rk-empty">Aucun véhicule en flotte.</div>')}
           </div>
@@ -2362,15 +2363,34 @@ FP.kmCollecte = {
     const sent = this._lastSentAt(v);
     return this.recusDe(v).filter(r => (r.source !== 'qr') || (sent && new Date(r.used_at).getTime() >= sent));
   },
-  // ⚠️ SOURCE UNIQUE — « à jour » = un relevé a été REÇU il y a ≤ releveKmJours (même définition que
-  // l'onglet Alertes → Relevé KM, statut « ajour »). Sert à ne relancer QUE ceux qui n'ont pas répondu.
+  // ⚠️ SOURCE UNIQUE — DATE-SEUIL « à jour » (ms). Un relevé qui COMPTE et daté APRÈS cette date = à jour.
+  // Combine les DEUX réglages (Paramètres → Notifications / panneau Relevé KM) :
+  //  • le DÉLAI « rappel à faire tous les X jours » (releveKmJours) → cutoff = aujourd'hui − X jours ;
+  //  • la DATE DE DÉBUT DU CYCLE (releveKmDebut, optionnelle) → échéance de cycle courante.
+  // La plus RÉCENTE (la + stricte) s'applique → mettre la date du cycle à AUJOURD'HUI force TOUTE la
+  // flotte à redonner son km (tout le monde repasse « à faire »). Même règle partout (relances + suivi).
+  _cutoff() {
+    const cfg = (FP.notifCfg ? FP.notifCfg() : {});
+    const seuil = cfg.releveKmJours || 45;
+    let cut = Date.now() - seuil * 86400000;
+    try {
+      const debut = cfg.releveKmDebut ? new Date(cfg.releveKmDebut) : null;
+      if (debut && !isNaN(debut)) {
+        const dsStart = Math.floor((Date.now() - debut.getTime()) / 86400000);
+        if (dsStart >= 0) {
+          const cycles = Math.floor(dsStart / seuil);
+          const ech = debut.getTime() + cycles * seuil * 86400000;   // échéance de cycle courante
+          if (ech > cut) cut = ech;                                    // le cycle prime s'il est plus strict
+        }
+      }
+    } catch (e) {}
+    return cut;
+  },
   aJour(v) {
     try {
       const last = this.recusComptesDe(v)[0];   // relevé qui COMPTE (mail/manuel, ou QR après relance)
       if (!last || !last.used_at) return false;
-      const seuil = (FP.notifCfg ? (FP.notifCfg().releveKmJours || 45) : 45);
-      const days = Math.floor((Date.now() - new Date(last.used_at)) / 86400000);
-      return days <= seuil;
+      return new Date(last.used_at).getTime() >= this._cutoff();
     } catch (e) { return false; }
   },
   // ⚠️ SOURCE UNIQUE — un relevé reçu par mail/QR met à jour le « dernier relevé » (settings.kmMajDates,
@@ -14974,8 +14994,8 @@ FP.relances = {
       // véhicule. Mail (lien) + saisie manuelle comptent toujours. Un scan spontané laisse le véhicule listé.
       const last = (KC.recusComptesDe ? KC.recusComptesDe(v)[0] : readings[0]) || null;
       const stt = KC.statusFor ? KC.statusFor(v) : null; const pending = (stt && stt.sent_at && !stt.used_at) ? stt : null;
-      const lastDate = last ? new Date(last.used_at) : null; const days = lastDate ? Math.floor((today - lastDate) / 86400000) : null;
-      let statut; if (lastDate && days <= seuil) statut = 'ajour'; else if (pending) statut = 'attente'; else if (readings.length) statut = 'relancer'; else statut = 'jamais';
+      const cutoff = KC._cutoff ? KC._cutoff() : (today.getTime() - seuil * 86400000);   // délai + date de cycle (source unique)
+      let statut; if (last && new Date(last.used_at).getTime() >= cutoff) statut = 'ajour'; else if (pending) statut = 'attente'; else if (readings.length) statut = 'relancer'; else statut = 'jamais';
       if (statut === 'ajour' || statut === 'attente') return; // à jour = rien ; en attente = demande déjà partie
       const chauffeur = (v.chauffeur && v.chauffeur !== '—') ? String(v.chauffeur).trim() : '';
       out.push({ type: 'km', veh: v, immat: v.immat || '', conducteur: chauffeur, contact: this._contact(chauffeur), statut, lastKm: last ? last.used_at : (readings[0] ? readings[0].used_at : ''), joursRestants: null, urgence: 'retard' });
@@ -15048,16 +15068,19 @@ FP.relances = {
     const _tags = { prenom: p, immat: item.immat, date: this._fdate(item.dueDate), motif: item.motif || '' };
     const _msg = (mkey, dkey) => (FP.mailModeleProfil && FP.fillTags) ? FP.fillTags(FP.mailModeleProfil(mkey, dkey), _tags) : (FP.MAIL_DEFAUT[dkey] || '');
     const _obj = (dkey, fallback) => (FP.mailObjet ? (FP.mailObjet(dkey, _tags) || fallback) : fallback);
-    let text = '', subject = '', emailText = '';
+    let text = '', subject = '', emailText = '', kmLink = '';
     if (item.type === 'ct') { subject = _obj('relanceCt', 'Contrôle technique — ' + item.immat); text = _msg('mailModeleRelanceCt', 'relanceCt'); emailText = text; }
     else if (item.type === 'entretien') { subject = _obj('relanceEntretien', 'Entretien à prévoir — ' + item.immat); text = _msg('mailModeleRelanceEntretien', 'relanceEntretien'); emailText = text; }
     else if (item.type === 'garage') { subject = _obj('relanceGarage', 'Rendez-vous garage — ' + item.immat); text = _msg('mailModeleRelanceGarage', 'relanceGarage'); emailText = text; }
-    else if (item.type === 'km') { const l = await this._liens(item.veh); subject = _obj('relanceKm', 'Relevé kilométrique — ' + item.immat); text = _msg('mailModeleRelanceKm', 'relanceKm') + (l.kmLink ? ('\n👉 ' + l.kmLink) : ''); emailText = text; }
+    else if (item.type === 'km') { const l = await this._liens(item.veh); kmLink = l.kmLink || ''; subject = _obj('relanceKm', 'Relevé kilométrique — ' + item.immat); const base = _msg('mailModeleRelanceKm', 'relanceKm'); text = base + (kmLink ? ('\n👉 ' + kmLink) : ''); emailText = base; }
     else if (item.type === 'amende') { subject = _obj('relanceAmende', 'Amende à régler — ' + item.immat); text = _msg('mailModeleRelanceAmende', 'relanceAmende'); emailText = text; }
     let nomSoc = '', logoUrl = '';
     try { const s = FP.settings.get() || {}; const pr = s.profil || {}; const so = s.societe || {}; nomSoc = so.nom || pr.societe || ''; logoUrl = pr.logoDataUrl || pr.logoUrl || ''; } catch (e) {}
     const esc = FP.esc || (x => String(x == null ? '' : x));
-    const emailHtml = FP.mailBrand ? FP.mailBrand({ title: subject, prenom: '', nomSoc, logoUrl, plaque: item.immat, bodyHtml: '<div style="white-space:pre-wrap;line-height:1.5">' + esc(emailText).replace(/\n/g, '<br>') + '</div>' }) : ('<div style="white-space:pre-wrap">' + esc(emailText).replace(/\n/g, '<br>') + '</div>');
+    // Corps HTML : message échappé, puis (pour le km) un lien PROPRE « 👉 Cliquez ici » au lieu de l'URL brute.
+    let bodyHtml = '<div style="white-space:pre-wrap;line-height:1.5">' + esc(emailText).replace(/\n/g, '<br>') + '</div>';
+    if (kmLink) bodyHtml += '<p style="margin:14px 0 0">👉 <a href="' + esc(kmLink) + '" style="color:#F97316;font-weight:700;text-decoration:underline">Cliquez ici</a></p>';
+    const emailHtml = FP.mailBrand ? FP.mailBrand({ title: subject, prenom: '', nomSoc, logoUrl, plaque: item.immat, bodyHtml: bodyHtml }) : bodyHtml;
     return { text, subject, emailHtml };
   }
 };
