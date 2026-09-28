@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260928s">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260928t">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260928s"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260928t"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260928s">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260928t">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -1121,8 +1121,8 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260928s"></script>
-<script src="../assets/js/supabase-client.js?v=20260928s"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260928t"></script>
+<script src="../assets/js/supabase-client.js?v=20260928t"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -1138,13 +1138,13 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260928s"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260928t"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
-<script src="../assets/js/fleet-docs.js?v=20260928s"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260928s"></script>
+<script src="../assets/js/fleet-docs.js?v=20260928t"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260928t"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20260928s"></script>
+<script src="../assets/js/app.min.js?v=20260928t"></script>
 <script>
   lucide.createIcons();
 
@@ -4312,19 +4312,18 @@
     // Véhicules à compléter qui n'ont AUCUNE carte grise stockée (ni fichier plateforme, ni lien) →
     // rien à lire pour eux tant que la CG n'est pas importée. On l'explique pour lever la confusion « 8 ».
     const noCG = all.filter(v => missing(v) && !cgUrlFor(v));
-    // Message qui EXPLIQUE pourquoi seulement N : les CG sur Google Drive et les véhicules sans CG stockée
-    // ne peuvent pas être lus ici (le site ne lit que les cartes grises importées sur la plateforme).
-    const _pourquoi = (n) => (n
-      ? `\n\nℹ️ Pourquoi pas plus ? Le site ne peut lire que les cartes grises IMPORTÉES sur la plateforme (photo/PDF).`
-      : '')
+    const complets = all.filter(v => !missing(v)).length;   // déjà tout renseigné → rien à relire
+    // Message qui EXPLIQUE le décompte : la plupart des véhicules sont souvent DÉJÀ COMPLETS (le lot ne
+    // relit que ceux avec un champ vide), et le site ne lit que les CG IMPORTÉES (pas Google Drive).
+    const _pourquoi = () => `\n\nℹ️ Le lot ne relit QUE les véhicules avec un champ encore vide (pas la peine de relire ceux déjà complets).`
+      + (complets ? `\n• ${complets} véhicule(s) sont déjà complets (rien à relire).` : '')
       + (onDrive.length ? `\n• ${onDrive.length} véhicule(s) ont leur carte grise sur Google Drive → non lisible ici, à re-scanner via « Scanner un document ».` : '')
       + (noCG.length ? `\n• ${noCG.length} véhicule(s) à compléter n'ont aucune carte grise importée → à scanner/importer d'abord.` : '');
     if (!targets.length) {
-      alert('Aucune carte grise lisible avec des champs manquants à compléter.' + _pourquoi(1)
-        + (!onDrive.length && !noCG.length ? '\n\n(Tout est déjà complété 🎉)' : ''));
+      alert('Aucune carte grise à relire : tous les véhicules qui ont une carte grise importée sont déjà complets.' + _pourquoi());
       return;
     }
-    if (!(await FP.confirm(`Lire ${targets.length} carte(s) grise(s) importée(s) et compléter automatiquement les champs manquants (carburant, CO₂ via le champ V.7, puissance, masse, VIN, dates) ?\n\nSeuls les champs VIDES sont remplis — aucune donnée existante n'est écrasée.${_pourquoi(onDrive.length + noCG.length)}`))) return;
+    if (!(await FP.confirm(`Lire ${targets.length} carte(s) grise(s) importée(s) et compléter automatiquement les champs manquants (carburant, CO₂ via le champ V.7, puissance, masse, VIN, dates) ?\n\nSeuls les champs VIDES sont remplis — aucune donnée existante n'est écrasée.${_pourquoi()}`))) return;
     const btn = $('btn-completer-cg'); const lbl = btn ? btn.innerHTML : '';
     if (btn) btn.disabled = true;
     let done = 0, fail = 0, processed = 0;
