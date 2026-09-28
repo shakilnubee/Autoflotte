@@ -3930,6 +3930,14 @@ FP.MAIL_DEFAUT = {
   bienvenue: `Bonjour {prenom},\n\nBienvenue à bord ! 🚗 Ta voiture {plaque} t'attend, et elle a un petit secret : un QR code collé à l'intérieur.\n\nScanne-le (ou clique sur le bouton juste en dessous) et tu as tout sous la main en 10 secondes :\n• 📸 Envoyer ton kilométrage\n• 📄 Retrouver tes documents (carte grise, assurance, assistance)\n• 🚨 Signaler un souci ou un accident\n• 📋 Faire l'état des lieux en photos\n\nGarde-le précieusement… et bonne route ! 🙌`,
   bienvenue_en: `Hello {prenom},\n\nWelcome on board! 🚗 Your car {plaque} is waiting for you, and it has a little secret: a QR code stuck inside.\n\nScan it (or tap the button just below) and everything is at your fingertips in 10 seconds:\n• 📸 Send your mileage\n• 📄 Find your documents (registration, insurance, assistance)\n• 🚨 Report an issue or an accident\n• 📋 Do the condition report with photos\n\nKeep it handy… and safe travels! 🙌`,
   relevekm: `Bonjour {prenom},\n\nMerci d'indiquer le kilométrage actuel de ton véhicule {immat}. C'est rapide : un clic, un nombre, terminé.`,
+  // ── Messages RAPIDES « Prévenir » (fiche véhicule → SMS / WhatsApp / e-mail). Courts, tutoiement.
+  //    Balises : {prenom} {immat} {lien} {date}. {lien} = espace véhicule / relevé km / annonce selon le cas.
+  prevAcces:     `Bonjour {prenom},\n🔑 Voici l'espace du véhicule {immat} 🎉 kilométrage, documents et petits soucis, tout au même endroit 👇\n{lien}`,
+  prevCarteGrise:`Bonjour {prenom},\n🪪 La carte grise du véhicule {immat} attend sagement ici — ouvrir le lien puis « Mes documents » 👇\n{lien}`,
+  prevRelanceKm: `Bonjour {prenom},\n📸 Un petit coup d'œil au compteur du véhicule {immat} ? 😊 Ça file en 30 secondes, c'est par ici 👇\n{lien}`,
+  prevCt:        `Bonjour {prenom},\n🔧 Le contrôle technique du véhicule {immat} approche à grands pas (échéance le {date}) ⏳ — un petit rendez-vous à caler ! 📅`,
+  prevRevision:  `Bonjour {prenom},\n🛠️ Le véhicule {immat} réclame bientôt un petit passage au garage 🚗 (révision / entretien à prévoir).`,
+  prevAnnonce:   `Bonjour,\n🏷️ Bonne affaire en vue ! Le véhicule {immat} est à vendre — photos et caractéristiques par ici 👇\n{lien}`,
   // Annonce d'un rendez-vous garage (envoyée QUAND on programme le RDV) — avec la DATE.
   rdvgarage: `Bonjour {prenom},\n\nUn rendez-vous est prévu pour le véhicule {immat} le {date}. 🗓️\nMotif : {motif}\n\nTu recevras un petit rappel la veille, pas d'inquiétude 🙂\nEt n'hésite pas si tu as la moindre question !`,
   // Rappel automatique la VEILLE (reprend les infos du rendez-vous).
@@ -4051,6 +4059,14 @@ FP.PROFIL_CHAMPS = [
   { key: 'mailModeleRelanceKm',       label: "Relance — relevé kilométrique",         type: 'textarea', ph: 'Balises : {prenom}, {immat}. Le lien de relevé est ajouté automatiquement.', default: FP.MAIL_DEFAUT.relanceKm },
   { key: 'mailObjetRelanceAmende',    label: "Objet — relance amende à régler",       type: 'text', ph: 'Balises : {immat}, {prenom}.', default: FP.MAIL_OBJET_DEFAUT.relanceAmende },
   { key: 'mailModeleRelanceAmende',   label: "Relance — amende à régler",             type: 'textarea', ph: 'Balises : {prenom}, {immat}.', default: FP.MAIL_DEFAUT.relanceAmende },
+  // ── Messages RAPIDES « Prévenir » (fiche véhicule → SMS / WhatsApp / e-mail). Balises {prenom}{immat}{lien}{date}.
+  //    {lien} = espace véhicule (accès/carte grise), lien de relevé km, ou annonce de vente selon le message.
+  { key: 'mailModelePrevAcces',       label: "Prévenir — Accès véhicule (espace QR)",  type: 'textarea', ph: 'Balises : {prenom}, {immat}, {lien}.', default: FP.MAIL_DEFAUT.prevAcces },
+  { key: 'mailModelePrevCarteGrise',  label: "Prévenir — Carte grise",                 type: 'textarea', ph: 'Balises : {prenom}, {immat}, {lien}.', default: FP.MAIL_DEFAUT.prevCarteGrise },
+  { key: 'mailModelePrevRelanceKm',   label: "Prévenir — Relance km",                  type: 'textarea', ph: 'Balises : {prenom}, {immat}, {lien}.', default: FP.MAIL_DEFAUT.prevRelanceKm },
+  { key: 'mailModelePrevCt',          label: "Prévenir — CT bientôt",                  type: 'textarea', ph: 'Balises : {prenom}, {immat}, {date}.', default: FP.MAIL_DEFAUT.prevCt },
+  { key: 'mailModelePrevRevision',    label: "Prévenir — Révision",                    type: 'textarea', ph: 'Balises : {prenom}, {immat}.', default: FP.MAIL_DEFAUT.prevRevision },
+  { key: 'mailModelePrevAnnonce',     label: "Prévenir — Annonce de vente",            type: 'textarea', ph: 'Balises : {immat}, {lien}.', default: FP.MAIL_DEFAUT.prevAnnonce },
   // ⚠️ Le champ « Signature (bas des e-mails d'amende) » a été RETIRÉ (2026-09-25) : les e-mails
   //    partent désormais via la plateforme avec un pied de page brandé (société · via Parc Pilot),
   //    plus besoin d'une signature manuelle. L'ancienne valeur settings.mailSignature est ignorée.
