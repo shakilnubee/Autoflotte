@@ -289,6 +289,21 @@
       }
       else { try { await FP.persist.insert('vehicules', rec); } catch (e) {} try { if (window.data && Array.isArray(data.vehicules)) data.vehicules.push(rec); } catch (e) {} }
       target = { table: 'vehicules', id: rec.id, existing: !!existing };
+      // ⚠️ RÈGLE (CLAUDE.md) : un CONTRÔLE TECHNIQUE met à jour les dates du véhicule (ci-dessus) ET doit
+      // AUSSI apparaître dans la fiche → section « Documents » (table documents, type controle-technique),
+      // avec le PDF scanné. Sans ça, le CT scanné ne se retrouvait nulle part dans « les documents ».
+      if (t === 'controle_technique' && model._fileUrl) {
+        try {
+          const url = model._fileUrl;
+          const driveId = ((String(url).match(/\/d\/([-\w]{20,})/) || [])[1]) || ((String(url).match(/[?&]id=([-\w]{20,})/) || [])[1]) || null;
+          const dfmt = d => { try { return d ? (FP.date ? FP.date(d) : d) : ''; } catch (e) { return d || ''; } };
+          const bits = [g('centre'), g('prochainCT') ? ('prochain ' + dfmt(g('prochainCT'))) : (g('date') ? dfmt(g('date')) : '')].filter(Boolean).join(' · ');
+          const drec = { id: uid('D'), societe: societe(), vehiculeId: rec.id, type: 'controle-technique',
+            label: 'Contrôle technique' + (bits ? ' — ' + bits : ''), url: url, driveId: driveId };
+          await FP.persist.insert('documents', drec);
+          try { if (window.data && Array.isArray(data.documents)) data.documents.push(drec); } catch (e) {}
+        } catch (e) { console.warn('[scan2 CT→document]', e); }
+      }
     }
     else if (cible === 'factures') {
       const sc = schemaFor(t) || {};
