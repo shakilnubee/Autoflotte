@@ -9,11 +9,11 @@
 <title>Scanner IA — Parc Pilot</title>
 <link rel="manifest" href="../manifest.json">
 <meta name="theme-color" content="#0F1E3D">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260928i">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260928j">
 <script>window.lucide={createIcons:function(){}};</script>
-<script defer src="../assets/js/lucide.min.js?v=20260928i"></script>
+<script defer src="../assets/js/lucide.min.js?v=20260928j"></script>
 <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260928i">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260928j">
 <style>
   .drop { border:2px dashed var(--fp-border); border-radius:1rem; padding:2.5rem 1.5rem; text-align:center; cursor:pointer; transition:.15s; background:#fff; }
   .drop:hover, .drop.over { border-color:var(--fp-accent); background:#FFF7ED; }
@@ -101,8 +101,8 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260928i"></script>
-<script src="../assets/js/supabase-client.js?v=20260928i"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260928j"></script>
+<script src="../assets/js/supabase-client.js?v=20260928j"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -118,11 +118,11 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260928i"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260928j"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
-<script src="../assets/js/app.min.js?v=20260928i"></script>
-<script src="../assets/js/scanner2.js?v=20260928i"></script>
+<script src="../assets/js/app.min.js?v=20260928j"></script>
+<script src="../assets/js/scanner2.js?v=20260928j"></script>
 <script>
   if (window.lucide) lucide.createIcons();
   var $ = function (id) { return document.getElementById(id); };
@@ -157,7 +157,10 @@
       if(step==='coherence'){ stepDone('extract'); setStep('coherence'); $('sc-status').textContent='Contrôle de cohérence…'; }
     }).then(async function(model){
       stepDone('coherence'); $('sc-status').textContent='';
-      try { model._fileUrl = await upP; } catch(e){}
+      try { model._fileUrl = await upP; } catch(e){ model._fileUrl = null; }
+      // ⚠️ Ne pas faire croire que le document est joint s'il n'a pas pu être téléversé : on marque
+      //    l'échec pour PRÉVENIR à l'écran de validation (les infos lues restent enregistrables).
+      if (!model._fileUrl) model._uploadFailed = true;
       _model = model;
       if (model && model._ulys) { renderUlys(model); return; }
       if (model && model._redirect) { renderRedirect(model._redirect); return; }
@@ -219,6 +222,10 @@
     var qual = model.qualite_document||''; var qualBadge = qual==='insuffisante' ? '<span class="conf faible">qualité insuffisante</span>' : qual==='moyenne' ? '<span class="conf moyen">qualité moyenne</span>' : '<span class="conf eleve">qualité correcte</span>';
     var html = '<div class="card p-5" style="background:#fff;border:1px solid var(--fp-border);border-radius:1rem">';
     html += '<div class="flex items-center justify-between flex-wrap gap-2 mb-3"><div class="font-extrabold text-lg" style="color:var(--fp-primary)">'+esc(schema.label)+'</div><div class="flex items-center gap-2">'+qualBadge+(model.nouveau_scan_recommande?' <span class="conf faible">nouveau scan conseillé</span>':'')+'</div></div>';
+
+    // ⚠️ Document non téléversé (stockage indispo / réseau) : on le DIT clairement — les infos lues
+    //    seront bien enregistrées, mais le fichier lui-même ne sera PAS joint tant qu'on ne réessaie pas.
+    if(model._uploadFailed){ html += '<div class="anom elevee" style="margin-bottom:.75rem"><b>⚠️ Le fichier n\'a pas pu être stocké</b> — les informations lues ci-dessous seront enregistrées, mais le document (PDF/photo) ne sera PAS joint. Vérifie ta connexion et re-scanne si tu veux garder le fichier.</div>'; }
 
     // Anomalies
     var anoms = (model.anomalies||[]).filter(Boolean);
@@ -302,7 +309,8 @@
       var upP = (window.FP && FP.uploadScan) ? FP.uploadScan(it.file,'scans-v2').catch(function(){return null;}) : Promise.resolve(null);
       try{
         var model = await FP2.run(it.file, function(){});
-        try{ model._fileUrl = await upP; }catch(e){}
+        try{ model._fileUrl = await upP; }catch(e){ model._fileUrl = null; }
+        if(!model._fileUrl) model._uploadFailed = true;   // fichier non stocké → à signaler dans la revue
         it.model = model;
         if(model && model._redirect){ it.status='redirect'; it.redirect=model._redirect; }
         else if(model && model._ulys){ it.status='ulys'; it.include=true; }
@@ -338,6 +346,8 @@
       html+='</div>';
       var sum = canSave ? batchSummary(it) : (it.status==='redirect' ? (it.redirect&&it.redirect.reason||'') : (it.error||''));
       if(sum) html+='<div class="text-xs text-slate-500 mt-1" style="line-height:1.4">'+esc(sum)+'</div>';
+      // ⚠️ Fichier non téléversé : les infos seront enregistrées mais le document ne sera pas joint.
+      if(canSave && it.model && it.model._uploadFailed){ html+='<div class="text-xs mt-1" style="color:#b45309;font-weight:600">⚠️ Fichier non stocké (le document ne sera pas joint) — re-scanne pour le garder.</div>'; }
       if(it.status==='redirect' && it.redirect){ html+='<a class="text-xs font-semibold" style="color:var(--fp-accent)" href="../pages/'+esc(it.redirect.page)+'">→ Ouvrir l\'outil dédié</a>'; }
       if(it.status==='ok'){ html+='<div data-body="'+idx+'" hidden>'+batchFieldsHtml(it, idx)+'</div>'; }
       html+='</div>';

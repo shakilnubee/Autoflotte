@@ -11246,18 +11246,29 @@ FP.edl = {
       if (pcount) pcount.textContent = edlPhotos.length ? (edlPhotos.length + ' photo(s) jointe(s)') : 'Recommandé à la restitution (carrosserie, intérieur, dommages…). Elles sont jointes au PDF et rangées dans la fiche.';
     };
     // Charge une image, la redimensionne (max 1400 px) et renvoie un data URL JPEG léger (PDF raisonnable).
+    // ⚠️ Anti « la photo n'est pas ajoutée » : si le canvas ne sait PAS décoder le fichier (HEIC iPhone,
+    //    format exotique), on NE renvoie PAS null (perte silencieuse) → on garde le fichier BRUT (r.result).
     const loadPhoto = (file) => new Promise(res => {
       const r = new FileReader();
       r.onload = () => { const img = new Image(); img.onload = () => {
         const max = 1400; let w = img.width, h = img.height; if (w > max || h > max) { const k = max / Math.max(w, h); w = Math.round(w * k); h = Math.round(h * k); }
-        try { const cv = document.createElement('canvas'); cv.width = w; cv.height = h; cv.getContext('2d').drawImage(img, 0, 0, w, h); res(cv.toDataURL('image/jpeg', 0.82)); } catch (e) { res(r.result); }
-      }; img.onerror = () => res(null); img.src = r.result; };
+        try { const cv = document.createElement('canvas'); cv.width = w; cv.height = h; cv.getContext('2d').drawImage(img, 0, 0, w, h); res(cv.toDataURL('image/jpeg', 0.82)); } catch (e) { res(r.result || null); }
+      }; img.onerror = () => res(r.result || null); img.src = r.result; };   // décodage impossible → fichier brut
       r.onerror = () => res(null); r.readAsDataURL(file);
     });
     if (photoIn) photoIn.addEventListener('change', async e => {
       const files = Array.from(e.target.files || []); e.target.value = '';
-      for (const f of files) { if (!/^image\//.test(f.type)) continue; const d = await loadPhoto(f); if (d) { edlPhotos.push(d); edlPhotoSrc.push(null); } }
+      let failed = 0;
+      for (const f of files) {
+        // Accepte par type OU par extension OU type vide (HEIC iPhone remonte souvent un type vide).
+        const looksImg = /^image\//.test(f.type) || /\.(jpe?g|png|heic|heif|webp|gif|bmp|tiff?)$/i.test(f.name || '') || !f.type;
+        if (!looksImg) { failed++; continue; }
+        const d = await loadPhoto(f);
+        if (d) { edlPhotos.push(d); edlPhotoSrc.push(null); } else { failed++; }
+      }
       renderThumbs();
+      // Ne JAMAIS laisser tomber une photo en silence : on prévient si au moins une n'a pas pu être ajoutée.
+      if (failed && FP.toast) FP.toast('⚠️ ' + failed + ' photo(s) non ajoutée(s) (format illisible) — réessaie ou change de format.');
     });
     if (thumbsBox) thumbsBox.addEventListener('click', e => { const b = e.target.closest('[data-edl-prm]'); if (b) { const _i = +b.getAttribute('data-edl-prm'); edlPhotos.splice(_i, 1); edlPhotoSrc.splice(_i, 1); renderThumbs(); } });
     // Récupère une image (URL Storage) → data URL (via URL signée + redimensionnement). Sert à

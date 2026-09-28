@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260928i">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260928j">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260928i"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260928j"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260928i">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260928j">
 <style>
   /* Dossier assurance (mobile) : les grilles à 3 colonnes contiennent des champs date/select dont la
      largeur minimale ne rentre pas sur un petit écran → débordement. On autorise le rétrécissement
@@ -421,8 +421,8 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260928i"></script>
-<script src="../assets/js/supabase-client.js?v=20260928i"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260928j"></script>
+<script src="../assets/js/supabase-client.js?v=20260928j"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -438,11 +438,11 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260928i"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260928j"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20260928i"></script>
+<script src="../assets/js/app.min.js?v=20260928j"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -996,7 +996,7 @@
     const setSt = (html, color) => { if (statusEl) { statusEl.innerHTML = html; statusEl.style.color = color || 'var(--fp-muted)'; if (window.lucide) lucide.createIcons(); } };
     // TOUJOURS stocker le constat déposé (le but du « Drive ») — rangé par plaque/année comme le courrier,
     // même si l'IA ne parvient pas à lire la responsabilité. On garde l'URL dans le dossier (constatUrl).
-    let constatSaved = false;
+    let constatSaved = false, constatFail = false;
     if (FP.uploadScan) {
       setSt('⏳ Enregistrement du constat…');
       try {
@@ -1004,9 +1004,11 @@
         const annee = (input.dataset.annee && /^\d{4}$/.test(input.dataset.annee)) ? input.dataset.annee : String(new Date().getFullYear());
         const url = await FP.uploadScan(file, `sinistres/${plaqueSlug}/${annee}`);
         if (url) { const s = FP.settings.get(); s.sinistreAssurance = s.sinistreAssurance || {}; const o = s.sinistreAssurance[key] = s.sinistreAssurance[key] || {}; o.constatUrl = url; FP.settings.save(s); constatSaved = true; }
-      } catch (_) {}
+        else constatFail = true;   // upload échoué → à signaler (ne pas faire croire que le constat est classé)
+      } catch (_) { constatFail = true; }
     }
-    const pfx = constatSaved ? '📎 Constat enregistré. ' : '';
+    // ⚠️ Ne pas masquer un échec de stockage : le préfixe du statut le dit clairement.
+    const pfx = constatSaved ? '📎 Constat enregistré. ' : (constatFail ? '⚠️ Le constat n\'a PAS pu être stocké (réessaie). ' : '');
     if (!(window.FP && FP.scanIA && FP.constatPrompt)) { setSt(pfx + '⚠️ Connexion requise pour lire le constat.', constatSaved ? '#0F766E' : '#B91C1C'); return; }
     setSt(pfx + '⏳ Lecture du constat par l\'IA…');
     let res = null;
@@ -1039,7 +1041,8 @@
     let url = '';
     const plaqueSlug = String(immat || '').toUpperCase().replace(/[^A-Z0-9]/g, '') || 'sans-plaque';
     const annee = (input.dataset.annee && /^\d{4}$/.test(input.dataset.annee)) ? input.dataset.annee : String(new Date().getFullYear());
-    try { if (FP.uploadScan) url = await FP.uploadScan(file, `sinistres/${plaqueSlug}/${annee}`) || ''; } catch (_) {}
+    let courrierFail = false;
+    try { if (FP.uploadScan) { url = await FP.uploadScan(file, `sinistres/${plaqueSlug}/${annee}`) || ''; if (!url) courrierFail = true; } } catch (_) { courrierFail = true; }
     const s = FP.settings.get(); s.sinistreAssurance = s.sinistreAssurance || {};
     const o = s.sinistreAssurance[key] = s.sinistreAssurance[key] || {};
     if (url) o.courrierUrl = url;
@@ -1057,7 +1060,8 @@
     const labels = { 'responsable': 'Responsable (nous en tort)', 'non-responsable': 'Non responsable', 'partagee': 'Partagée' };
     const just = (res && res.justification) ? ' — ' + FP.esc(res.justification) : '';
     const lus = [url ? 'courrier enregistré' : '', (res && res.numeroDossier) ? ('n° ' + FP.esc(o.numeroDossier)) : '', (o.dateReponse) ? ('reçu le ' + (FP.dateNum ? FP.dateNum(o.dateReponse) : o.dateReponse)) : ''].filter(Boolean).join(' · ');
-    const prefix = lus ? ('✓ ' + lus + '. ') : '';
+    // ⚠️ Ne pas laisser croire que la lettre est classée si son upload a échoué.
+    const prefix = (courrierFail ? '⚠️ La lettre n\'a PAS pu être stockée (réessaie). ' : '') + (lus ? ('✓ ' + lus + '. ') : '');
     if (!val) { setSt(prefix + '🤷 L\'IA n\'a pas pu trancher la responsabilité' + just + ' — renseigne-la à la main.', '#B45309'); return; }
     const sel = $('timeline').querySelector(`.sin-doss[data-k="resp"][data-key="${key}"]`);
     if (sel) sel.value = val;
@@ -1284,12 +1288,13 @@
       const files = [...(inp.files || [])]; inp.value = ''; if (!files.length) return;
       if (!(window.FP && FP.uploadScan && FP.persist)) { setStatus('Connexion requise pour enregistrer en ligne.', 'err'); return; }
       setStatus('<span class="inline-flex items-center gap-2">⏳ Lecture de ' + files.length + ' fichier(s)…</span>', 'working');
-      let ok = 0, dup = 0;
+      let ok = 0, dup = 0, fail = 0, noDoc = 0;
       for (const f of files) {
         try {
           let det = {};
           try { const ia = await FP.scanIA(f, 'facture'); if (ia) det = ia; } catch (_) {}
           const url = await FP.uploadScan(f, 'documents');
+          if (!url) noDoc++;   // facture lue mais document non stocké → à signaler
           const fact = {
             id: newId(), date: det.date || null, vehiculeImmat: det.vehiculeImmat || null,
             fournisseur: det.fournisseur || null, numeroFacture: det.numeroFacture || null,
@@ -1307,11 +1312,13 @@
           if (FP.applyFactureToVehicule) FP.applyFactureToVehicule(fact, data.vehicules);
           const s = FP.settings.get(); s.sinistreStatut = s.sinistreStatut || {}; s.sinistreStatut[fact.id] = 'attente'; FP.settings.save(s);
           ok++;
-        } catch (e) { console.error('[sin facture import]', e); }
+        } catch (e) { console.error('[sin facture import]', e); fail++; }
       }
       sinistres = (data.factures || []).filter(f => f.type === 'sinistre');
       refreshAll(); if (typeof renderDrive === 'function') renderDrive();
-      setStatus(`<b>✓ ${ok} facture(s) sinistre ajoutée(s)</b>${dup ? ' · ' + dup + ' doublon(s) ignoré(s)' : ''}. Complète le montant / véhicule sur la ligne si besoin.`, ok ? 'ok' : 'err');
+      // ⚠️ On DIT ce qui a échoué (fichier non lu) ou n'a pas pu être joint (doc non stocké) — jamais silencieux.
+      const warn = [fail ? (fail + ' fichier(s) en échec (non enregistrés)') : '', noDoc ? (noDoc + ' sans document joint (réessaie)') : ''].filter(Boolean).join(' · ');
+      setStatus(`<b>✓ ${ok} facture(s) sinistre ajoutée(s)</b>${dup ? ' · ' + dup + ' doublon(s) ignoré(s)' : ''}${warn ? ' · ⚠️ ' + warn : ''}. Complète le montant / véhicule sur la ligne si besoin.`, (fail && !ok) ? 'err' : 'ok');
     });
   })();
 
@@ -1404,7 +1411,7 @@
       setSt('⏳ Création du dossier…');
       try {
         const files = sdPicked.slice();
-        let firstUrl = null, nbPhotos = 0;
+        let firstUrl = null, nbPhotos = 0, nbFail = 0;
         for (const f of files) {
           try {
             const url = await FP.uploadScan(f, 'documents');
@@ -1412,8 +1419,8 @@
               if (!firstUrl) firstUrl = url;
               await FP.persist.insert('documents', { id: 'SD' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), vehiculeId: immat, type: 'sinistre-doc', label: f.name, url, driveId: null });
               nbPhotos++;
-            }
-          } catch (_) {}
+            } else { nbFail++; }   // upload échoué → ne PAS le compter comme rattaché
+          } catch (_) { nbFail++; }
         }
         const fact = { id: 'F-SIN-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), date, vehiculeImmat: immat, description: descFull, type: 'sinistre', montantTTC: null, fileId: firstUrl, fileName: files[0] ? files[0].name : null };
         await FP.persist.insert('factures', fact);
@@ -1447,6 +1454,8 @@
         if (typeof loadSinDocs === 'function') loadSinDocs(); else if (typeof renderDrive === 'function') renderDrive();
         close();
         if (FP.toast) FP.toast('Dossier sinistre créé' + (nbPhotos ? (' — ' + nbPhotos + ' photo(s) rattachée(s)') : '') + '. Complète le montant quand tu auras la facture.');
+        // ⚠️ Ne pas masquer un échec : si des photos n'ont pas pu être envoyées, on le dit clairement.
+        if (nbFail > 0) { try { alert('⚠️ ' + nbFail + ' photo(s) n\'ont PAS pu être envoyées (connexion / stockage). Rouvre le dossier et réessaie de les joindre.'); } catch (e) {} }
       } catch (e) {
         console.error('[sin declare]', e);
         setSt('⚠️ Erreur — réessaie.', '#B91C1C');

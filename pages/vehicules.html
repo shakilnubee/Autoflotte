@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260928i">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260928j">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260928i"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260928j"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260928i">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260928j">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -1120,8 +1120,8 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260928i"></script>
-<script src="../assets/js/supabase-client.js?v=20260928i"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260928j"></script>
+<script src="../assets/js/supabase-client.js?v=20260928j"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -1137,13 +1137,13 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260928i"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260928j"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
-<script src="../assets/js/fleet-docs.js?v=20260928i"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260928i"></script>
+<script src="../assets/js/fleet-docs.js?v=20260928j"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260928j"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20260928i"></script>
+<script src="../assets/js/app.min.js?v=20260928j"></script>
 <script>
   lucide.createIcons();
 
@@ -3790,12 +3790,15 @@
     const attachExtraDoc = async (vehId) => {
       if (!extraDocFile || !vehId || !(FP.uploadScan)) return;
       try {
-        const url = await FP.uploadScan(extraDocFile, 'documents'); if (!url) return;
+        const url = await FP.uploadScan(extraDocFile, 'documents');
+        // ⚠️ Ne pas perdre le document en silence : si l'upload échoue, on le DIT (le véhicule est bien
+        //    enregistré, mais le document scanné n'est pas joint → à re-scanner).
+        if (!url) { if (FP.toast) FP.toast('⚠️ Le document scanné n\'a pas pu être joint (connexion) — réessaie.'); return; }
         const label = ({ 'controle-technique':'Contrôle technique', 'carte-grise':'Carte grise', 'facture':'Facture', 'assurance':'Attestation assurance' })[extraDocType] || 'Document';
         const doc = { id:'D'+Date.now().toString(36)+Math.random().toString(36).slice(2,5), vehiculeId: vehId, type: extraDocType, label, url, driveId: (typeof driveIdFromUrl === 'function' ? driveIdFromUrl(url) : null) };
         try { if (typeof docsCache !== 'undefined' && docsCache) docsCache.push(doc); } catch (e) {}
         if (FP.persist && FP.persist.available && FP.persist.available()) await FP.persist.insert('documents', doc);
-      } catch (e) { console.warn('[extra doc attach]', e); }
+      } catch (e) { console.warn('[extra doc attach]', e); if (FP.toast) FP.toast('⚠️ Le document scanné n\'a pas pu être joint (connexion) — réessaie.'); }
     };
     const id = $('f-id').value;
     if (id) {
@@ -6240,7 +6243,7 @@
     const isEmptyV = x => x == null || String(x).trim() === '' || String(x).trim() === '—';
     const num = v => { const n = Number(v); return Number.isFinite(n) ? n : null; };
     const nm = s => (s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-    let done = 0, attached = 0, already = 0, failed = 0;
+    let done = 0, attached = 0, already = 0, failed = 0, cgFailN = 0;
     for (let i = 0; i < valides.length; i++) {
       const p = valides[i].parsed;
       const existing = batchExisting(p);
@@ -6249,9 +6252,9 @@
       if (existing) {
         if (hasPlatformCg(existing)) { already++; continue; } // déjà sur la plateforme → rien à faire
         batchProgress(`<span class="inline-flex items-center gap-2"><span class="cg-spin"></span> Rattachement ${i + 1}/${valides.length} — ${escapeHtml(p.immat)}…</span>`, 'working');
-        let cgUrl = '';
-        try { cgUrl = await FP.uploadScan(valides[i].file, 'cartes-grises') || ''; } catch (e) { console.error('[batch upload]', e); }
-        if (cgUrl) existing.cgUrl = cgUrl;
+        let cgUrl = '', cgFail = false;
+        try { cgUrl = await FP.uploadScan(valides[i].file, 'cartes-grises') || ''; if (!cgUrl) cgFail = true; } catch (e) { console.error('[batch upload]', e); cgFail = true; }
+        if (cgUrl) existing.cgUrl = cgUrl; else cgFailN++;   // fichier carte grise non stocké → à signaler
         // Complète UNIQUEMENT les champs encore vides (non destructif — on n'écrase jamais l'existant).
         const fill = {
           vin: (p.vin || '').toUpperCase(), co2: num(p.co2), puissanceFiscale: num(p.puissanceFiscale),
@@ -6262,8 +6265,9 @@
         Object.keys(fill).forEach(k => { const nv = fill[k]; if (nv != null && nv !== '' && isEmptyV(existing[k])) existing[k] = nv; });
         if (Number.isFinite(p.masse)) { const s = FP.settings.get(); s.vehMasse = s.vehMasse || {}; if (isEmptyV(s.vehMasse[existing.id])) { s.vehMasse[existing.id] = p.masse; FP.settings.save(s); } }
         // ⚠️ UPDATE (false) — le véhicule existe déjà ; un INSERT (true) provoquait un conflit de clé.
-        const ok = cgUrl ? await persistVehicleUpsert(existing, false) : true;
-        if (ok) attached++; else failed++;
+        //    On persiste TOUJOURS (les champs lus doivent être sauvés même si l'upload CG a échoué).
+        const ok = await persistVehicleUpsert(existing, false);
+        if (!ok) failed++; else if (cgUrl) attached++;   // « rattachée » uniquement si la CG a bien été stockée
         continue;
       }
 
@@ -6271,6 +6275,7 @@
       batchProgress(`<span class="inline-flex items-center gap-2"><span class="cg-spin"></span> Création ${i + 1}/${valides.length} — ${escapeHtml(p.immat)}…</span>`, 'working');
       let cgUrl = '';
       try { cgUrl = await FP.uploadScan(valides[i].file, 'cartes-grises') || ''; } catch (e) { console.error('[batch upload]', e); }
+      if (!cgUrl) cgFailN++;   // fiche créée mais fichier carte grise non stocké → à signaler
       const newV = {
         id: nextVehId(),
         immat: String(p.immat).toUpperCase(),
@@ -6309,7 +6314,10 @@
     if (attached) parts.push(`${attached} carte(s) grise(s) rattachée(s) à une fiche existante`);
     if (already) parts.push(`${already} déjà à jour`);
     const bilan = parts.length ? parts.join(' · ') : 'Rien à faire';
-    if (failed) batchProgress(`<b>${bilan}</b>, mais ${failed} n'ont pas pu être enregistrés en base (voir console).`, 'error');
+    // ⚠️ Ne pas masquer les cartes grises (fichiers) non stockées : on le dit dans la synthèse.
+    const cgWarn = cgFailN ? ` ⚠️ ${cgFailN} carte(s) grise(s) non stockée(s) (infos lues enregistrées, mais le fichier n'est pas joint — re-scanne).` : '';
+    if (failed) batchProgress(`<b>${bilan}</b>, mais ${failed} n'ont pas pu être enregistrés en base (voir console).${cgWarn}`, 'error');
+    else if (cgFailN) batchProgress(`<b>✓ ${bilan}.</b>${cgWarn}`, 'error');
     else { batchProgress(`<b>✓ ${bilan}.</b>`, 'ok'); setTimeout(closeBatchModal, 1600); }
   }
 
