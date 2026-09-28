@@ -488,6 +488,13 @@
   function hasMemoDoc(v) { if (!_docsLoaded) return true; return docsOf(v.id).some(d => d && d.type === 'memo' && d.url); }
   // État des lieux « fait » = coché sur la fiche OU au moins un document/photo d'état des lieux enregistré.
   function hasEdl(v) { if (v && v.etatDesLieux) return true; if (!_docsLoaded) return true; return docsOf(v.id).some(d => d && d.type === 'etat-des-lieux' && d.url); }
+  // ⚠️ On DISTINGUE bien les deux (demande explicite, comme les colonnes du Suivi flotte) :
+  //   • PHOTOS d'état des lieux = fichiers IMAGE (jpg/png/heic…) de type 'etat-des-lieux' (ou la case
+  //     « EDL fait » de la fiche) ;
+  //   • ÉTAT DES LIEUX SIGNÉ = un DOCUMENT (PDF signé) de type 'etat-des-lieux' qui n'est PAS une image.
+  const _EDL_IMG_RE = /\.(jpe?g|png|gif|webp|heic|bmp|avif)(\?|$)/i;
+  function hasEdlPhotos(v) { if (v && v.etatDesLieux) return true; if (!_docsLoaded) return true; return docsOf(v.id).some(d => d && d.type === 'etat-des-lieux' && d.url && (_EDL_IMG_RE.test(d.url) || /^data:image\//i.test(d.url))); }
+  function hasEdlSigne(v) { if (!_docsLoaded) return true; return docsOf(v.id).some(d => d && d.type === 'etat-des-lieux' && d.url && !_EDL_IMG_RE.test(d.url) && !/^data:image\//i.test(d.url)); }
   function loadCompletDocs() {
     if (!(window.FP && FP.db && FP.supabase)) return;
     FP.db.select('documents').then(r => {
@@ -580,7 +587,8 @@
     // apparaître dans le QR conducteur → « Mes documents ». On les remplit par UPLOAD (PDF/photo).
     { k: 'carteGrise', label: 'Carte grise à importer sur la plateforme (pour le QR véhicule)', empty: v => !hasCgPlatform(v) },
     { k: 'carteMemo', label: 'Carte mémo à importer sur la plateforme (pour le QR véhicule)', empty: v => !hasMemoDoc(v) },
-    { k: 'etatDesLieux', label: 'État des lieux à enregistrer (photos ou document signé)', empty: v => !hasEdl(v) },
+    { k: 'edlPhotos', label: 'Photos d\'état des lieux à enregistrer', empty: v => !hasEdlPhotos(v) },
+    { k: 'edlSigne', label: 'État des lieux SIGNÉ (document) à enregistrer', empty: v => !hasEdlSigne(v) },
     // Clés & carte grise : détenteur non renseigné = ni « Siège » ni « Salarié » sélectionné (rubrique « Clés & carte grise » de la fiche).
     { k: 'cleDetenteur', label: 'Détenteur du double de clé', empty: v => !v.cleSiege && !v.cleSalarie },
     { k: 'cgDetenteur', label: 'Détenteur de la carte grise', empty: v => !v.cgOrigSiege && !v.cgOrigSalarie },
