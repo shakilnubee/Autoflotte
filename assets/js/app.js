@@ -3881,18 +3881,28 @@ FP._condLangKey = function (nameOrCond) {
     return (FP.normPrenom ? FP.normPrenom(base) : String(base || '').trim().toLowerCase());
   } catch (e) { return ''; }
 };
+// Langue d'ENVOI des e-mails (seuls FR/EN ont des gabarits traduits). Règle voulue par
+// l'utilisateur : un conducteur en FRANÇAIS (ou dont la langue n'est pas renseignée) reçoit
+// ses e-mails en français ; TOUTE autre langue (anglais, italien, espagnol, allemand,
+// chinois…) → e-mails en ANGLAIS (repli international). Le PORTAIL QR, lui, reste dans la
+// vraie langue du conducteur parmi les 6 (cf. FP.condLangueRaw).
+FP._mailLangFrom = function (raw) {
+  const v = String(raw || '').trim().toLowerCase();
+  if (!v) return 'fr';                                                  // non renseigné → français (défaut plateforme)
+  if (v === 'fr' || v === 'francais' || v === 'français' || v === 'french') return 'fr';
+  return 'en';                                                          // toute autre langue → anglais
+};
 FP.condLangue = function (nameOrCond) {
   try {
     let c = (nameOrCond && typeof nameOrCond === 'object') ? nameOrCond
       : ((FP.conducteurs && FP.conducteurs.find) ? FP.conducteurs.find(nameOrCond) : null);
     // 1) Colonne `langue` de la fiche (si la base la porte un jour).
-    const l = c && String(c.langue || '').trim().toLowerCase();
-    if (l) return (l === 'en' || l === 'anglais' || l === 'english') ? 'en' : 'fr';
+    const l = c && String(c.langue || '').trim();
+    if (l) return FP._mailLangFrom(l);
     // 2) Carte synchronisée (app_settings.condLangues) — réglable depuis la fiche, sans SQL.
     const map = (FP.settings && FP.settings.get && (FP.settings.get().condLangues || {})) || {};
     const k = FP._condLangKey(c || nameOrCond);
-    const v = k && map[k] && String(map[k]).trim().toLowerCase();
-    return (v === 'en' || v === 'anglais' || v === 'english') ? 'en' : 'fr';
+    return FP._mailLangFrom(k && map[k]);
   } catch (e) { return 'fr'; }
 };
 // Langues du PORTAIL QR supportées (v.html/km.html). L'e-mail reste FR/EN (cf. FP.condLangue).
