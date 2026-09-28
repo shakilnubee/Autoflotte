@@ -5205,7 +5205,10 @@ FP.settings = {
       'zoneNotes', 'prestataires', 'corbeille',
       // — Correction MANUELLE « est-ce une révision ? » par facture (map { factureId → 'oui' | 'non' }) :
       //   l'utilisateur tranche quand l'auto-détection se trompe → à protéger comme les autres maps.
-      'revisionOverride']);
+      'revisionOverride',
+      // — Checklists entrée/sortie : modèle éditable par catégorie (commun société) + état coché PAR
+      //   véhicule (map { vehId → { cat → { label → true } } }). Données de travail → fusion fine.
+      'checklistModeles', 'checklistDone']);
     // Familles DYNAMIQUES keyées par conducteur (n° carte/badge d'un prestataire perso : condNum_<id>).
     const isCollKey = (k) => COLLECTION_KEYS.has(k) || /^condNum_/.test(k);
     const isPlain = x => x && typeof x === 'object' && !Array.isArray(x);
@@ -7188,7 +7191,10 @@ FP.leasingLoyerAt = (c, when) => {
 // Loyer courant (aujourd'hui).
 FP.leasingLoyerCourant = (c) => FP.leasingLoyerAt(c, new Date());
 // Total réellement dû depuis le début : somme des loyers mois par mois (bascule aux dates
-// d'avenant), + PRORATA au jour du mois en cours. Renvoie null si aucun loyer d'offre connu.
+// d'avenant), + PRORATA au jour. ⚠️ Le prorata s'applique AUSSI au mois où tombe un avenant : ce
+// mois-là est découpé en jours au vieux loyer (avant la date de l'avenant) + jours au nouveau loyer
+// (à partir de la date), au lieu de compter tout le mois à l'ancien tarif. Le dernier mois (en cours)
+// est proratisé jusqu'à « aujourd'hui » comme avant. Renvoie null si aucun loyer d'offre connu.
 FP.leasingTotalVerse = (c, upto) => {
   if (!c || !c.debut) return null;
   const hasLoyer = (c.loyer != null && c.loyer !== '') || (Array.isArray(c.avenants) && c.avenants.some(a => a && a.loyer != null && a.loyer !== ''));
@@ -7198,12 +7204,26 @@ FP.leasingTotalVerse = (c, upto) => {
   const now = upto ? new Date(upto) : new Date();
   const stop = now < end ? now : end;
   if (stop <= start) return 0;
+  // Dates d'avenant (bornes de changement de loyer) STRICTEMENT à l'intérieur de la période.
+  const brks = (Array.isArray(c.avenants) ? c.avenants : [])
+    .filter(a => a && a.loyer != null && a.loyer !== '' && a.date)
+    .map(a => new Date(a.date)).filter(d => !isNaN(d) && d > start && d < stop)
+    .sort((a, b) => a - b);
   let total = 0, cur = new Date(start), guard = 0;
-  while (guard++ < 600) {
-    const next = new Date(cur); next.setMonth(next.getMonth() + 1);
-    const loyer = FP.leasingLoyerAt(c, cur) || 0;
-    if (next <= stop) { total += loyer; cur = next; }
-    else { const dInMonth = (next - cur) / 86400000, dDone = Math.max(0, (stop - cur) / 86400000); total += loyer * Math.min(1, dDone / dInMonth); break; }
+  while (cur < stop && guard++ < 600) {
+    const next = new Date(cur); next.setMonth(next.getMonth() + 1);   // fin du mois « plein » courant
+    const monthEnd = next < stop ? next : stop;                        // clip au dernier jour compté
+    const dInMonth = (next - cur) / 86400000;                          // durée d'un mois plein (jours)
+    // Bornes de sous-période DANS ce mois = avenants tombant entre cur et monthEnd.
+    const subEnds = brks.filter(d => d > cur && d < monthEnd).concat([monthEnd]);
+    let segStart = new Date(cur);
+    subEnds.forEach(segEnd => {
+      const loyer = FP.leasingLoyerAt(c, segStart) || 0;               // loyer en vigueur au début du segment
+      const dSeg = Math.max(0, (segEnd - segStart) / 86400000);
+      total += loyer * (dInMonth > 0 ? (dSeg / dInMonth) : 0);         // quote-part du loyer mensuel (au prorata des jours)
+      segStart = new Date(segEnd);
+    });
+    cur = next;
   }
   return Math.round(total * 100) / 100;
 };
@@ -7799,6 +7819,36 @@ FP.buildAlertes = (data) => {
       const items = list.map(s => ({ label: `${s.plaque || 'Véhicule'} — QR ouvert ${rel(s.at)}`, target: 'vehicules.html?immat=' + encodeURIComponent(s.plaque || '') }));
       const msg = `${nNew} nouveau${nNew > 1 ? 'x' : ''} scan${nNew > 1 ? 's' : ''} de QR (24 h)`;
       out.push({ niveau: 'info', categorie: 'Activité QR', message: msg, detail: 'Quelqu\'un a ouvert le portail QR d\'un véhicule (le détail daté est dans la fiche du véhicule). « ✓ Vu » efface l\'alerte — elle reviendra au prochain scan.', sort: 470, seenKey: 'qr', vehicules: items });
+    }
+  } catch (e) {}
+
+  // --- Tâches (page Tâches) EN RETARD ou À FAIRE BIENTÔT ---
+  // Rappelle dans les Alertes les tâches datées non terminées (RDV, actions, achats) — pour que
+  // l'utilisateur pense à saisir/traiter les infos. Source unique = settings.taches (même liste que la
+  // page Tâches). Terminée = statut 'done' OU fait===true. Chaque ligne renvoie à la tâche (?task=<id>).
+  try {
+    let taches = []; try { const t = FP.settings.get().taches; if (Array.isArray(t)) taches = t; } catch (e) {}
+    if (taches.length) {
+      const HORIZON = 7;                                  // fenêtre « bientôt » (jours)
+      const j0 = new Date(); j0.setHours(0, 0, 0, 0);
+      const doneOf = t => (t && (t.statut === 'done' || (t.statut == null && !!t.fait)));
+      const typeLbl = { rdv: 'RDV', action: 'Action', achat: 'Achat' };
+      const tRetard = [], tBientot = [];
+      taches.forEach(t => {
+        if (!t || doneOf(t) || !t.echeance) return;
+        const ech = new Date(t.echeance + 'T00:00:00'); if (isNaN(ech)) return;
+        const j = Math.round((ech - j0) / 86400000);
+        if (j > HORIZON) return;                          // trop loin → pas encore d'alerte
+        const titre = String(t.titre || typeLbl[t.type] || 'Tâche').trim();
+        let veh = '';
+        if (t.vehiculeId != null) { const vv = (data.vehicules || []).find(x => String(x.id) === String(t.vehiculeId)); if (vv) veh = ' · ' + vv.immat; }
+        const cond = t.conducteur ? ' · ' + t.conducteur : '';
+        const quand = j < 0 ? `en retard de ${-j} j` : (j === 0 ? "aujourd'hui" : (j === 1 ? 'demain' : `dans ${j} j`));
+        const item = { label: `${titre}${veh}${cond} — ${quand}`, target: 'taches.html?task=' + encodeURIComponent(t.id) };
+        (j < 0 ? tRetard : tBientot).push(item);
+      });
+      if (tRetard.length) out.push({ niveau: 'warn', categorie: 'Tâches', message: `${tRetard.length} tâche${tRetard.length > 1 ? 's' : ''} en retard`, detail: 'Tâches datées non terminées dont l\'échéance est dépassée.', sort: 460, muteKey: 'taches-retard', vehicules: tRetard });
+      if (tBientot.length) out.push({ niveau: 'info', categorie: 'Tâches', message: `${tBientot.length} tâche${tBientot.length > 1 ? 's' : ''} à faire bientôt`, detail: `Tâches datées à traiter dans les ${HORIZON} prochains jours.`, sort: 1000, muteKey: 'taches-bientot', vehicules: tBientot });
     }
   } catch (e) {}
 
@@ -15072,6 +15122,62 @@ FP.relances = {
     const emailHtml = FP.mailBrand ? FP.mailBrand({ title: subject, prenom: '', nomSoc, logoUrl, plaque: item.immat, bodyHtml: bodyHtml }) : bodyHtml;
     return { text, subject, emailHtml };
   }
+};
+
+// ===== CHECKLISTS entrée / sortie (véhicule + conducteur) — MODÈLE UNIQUE ÉDITABLE, état PAR VÉHICULE =====
+// 4 contextes : entrée dans la flotte, remise à un conducteur, reprise du conducteur, sortie (vente).
+// Le MODÈLE (liste des cases) est commun à toute la société et éditable (settings.checklistModeles) ;
+// l'ÉTAT COCHÉ est propre à chaque véhicule (settings.checklistDone[vehId][cat][label]=true). Source
+// unique, synchronisée sur tous les appareils. Utilisé par la fiche véhicule ET l'alerte « à compléter ».
+FP.CHECKLIST_CATS = [
+  { key: 'entreeFlotte', label: "Entrée dans la flotte", emoji: '📥' },
+  { key: 'prise',        label: "Remise à un conducteur", emoji: '🧑‍✈️' },
+  { key: 'restitution',  label: "Reprise du conducteur", emoji: '↩️' },
+  { key: 'sortieFlotte', label: "Sortie de la flotte (vente)", emoji: '📤' },
+];
+FP.CHECKLIST_DEFAUT = {
+  entreeFlotte: ['Carte grise scannée', 'Contrôle technique planifié', 'Assurance souscrite / vérifiée', 'Carte carburant commandée', 'Badge télépéage commandé', 'Double des clés récupéré', 'Photos d\'état des lieux (entrée)'],
+  prise: ['État des lieux (photos) fait', 'Kilométrage au compteur relevé', 'Clés remises', 'Carte carburant remise', 'Badge télépéage remis', 'Documents à bord (carte grise, assurance)', 'Permis du conducteur vérifié', 'Conducteur informé (règles, assistance)'],
+  restitution: ['État des lieux (photos) de restitution', 'Kilométrage final relevé', 'Clés récupérées', 'Carte carburant récupérée', 'Badge télépéage récupéré', 'Documents à bord récupérés', 'Dégâts / frais éventuels notés', 'Propreté / pleins vérifiés'],
+  sortieFlotte: ['Assurance résiliée', 'Certificat + code de cession', 'Carte carburant résiliée', 'Badge télépéage résilié', 'Contrat leasing clôturé (si leasing)', 'Conducteur désassigné', 'Documents remis à l\'acheteur'],
+};
+FP.checklist = {
+  cats() { return FP.CHECKLIST_CATS; },
+  catLabel(cat) { const c = FP.CHECKLIST_CATS.find(x => x.key === cat); return c ? (c.emoji + ' ' + c.label) : cat; },
+  // Items (labels) du modèle ACTIF d'une catégorie : perso société sinon défaut.
+  items(cat) {
+    let m = {}; try { m = (FP.settings.get().checklistModeles) || {}; } catch (e) {}
+    const raw = Array.isArray(m[cat]) ? m[cat] : (FP.CHECKLIST_DEFAUT[cat] || []);
+    return raw.map(x => String(x == null ? '' : x).trim()).filter(Boolean);
+  },
+  // Enregistre le modèle (liste de labels) d'une catégorie — commun à toute la société.
+  setModele(cat, labels) {
+    try {
+      const s = FP.settings.get(); s.checklistModeles = (s.checklistModeles && typeof s.checklistModeles === 'object') ? s.checklistModeles : {};
+      s.checklistModeles[cat] = (labels || []).map(x => String(x == null ? '' : x).trim()).filter(Boolean);
+      FP.settings.save(s); return true;
+    } catch (e) { return false; }
+  },
+  // État coché d'un véhicule pour une catégorie : { label: true }.
+  stateOf(vehId, cat) {
+    try { const d = (FP.settings.get().checklistDone || {})[vehId] || {}; return (d[cat] && typeof d[cat] === 'object') ? d[cat] : {}; } catch (e) { return {}; }
+  },
+  // Coche / décoche une case (persisté, synchronisé).
+  set(vehId, cat, label, done) {
+    try {
+      const s = FP.settings.get(); s.checklistDone = (s.checklistDone && typeof s.checklistDone === 'object') ? s.checklistDone : {};
+      const v = s.checklistDone[vehId] = (s.checklistDone[vehId] && typeof s.checklistDone[vehId] === 'object') ? s.checklistDone[vehId] : {};
+      const c = v[cat] = (v[cat] && typeof v[cat] === 'object') ? v[cat] : {};
+      if (done) c[label] = true; else delete c[label];
+      FP.settings.save(s); return true;
+    } catch (e) { return false; }
+  },
+  // Avancement { done, total } d'un véhicule pour une catégorie.
+  progress(vehId, cat) {
+    const items = this.items(cat); const st = this.stateOf(vehId, cat);
+    let done = 0; items.forEach(l => { if (st[l]) done++; });
+    return { done, total: items.length };
+  },
 };
 
 // Bouton « + » flottant (quick-add) : accès rapide aux ajouts fréquents depuis n'importe quelle page
