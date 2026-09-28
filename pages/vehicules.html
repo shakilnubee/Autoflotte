@@ -5798,7 +5798,9 @@
     const dec = FP.decoteVehicule ? FP.decoteVehicule(v) : null;
     return {
       km, exploitTotal,
-      coutKm: (km > 0 && exploitTotal > 0) ? exploitTotal / km : null,
+      // Même seuil que la fiche véhicule (coût/km ignoré sous 1 000 km, sinon ratio aberrant) → le
+      // comparateur et la fiche affichent la MÊME valeur pour un même véhicule.
+      coutKm: (km >= 1000 && exploitTotal > 0) ? exploitTotal / km : null,
       entretienAnnee,
       tvs: FP.tvsAnnuelle ? FP.tvsAnnuelle(v) : 0,
       lease, decote: dec ? dec.valeur : null,
@@ -6203,7 +6205,13 @@
   let _cgBatch = []; // [{ file, parsed:{immat,marque,...}, include:true }]
 
   // Une carte grise « déjà sur la plateforme » = un lien de stockage NON Drive (règle : plus de Drive).
-  const hasPlatformCg = v => !!(v && v.cgUrl && !/drive\.google|docs\.google/i.test(v.cgUrl));
+  // ⚠️ On regarde AUSSI la table documents (type carte-grise), pas seulement le champ cgUrl : une CG
+  // ré-importée pour le QR est stockée comme document → sinon on la croyait absente (même source que cgUrlFor).
+  const _cgNotDrive = u => !!(u && !/drive\.google|docs\.google/i.test(u));
+  const hasPlatformCg = v => {
+    if (v && _cgNotDrive(v.cgUrl)) return true;
+    try { return (typeof docsCache !== 'undefined' && Array.isArray(docsCache)) && docsCache.some(d => d && d.type === 'carte-grise' && d.vehiculeId === v.id && _cgNotDrive(d.url)); } catch (e) { return false; }
+  };
   // Véhicule existant correspondant à l'immat lue (source unique : anti-doublon FP.dupe → immatriculation).
   function batchExisting(p) {
     if (!p || !p.immat) return null;

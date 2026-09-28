@@ -493,8 +493,10 @@
   //     « EDL fait » de la fiche) ;
   //   • ÉTAT DES LIEUX SIGNÉ = un DOCUMENT (PDF signé) de type 'etat-des-lieux' qui n'est PAS une image.
   const _EDL_IMG_RE = /\.(jpe?g|png|gif|webp|heic|bmp|avif)(\?|$)/i;
-  function hasEdlPhotos(v) { if (v && v.etatDesLieux) return true; if (!_docsLoaded) return true; return docsOf(v.id).some(d => d && d.type === 'etat-des-lieux' && d.url && (_EDL_IMG_RE.test(d.url) || /^data:image\//i.test(d.url))); }
-  function hasEdlSigne(v) { if (!_docsLoaded) return true; return docsOf(v.id).some(d => d && d.type === 'etat-des-lieux' && d.url && !_EDL_IMG_RE.test(d.url) && !/^data:image\//i.test(d.url)); }
+  // ⚠️ Même règle que la colonne EDL du Suivi flotte (FP.suivi._edl) : on EXCLUT les EDL hébergés sur
+  // Google Drive (non exploitables dans le portail) → les deux écrans de la même page ne se contredisent plus.
+  function hasEdlPhotos(v) { if (v && v.etatDesLieux) return true; if (!_docsLoaded) return true; return docsOf(v.id).some(d => d && d.type === 'etat-des-lieux' && d.url && !_isDrive(d.url) && (_EDL_IMG_RE.test(d.url) || /^data:image\//i.test(d.url))); }
+  function hasEdlSigne(v) { if (!_docsLoaded) return true; return docsOf(v.id).some(d => d && d.type === 'etat-des-lieux' && d.url && !_isDrive(d.url) && !_EDL_IMG_RE.test(d.url) && !/^data:image\//i.test(d.url)); }
   function loadCompletDocs() {
     if (!(window.FP && FP.db && FP.supabase)) return;
     FP.db.select('documents').then(r => {
@@ -1060,10 +1062,14 @@
       const pending = (stt && stt.sent_at && !stt.used_at) ? stt : null;
       const lastDate = last ? new Date(last.used_at) : null;
       const daysSince = lastDate ? Math.floor((today - lastDate) / 86400000) : null;
+      // ⚠️ SOURCE UNIQUE : « à jour » vient de FP.kmCollecte.aJour (mêmes règles que la colonne km du
+      // Suivi flotte, les Relances et les alertes : QR ne compte qu'après une relance, + date de cycle).
+      // Avant, ce panneau utilisait `daysSince <= seuil` sur le dernier relevé de N'IMPORTE quel canal →
+      // il pouvait afficher « À jour » alors que le reste du site disait « à relancer » (et ignorait la date de cycle).
       let statut;
-      if (lastDate && daysSince <= seuil) statut = 'ajour';
+      if (KC && KC.aJour && KC.aJour(v)) statut = 'ajour';
       else if (pending) statut = 'attente';
-      else if (last) statut = 'relancer';
+      else if (readings.length) statut = 'relancer';
       else statut = 'jamais';
       const email = (KC && KC.emailDe) ? KC.emailDe(v) : '';
       return { v, readings, last, pending, lastDate, daysSince, statut, email };
