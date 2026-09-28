@@ -508,6 +508,25 @@
                 shared.alertesMasqueesInfo = Object.assign({}, shared.alertesMasqueesInfo || {}, lp.alertesMasqueesInfo);
             }
           } catch (_) {}
+          // ⚠️⚠️ MAILS/PROFIL QUI « REVIENNENT AU TEXTE PAR DÉFAUT » (même appareil) — CORRECTIF.
+          //   Cause : au chargement, les réglages du SERVEUR écrasent le cache local EN BLOC (ligne
+          //   plus bas). Or un modèle d'e-mail (ou tout champ du profil société) enregistré JUSTE avant
+          //   un rechargement peut être ENCORE EN VOL dans la file d'écriture durable (FP.persist) — pas
+          //   encore confirmé côté serveur. Le serveur (avec l'ANCIEN texte / le défaut) écrasait alors
+          //   l'édition → le mail « revenait au texte de base ». On RÉ-APPLIQUE donc, CHAMP PAR CHAMP,
+          //   les éditions de `profil` ENCORE EN ATTENTE d'envoi de CE poste par-dessus la version serveur
+          //   (la file finit d'envoyer ces éditions au serveur juste après). Non destructif : on ne touche
+          //   qu'aux champs que CE poste vient de saisir et qui n'ont pas encore été confirmés.
+          //   (Même esprit que la préservation des accusés d'alerte ci-dessus.)
+          try {
+            const q = (window.FP && FP.persist && FP.persist._loadQ) ? FP.persist._loadQ() : [];
+            let pend = null;   // dernière écriture app_settings EN ATTENTE portant un profil = intention la plus récente
+            for (let i = q.length - 1; i >= 0; i--) {
+              const it = q[i];
+              if (it && it.op === 'upsert' && it.table === 'app_settings' && it.row && it.row.data && it.row.data.profil && typeof it.row.data.profil === 'object') { pend = it.row.data.profil; break; }
+            }
+            if (pend) shared.profil = Object.assign({}, shared.profil || {}, pend);   // les éditions en vol priment
+          } catch (_) {}
           const _freshSettingsRaw = JSON.stringify(shared);
           settingsChanged = (_prevSettingsRaw !== _freshSettingsRaw);
           localStorage.setItem(key, _freshSettingsRaw);
