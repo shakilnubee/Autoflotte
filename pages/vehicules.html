@@ -1629,7 +1629,7 @@
             <button type="button" id="edl-pick" class="btn btn-outline text-sm"><i data-lucide="image-plus" class="w-4 h-4"></i> Galerie / fichiers</button>
           </div>
           <!-- Appareil photo (une prise à la fois, on peut recommencer) et sélection multiple : les deux ACCUMULENT -->
-          <input id="edl-file-cam" type="file" accept="image/*" capture="environment" class="hidden" />
+          <input id="edl-file-cam" type="file" accept="image/*" capture="environment" multiple class="hidden" />
           <input id="edl-file" type="file" accept="image/*,application/pdf,.pdf" multiple class="hidden" />
           <div id="edl-previews" class="flex flex-wrap gap-2 mt-2"></div>
           <p class="text-xs text-slate-400 mt-1">Tu peux <b>reprendre l'appareil photo plusieurs fois</b> : chaque photo s'ajoute (elle ne remplace pas les précédentes). Photos du véhicule <b>et/ou</b> le fichier de l'état des lieux (PDF).</p></div>
@@ -4890,8 +4890,12 @@
     const inp = e.target.closest('#edl-file, #edl-file-cam');
     if (!inp) return;
     const added = Array.from(inp.files || []);
+    const isCam = inp.id === 'edl-file-cam';
     if (added.length) { edlPending.push(...added); renderEdlPreviews(); }
     inp.value = '';   // remet à zéro → reprendre l'appareil ou re-sélectionner AJOUTE (ne remplace pas)
+    // 📷 Enchaîner plusieurs photos SANS recliquer : après une prise via l'appareil, on le RÉOUVRE
+    //    automatiquement. On s'arrête en ANNULANT l'appareil (aucun fichier renvoyé → pas de réouverture).
+    if (isCam && added.length && edlPending.length < 30) { setTimeout(() => { try { inp.click(); } catch (e) {} }, 400); }
   });
   $('drawer-body').addEventListener('click', (e) => {
     if (e.target.closest('#edl-cam'))  { const i = document.getElementById('edl-file-cam'); if (i) i.click(); return; }
