@@ -4295,6 +4295,16 @@
       const good = rows.find(d => isFetchable(d.url));
       return good ? good.url : (rows[0] ? rows[0].url : null);
     };
+    // ⚠️ On RECHARGE les documents (frais) AVANT de compter : les cartes grises ré-importées sont souvent
+    // stockées comme DOCUMENTS (pour apparaître dans le QR), pas dans le champ cgUrl. Si docsCache n'est pas
+    // (encore) chargé, on ne verrait que les CG du champ cgUrl → « seulement 8 ». Ce fetch garantit qu'on
+    // voit TOUTES les CG réellement présentes sur la plateforme.
+    try {
+      if (window.FP && FP.db && FP.db.select) {
+        const _r = await FP.db.select('documents');
+        if (_r && !_r.error && Array.isArray(_r.data)) { docsCache = _r.data; try { localStorage.setItem(DOCS_CACHE_KEY, JSON.stringify(docsCache)); } catch (e) {} }
+      }
+    } catch (e) {}
     const all = (data.vehicules || []).filter(v => !FP.estVendu(v));
     const withCG = all.map(v => ({ v, url: cgUrlFor(v) })).filter(x => x.url && missing(x.v));
     const targets = withCG.filter(x => isFetchable(x.url));
