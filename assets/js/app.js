@@ -2515,8 +2515,8 @@ FP.kmCollecte = {
     // Langue du conducteur → e-mail en français ou en anglais.
     const L = (FP.condLangue ? FP.condLangue(cond || v.chauffeur) : 'fr');
     const T = (L === 'en')
-      ? { subject: 'Mileage reading', hi: 'Hello', title: 'Mileage reading requested', ask1: 'Please provide the <b>current mileage</b> of your vehicle', ask2: '. It only takes a second: one tap, one number, done.', btn: 'Enter my mileage →', fb: 'If the button does not work, copy this link:', askTxt: 'Please provide the current mileage of your vehicle', clickTxt: 'Open this link:' }
-      : { subject: 'Relevé kilométrique', hi: 'Bonjour', title: 'Relevé kilométrique demandé', ask1: "Merci d'indiquer le <b>kilométrage actuel</b> de ton véhicule", ask2: ". C'est rapide : un clic, un nombre, terminé.", btn: 'Indiquer mon kilométrage →', fb: 'Si le bouton ne fonctionne pas, copie ce lien :', askTxt: "Merci d'indiquer le kilométrage actuel de ton véhicule", clickTxt: 'Clique sur ce lien :' };
+      ? { subject: 'Mileage reading', hi: 'Hello', title: 'Mileage reading requested', ask1: 'Please provide the <b>current mileage</b> of your vehicle', ask2: '. It only takes a second: one tap, one number, done.', btn: 'Enter my mileage →', fb: "If the button doesn't work, ", fbLink: 'click here', askTxt: 'Please provide the current mileage of your vehicle', clickTxt: 'Open this link:' }
+      : { subject: 'Relevé kilométrique', hi: 'Bonjour', title: 'Relevé kilométrique demandé', ask1: "Merci d'indiquer le <b>kilométrage actuel</b> de ton véhicule", ask2: ". C'est rapide : un clic, un nombre, terminé.", btn: 'Indiquer mon kilométrage →', fb: 'Si le bouton ne fonctionne pas, ', fbLink: 'cliquez ici', askTxt: "Merci d'indiquer le kilométrage actuel de ton véhicule", clickTxt: 'Clique sur ce lien :' };
     // Objet : FR = ÉDITABLE (Paramètres → E-mails → « Objet — relevé km »), balises {immat}{prenom} ;
     // EN = objet anglais par défaut. Repli sur l'ancien format si le helper n'est pas dispo.
     const subject = (L !== 'en' && FP.mailObjet)
@@ -2532,9 +2532,9 @@ FP.kmCollecte = {
       + '<td style="background:#fff;color:#0b0b0b;font-family:Arial,sans-serif;font-weight:800;font-size:18px;letter-spacing:2px;padding:6px 14px;border:2px solid #0b0b0b;border-radius:0 7px 7px 0;white-space:nowrap">' + plaque + '</td>'
       + '</tr></table>') : '';
     const html = ''
-      + '<div style="font-family:Inter,Arial,sans-serif;max-width:480px;margin:0 auto;color:#0F1E3D">'
+      + '<div style="font-family:Inter,Arial,sans-serif;max-width:440px;margin:0 auto;color:#0F1E3D">'
       // ── En-tête bleu : marque Parc Pilot + société, titre, puis conducteur (prénom/nom + poste) et plaque ──
-      + '<div style="background-color:#0B1220;background-image:linear-gradient(135deg,#0B1220,#1E293B);color:#ffffff;padding:22px 24px;border-radius:14px 14px 0 0">'
+      + '<div style="background-color:#0B1220;background-image:linear-gradient(135deg,#0B1220,#1E293B);color:#ffffff;padding:20px 22px;border-radius:16px 16px 0 0">'
       // En-tête = marque expéditeur : logo société hébergé, sinon nom de société, sinon logo Parc Pilot.
       + '<div>' + (logoUrl
         ? '<img src="' + FP.esc(logoUrl) + '" alt="' + (socName || 'Logo') + '" style="max-height:40px;max-width:180px;object-fit:contain;background:#fff;border-radius:8px;padding:5px 8px;display:block">'
@@ -2545,15 +2545,16 @@ FP.kmCollecte = {
       + (plateBadge ? '<div style="margin-top:14px;white-space:nowrap">' + plateBadge + '</div>' : '')
       + '</div>'
       // ── Corps blanc : demande + bouton ── (FR = message ÉDITABLE Paramètres → E-mails ; EN = défaut)
-      + '<div style="border:1px solid #E7EBF0;border-top:none;padding:22px">'
+      + '<div style="border:1px solid #E7EBF0;border-top:none;padding:20px 22px">'
       + ((L !== 'en' && FP.mailModeleProfil && FP.fillTags)
           ? '<div style="white-space:pre-wrap;line-height:1.55">' + FP.esc(FP.fillTags(FP.mailModeleProfil('mailModeleReleveKm', 'relevekm'), { prenom: cPrenom, immat: v.immat })).replace(/\n/g, '<br>') + '</div>'
           : ('<p style="margin:0 0 16px">' + T.hi + (cPrenom ? ' ' + FP.esc(cPrenom) : '') + ',</p>'
              + '<p style="margin:0 0 16px;line-height:1.5">' + T.ask1 + (plaque ? ' <b style="white-space:nowrap">' + plaque + '</b>' : '') + (marque ? ' (' + marque + ')' : '') + T.ask2 + '</p>'))
-      + '<p style="text-align:center;margin:22px 0">'
-      + '<a href="' + link + '" style="display:inline-block;background:#0B1220;color:#fff;text-decoration:none;padding:14px 26px;border-radius:10px;font-weight:800;font-size:15px">' + T.btn + '</a>'
+      + '<p style="text-align:center;margin:24px 0 6px">'
+      + '<a href="' + link + '" style="display:inline-block;background-color:#0B1220;background-image:linear-gradient(135deg,#0B1220,#1E293B);color:#fff;text-decoration:none;padding:14px 30px;border-radius:12px;font-weight:800;font-size:15px;box-shadow:0 8px 20px -8px rgba(11,18,32,.6)">' + T.btn + '</a>'
       + '</p>'
-      + '<p style="margin:14px 0 0;font-size:12px;color:#94A3B8">' + T.fb + '<br>' + link + '</p>'
+      // Repli PROPRE : pas d'URL brute, juste un lien discret « cliquez ici ».
+      + '<p style="margin:10px 0 0;font-size:12px;color:#94A3B8;text-align:center">' + T.fb + '<a href="' + link + '" style="color:#94A3B8;text-decoration:underline">' + T.fbLink + '</a></p>'
       + '</div>'
       + (FP.mailFooterHtml ? FP.mailFooterHtml(nomSoc || '') : '')
       + '</div>';
@@ -7681,41 +7682,29 @@ FP.buildAlertes = (data) => {
   {
     const nc = FP.notifCfg();
     const periodeJ = nc.releveKmJours || 45;
-    const debut = (nc.releveKmDebut ? new Date(nc.releveKmDebut) : null);
-    const debutOk = debut && !isNaN(debut);
+    // Le délai ET la date de cycle sont désormais gérés dans FP.kmCollecte._cutoff/aJour (source unique).
     const kmDates = (function () { try { return FP.settings.get().kmMajDates || {}; } catch (e) { return {}; } })();
-    // Dernière échéance globale passée (mode « date de début »)
-    let echeance = null, sinceEch = null;
-    if (debutOk) {
-      const dsStart = Math.floor((today - debut) / 86400000);
-      if (dsStart >= 0) {
-        const cycles = Math.floor(dsStart / periodeJ);
-        echeance = new Date(debut.getTime() + cycles * periodeJ * 86400000);
-        sinceEch = Math.floor((today - echeance) / 86400000);
-      }
-    }
     // ⚠️ Liste potentiellement LONGUE (toute la flotte) → on REGROUPE en une seule alerte
     // dépliable (champ `vehicules` rendu en <details> dans notifications.html), au lieu d'une
     // carte par véhicule. Deux paquets par urgence : « à faire » (warn) et « à renseigner » (info).
     const relKmWarn = [], relKmInfo = [];
+    // ⚠️ SOURCE UNIQUE — même décision « à jour / à faire » que l'onglet Relevé KM, les Relances et le
+    // Suivi flotte : FP.kmCollecte.aJour (délai « valable » + date de cycle + règle « QR compte après
+    // relance »). Fini le calcul de cycle en double : tout part du même endroit.
+    const _KC = FP.kmCollecte;
     (data.vehicules || []).forEach(v => {
       if (horsFlotte(v)) return;
       if (FP.kmSuivi && !FP.kmSuivi(v)) return;      // véhicule décoché du suivi km → pas d'alerte
+      if (_KC && _KC.aJour && _KC.aJour(v)) return;  // à jour → rien
+      const _stt = (_KC && _KC.statusFor) ? _KC.statusFor(v) : null;
+      if (_stt && _stt.sent_at && !_stt.used_at) return;   // relance déjà envoyée → traité par « relance km sans réponse »
       const veh = `${v.immat} · ${v.marque} ${v.modele}${v.chauffeur && v.chauffeur !== '—' ? ' (' + v.chauffeur + ')' : ''}`;
       const tgt = 'vehicules.html?veh=' + v.id;
-      const last = kmDates[v.immat] ? new Date(kmDates[v.immat]) : null;
-      if (debutOk) {
-        if (!echeance) return;                       // cycle pas encore commencé
-        if (last && last >= echeance) return;        // relevé déjà fait après la dernière échéance
-        (sinceEch >= periodeJ * 0.5 ? relKmWarn : relKmInfo).push({ label: `${veh} — échéance il y a ${sinceEch} j`, target: tgt });
-        return;
-      }
-      // Mode par véhicule (pas de date d'ancrage)
+      const _reads = (_KC && _KC.recusComptesDe) ? _KC.recusComptesDe(v) : [];
+      const last = _reads[0] ? new Date(_reads[0].used_at) : null;
       if (!last) { relKmInfo.push({ label: `${veh} — jamais renseigné`, target: tgt }); return; }
       const since = Math.floor((today - last) / 86400000);
-      if (since >= periodeJ) {
-        (since >= periodeJ * 1.5 ? relKmWarn : relKmInfo).push({ label: `${veh} — dernier il y a ${since} j`, target: tgt });
-      }
+      (since >= periodeJ * 1.5 ? relKmWarn : relKmInfo).push({ label: `${veh} — dernier il y a ${since} j`, target: tgt });
     });
     if (relKmWarn.length) out.push({ niveau: 'warn', categorie: 'Relevé km', message: `${relKmWarn.length} relevé${relKmWarn.length > 1 ? 's' : ''} km à faire`, detail: 'Kilométrage à mettre à jour (échéance dépassée).', sort: 480, muteKey: 'relevekm-warn', vehicules: relKmWarn });
     if (relKmInfo.length) out.push({ niveau: 'info', categorie: 'Relevé km', message: `${relKmInfo.length} relevé${relKmInfo.length > 1 ? 's' : ''} km à renseigner`, detail: 'Kilométrage jamais saisi ou à rafraîchir.', sort: 1000, muteKey: 'relevekm-info', vehicules: relKmInfo });
@@ -14450,9 +14439,9 @@ FP.mailBrand = function (o) {
     infoBlock = '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:18px"><tr><td style="border-top:1px solid rgba(255,255,255,.14);padding-top:14px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>' + cells.join('') + '</tr></table></td></tr></table>';
   }
   return FP.mailDocument(''
-    + '<div style="font-family:Inter,Arial,sans-serif;max-width:480px;margin:0 auto;color:#0F1E3D">'
+    + '<div style="font-family:Inter,Arial,sans-serif;max-width:440px;margin:0 auto;color:#0F1E3D">'
     // ── EN-TÊTE SOMBRE, CENTRÉ (marque · titre · plaque héros · destinataire · montant/n° d'avis) ──
-    + '<div style="background-color:#0B1220;background-image:linear-gradient(135deg,#0B1220,#1E293B);color:#ffffff;padding:26px 24px 24px;border-radius:14px 14px 0 0;text-align:center">'
+    + '<div style="background-color:#0B1220;background-image:linear-gradient(135deg,#0B1220,#1E293B);color:#ffffff;padding:24px 22px 22px;border-radius:16px 16px 0 0;text-align:center">'
     +   '<div>' + brand + '</div>'
     +   (o.title ? '<div style="font-size:19px;font-weight:800;font-style:italic;margin-top:14px;line-height:1.25;color:#ffffff">' + esc(o.title) + '</div>' : '')
     +   (plate ? '<div style="margin-top:16px">' + plate + '</div>' : '')
@@ -14488,12 +14477,12 @@ FP.mailShell = function (o) {
         ? '<span style="font-weight:900;font-size:18px;color:#ffffff;letter-spacing:.02em">' + esc(o.brand) + '</span>'
         : FP.ppLogoMail());
   return FP.mailDocument(''
-    + '<div style="font-family:Inter,-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:480px;margin:0 auto;color:#0F1E3D">'
-    + '<div style="background-color:#0B1220;background-image:linear-gradient(135deg,#0B1220,#1E293B);color:#ffffff;padding:22px 24px;border-radius:14px 14px 0 0">'
+    + '<div style="font-family:Inter,-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:440px;margin:0 auto;color:#0F1E3D">'
+    + '<div style="background-color:#0B1220;background-image:linear-gradient(135deg,#0B1220,#1E293B);color:#ffffff;padding:20px 22px;border-radius:16px 16px 0 0">'
     +   '<div>' + brand + '</div>'
-    +   (o.title ? '<div style="font-size:20px;font-weight:800;font-style:italic;margin-top:16px;line-height:1.25;color:#ffffff">' + esc(o.title) + '</div>' : '')
+    +   (o.title ? '<div style="font-size:19px;font-weight:800;font-style:italic;margin-top:14px;line-height:1.25;color:#ffffff">' + esc(o.title) + '</div>' : '')
     + '</div>'
-    + '<div style="border:1px solid #E7EBF0;border-top:none;padding:22px;color:#0F1E3D">'
+    + '<div style="border:1px solid #E7EBF0;border-top:none;padding:20px 22px;color:#0F1E3D">'
     +   (o.bodyHtml || '')
     +   (o.buttonHtml ? '<p style="text-align:center;margin:22px 0">' + o.buttonHtml + '</p>' : '')
     + '</div>'
@@ -14839,7 +14828,7 @@ FP.suivi = {
   _isDrive: (u) => /drive\.google|docs\.google/i.test(u || ''),
   // ctx = { docs:{vehId:[docs]}, km:{vehId:req} } — chargé une fois par FP.suivi.ctx().
   COLS: [
-    { k: 'km', emo: '📸', label: 'Relevé km', auto: (v, c) => !!(c && c.km && c.km[v.id]) },
+    { k: 'km', emo: '📸', label: 'Relevé km', auto: (v, c) => (FP.kmCollecte && FP.kmCollecte.aJour) ? FP.kmCollecte.aJour(v) : !!(c && c.km && c.km[v.id]) },
     { k: 'edlp', emo: '🖼️', label: 'Photos EDL', auto: (v, c) => FP.suivi._edl(v, c, 'photo') },
     { k: 'edls', emo: '✍️', label: 'EDL signé', auto: (v, c) => FP.suivi._edl(v, c, 'pdf') },
     { k: 'cle', emo: '🔑', label: 'Double des clés', auto: (v) => !!(v.cleSiege || v.cleSalarie) },

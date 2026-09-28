@@ -171,22 +171,22 @@ function buildMail(opts: { prenom: string; immat: string; marque: string; link: 
   const plate = immat
     ? '<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:separate;white-space:nowrap"><tr>'
       + '<td style="background:#1B48C4;color:#fff;font-family:Arial,sans-serif;font-weight:800;font-size:11px;padding:8px 7px;border:2px solid #0b0b0b;border-right:none;border-radius:7px 0 0 7px">F</td>'
-      + '<td style="background:#fff;color:#0b0b0b;font-family:Arial,sans-serif;font-weight:800;font-size:18px;letter-spacing:2px;padding:6px 14px;border:2px solid #0b0b0b;border-radius:0 7px 7px 0">' + esc(immat) + "</td></tr></table>"
+      + '<td style="background:#fff;color:#0b0b0b;font-family:Arial,sans-serif;font-weight:800;font-size:18px;letter-spacing:2px;padding:6px 14px;border:2px solid #0b0b0b;border-radius:0 7px 7px 0;white-space:nowrap">' + esc(immat) + "</td></tr></table>"
     : "";
   const html = ''
-    + '<div style="font-family:Inter,Arial,sans-serif;max-width:480px;margin:0 auto;color:#0F1E3D">'
-    + '<div style="background-color:#0B1220;background-image:linear-gradient(135deg,#0B1220,#1E293B);color:#ffffff;padding:22px 24px;border-radius:14px 14px 0 0">'
+    + '<div style="font-family:Inter,Arial,sans-serif;max-width:440px;margin:0 auto;color:#0F1E3D">'
+    + '<div style="background-color:#0B1220;background-image:linear-gradient(135deg,#0B1220,#1E293B);color:#ffffff;padding:20px 22px;border-radius:16px 16px 0 0">'
     + '<div>' + mailHead(nomSoc, logoUrl) + "</div>"
-    + '<div style="font-size:20px;font-weight:800;font-style:italic;margin-top:16px;line-height:1.25;color:#ffffff">' + title + "</div>"
+    + '<div style="font-size:19px;font-weight:800;font-style:italic;margin-top:14px;line-height:1.25;color:#ffffff">' + title + "</div>"
     + (prenom ? '<div style="font-size:16px;font-weight:700;margin-top:14px;color:#fff">' + esc(prenom) + "</div>" : "")
-    + (plate ? '<div style="margin-top:14px">' + plate + "</div>" : "")
+    + (plate ? '<div style="margin-top:14px;white-space:nowrap">' + plate + "</div>" : "")
     + "</div>"
-    + '<div style="border:1px solid #E7EBF0;border-top:none;padding:22px">'
+    + '<div style="border:1px solid #E7EBF0;border-top:none;padding:20px 22px">'
     + bodyText(msg)
-    + '<p style="text-align:center;margin:22px 0">'
-    + '<a href="' + esc(link) + '" style="display:inline-block;background:#0B1220;color:#fff;text-decoration:none;padding:14px 26px;border-radius:10px;font-weight:800;font-size:15px">Indiquer mon kilométrage →</a>'
+    + '<p style="text-align:center;margin:24px 0 6px">'
+    + '<a href="' + esc(link) + '" style="display:inline-block;background-color:#0B1220;background-image:linear-gradient(135deg,#0B1220,#1E293B);color:#fff;text-decoration:none;padding:14px 30px;border-radius:12px;font-weight:800;font-size:15px;box-shadow:0 8px 20px -8px rgba(11,18,32,.6)">Indiquer mon kilométrage →</a>'
     + "</p>"
-    + '<p style="margin:14px 0 0;font-size:12px;color:#94A3B8">Si le bouton ne fonctionne pas, copie ce lien :<br>' + esc(link) + "</p>"
+    + '<p style="margin:10px 0 0;font-size:12px;color:#94A3B8;text-align:center">Si le bouton ne fonctionne pas, <a href="' + esc(link) + '" style="color:#94A3B8;text-decoration:underline">cliquez ici</a></p>'
     + "</div>"
     + ppFooter(nomSoc)
     + "</div>";
@@ -244,7 +244,7 @@ function buildCtMail(opts: { prenom: string; immat: string; marque: string; date
   const plate = immat
     ? '<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:separate;white-space:nowrap"><tr>'
       + '<td style="background:#1B48C4;color:#fff;font-family:Arial,sans-serif;font-weight:800;font-size:11px;padding:8px 7px;border:2px solid #0b0b0b;border-right:none;border-radius:7px 0 0 7px">F</td>'
-      + '<td style="background:#fff;color:#0b0b0b;font-family:Arial,sans-serif;font-weight:800;font-size:18px;letter-spacing:2px;padding:6px 14px;border:2px solid #0b0b0b;border-radius:0 7px 7px 0">' + esc(immat) + "</td></tr></table>"
+      + '<td style="background:#fff;color:#0b0b0b;font-family:Arial,sans-serif;font-weight:800;font-size:18px;letter-spacing:2px;padding:6px 14px;border:2px solid #0b0b0b;border-radius:0 7px 7px 0;white-space:nowrap">' + esc(immat) + "</td></tr></table>"
     : "";
   const html = ''
     + '<div style="font-family:Inter,Arial,sans-serif;max-width:480px;margin:0 auto;color:#0F1E3D">'
