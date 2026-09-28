@@ -14948,13 +14948,20 @@ FP.relances = {
     const seuil = (FP.notifCfg ? FP.notifCfg().releveKmJours : 0) || 45; const today = new Date();
     (data.vehicules || []).forEach(v => {
       if (FP.horsFlotte && FP.horsFlotte(v)) return; if (FP.kmSuivi && !FP.kmSuivi(v)) return;
-      const readings = KC.recusDe ? KC.recusDe(v) : []; const last = readings[0] || null;
+      const readings = KC.recusDe ? KC.recusDe(v) : [];
+      // ⚠️ RÈGLE (consigne utilisateur) : un relevé fait par SCAN QR ne « compte comme réponse » (et ne
+      // retire le véhicule de la liste) QUE s'il arrive APRÈS une relance mail envoyée pour ce véhicule.
+      // Un scan spontané (aucune relance envoyée) laisse le véhicule dans la liste → à toi de relancer.
+      // Les relevés par MAIL (lien) et la SAISIE MANUELLE du gestionnaire comptent toujours.
+      const lastSentAt = (KC._cache || []).reduce((m, r) => (r.vehicule_id === v.id && r.sent_at) ? Math.max(m, new Date(r.sent_at).getTime()) : m, 0) || null;
+      const compte = (r) => (r.source !== 'qr') || (lastSentAt && new Date(r.used_at).getTime() >= lastSentAt);
+      const last = readings.find(compte) || null;   // dernier relevé qui COMPTE (mail/manuel, ou QR après relance)
       const stt = KC.statusFor ? KC.statusFor(v) : null; const pending = (stt && stt.sent_at && !stt.used_at) ? stt : null;
       const lastDate = last ? new Date(last.used_at) : null; const days = lastDate ? Math.floor((today - lastDate) / 86400000) : null;
-      let statut; if (lastDate && days <= seuil) statut = 'ajour'; else if (pending) statut = 'attente'; else if (last) statut = 'relancer'; else statut = 'jamais';
+      let statut; if (lastDate && days <= seuil) statut = 'ajour'; else if (pending) statut = 'attente'; else if (readings.length) statut = 'relancer'; else statut = 'jamais';
       if (statut === 'ajour' || statut === 'attente') return; // à jour = rien ; en attente = demande déjà partie
       const chauffeur = (v.chauffeur && v.chauffeur !== '—') ? String(v.chauffeur).trim() : '';
-      out.push({ type: 'km', veh: v, immat: v.immat || '', conducteur: chauffeur, contact: this._contact(chauffeur), statut, lastKm: last ? last.used_at : '', joursRestants: null, urgence: 'retard' });
+      out.push({ type: 'km', veh: v, immat: v.immat || '', conducteur: chauffeur, contact: this._contact(chauffeur), statut, lastKm: last ? last.used_at : (readings[0] ? readings[0].used_at : ''), joursRestants: null, urgence: 'retard' });
     });
     return out;
   },
