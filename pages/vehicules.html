@@ -4295,16 +4295,36 @@
       const good = rows.find(d => isFetchable(d.url));
       return good ? good.url : (rows[0] ? rows[0].url : null);
     };
+    // ⚠️ On RECHARGE les documents (frais) AVANT de compter : les cartes grises ré-importées sont souvent
+    // stockées comme DOCUMENTS (pour apparaître dans le QR), pas dans le champ cgUrl. Si docsCache n'est pas
+    // (encore) chargé, on ne verrait que les CG du champ cgUrl → « seulement 8 ». Ce fetch garantit qu'on
+    // voit TOUTES les CG réellement présentes sur la plateforme.
+    try {
+      if (window.FP && FP.db && FP.db.select) {
+        const _r = await FP.db.select('documents');
+        if (_r && !_r.error && Array.isArray(_r.data)) { docsCache = _r.data; try { localStorage.setItem(DOCS_CACHE_KEY, JSON.stringify(docsCache)); } catch (e) {} }
+      }
+    } catch (e) {}
     const all = (data.vehicules || []).filter(v => !FP.estVendu(v));
     const withCG = all.map(v => ({ v, url: cgUrlFor(v) })).filter(x => x.url && missing(x.v));
     const targets = withCG.filter(x => isFetchable(x.url));
     const onDrive = withCG.filter(x => !isFetchable(x.url));
+    // Véhicules à compléter qui n'ont AUCUNE carte grise stockée (ni fichier plateforme, ni lien) →
+    // rien à lire pour eux tant que la CG n'est pas importée. On l'explique pour lever la confusion « 8 ».
+    const noCG = all.filter(v => missing(v) && !cgUrlFor(v));
+    // Message qui EXPLIQUE pourquoi seulement N : les CG sur Google Drive et les véhicules sans CG stockée
+    // ne peuvent pas être lus ici (le site ne lit que les cartes grises importées sur la plateforme).
+    const _pourquoi = (n) => (n
+      ? `\n\nℹ️ Pourquoi pas plus ? Le site ne peut lire que les cartes grises IMPORTÉES sur la plateforme (photo/PDF).`
+      : '')
+      + (onDrive.length ? `\n• ${onDrive.length} véhicule(s) ont leur carte grise sur Google Drive → non lisible ici, à re-scanner via « Scanner un document ».` : '')
+      + (noCG.length ? `\n• ${noCG.length} véhicule(s) à compléter n'ont aucune carte grise importée → à scanner/importer d'abord.` : '');
     if (!targets.length) {
-      alert('Rien à compléter automatiquement (aucune carte grise récupérable avec des champs manquants).'
-        + (onDrive.length ? `\n\n${onDrive.length} véhicule(s) ont leur carte grise sur Google Drive → non lisible par le site sans connexion Google. À re-scanner via « Scanner un document » (le scan remplit alors les champs tout seul).` : ''));
+      alert('Aucune carte grise lisible avec des champs manquants à compléter.' + _pourquoi(1)
+        + (!onDrive.length && !noCG.length ? '\n\n(Tout est déjà complété 🎉)' : ''));
       return;
     }
-    if (!(await FP.confirm(`Lire ${targets.length} carte(s) grise(s) stockée(s) et compléter automatiquement les champs manquants (carburant, CO₂, puissance, masse, VIN, dates) ?\n\nSeuls les champs VIDES sont remplis — aucune donnée existante n'est écrasée.`))) return;
+    if (!(await FP.confirm(`Lire ${targets.length} carte(s) grise(s) importée(s) et compléter automatiquement les champs manquants (carburant, CO₂ via le champ V.7, puissance, masse, VIN, dates) ?\n\nSeuls les champs VIDES sont remplis — aucune donnée existante n'est écrasée.${_pourquoi(onDrive.length + noCG.length)}`))) return;
     const btn = $('btn-completer-cg'); const lbl = btn ? btn.innerHTML : '';
     if (btn) btn.disabled = true;
     let done = 0, fail = 0, processed = 0;
@@ -4366,7 +4386,8 @@
     alert(`✓ ${done} véhicule(s) complété(s) depuis leur carte grise.`
       + (fail ? `\n${fail} carte(s) grise(s) illisible(s) ou en erreur.` : '')
       + (masseRestante ? `\n⚖️ ${masseRestante} véhicule(s) sans masse (champ G) — l'IA ne l'a pas trouvée sur la carte grise : saisis-la à la main dans la fiche (case « Masse »).` : '')
-      + (onDrive.length ? `\n${onDrive.length} sur Google Drive (non lisibles par le site) → à re-scanner via « Scanner un document » (le scan remplit la masse tout seul).` : ''));
+      + (onDrive.length ? `\n${onDrive.length} sur Google Drive (non lisibles par le site) → à re-scanner via « Scanner un document » (le scan remplit la masse tout seul).` : '')
+      + (noCG.length ? `\n${noCG.length} véhicule(s) sans carte grise importée → importe-la (photo/PDF) pour que l'IA lise le CO₂ (V.7) et les autres champs.` : ''));
   }
   { const b = $('btn-completer-cg'); if (b) b.addEventListener('click', () => { completerDepuisCG().catch(e => { console.error(e); alert('Erreur pendant la complétion.'); const btn = $('btn-completer-cg'); if (btn) btn.disabled = false; }); }); }
 
