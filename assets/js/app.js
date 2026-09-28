@@ -5815,6 +5815,20 @@ document.addEventListener('fp:data-ready', () => { try { FP.userEmail = (localSt
 
 // Normalisation d'un prénom (1er mot, minuscules, accents conservés) — partagé
 FP.normPrenom = (s) => (s || '').toString().trim().split(/\s+/)[0].toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+// ⚠️ HELPER CANONIQUE — PRÉNOM À AFFICHER (casse + accents conservés), pour un NOM ou une clé conducteur.
+// Certaines données stockent « Prénom NOM » et d'autres juste « Prénom » : partout où l'on montre le
+// conducteur de façon informelle (listes relevé km, suivi flotte…), on affiche UNIQUEMENT le prénom,
+// de façon cohérente. Priorité au champ `prenom` de la fiche (le plus juste, gère les prénoms composés),
+// sinon le 1er mot du nom. (À NE PAS utiliser là où le nom complet est voulu : fiche, exports, EDL légal.)
+FP.prenomAffiche = function (nameOrKey) {
+  if (!nameOrKey) return '';
+  try {
+    const c = (FP.conducteurs && FP.conducteurs.find) ? FP.conducteurs.find(nameOrKey) : null;
+    if (c && c.prenom && String(c.prenom).trim()) return String(c.prenom).trim();
+    if (c && c.nom && String(c.nom).trim()) { /* nom sans prénom → on retombe sur le 1er mot ci-dessous */ }
+  } catch (e) {}
+  return String(nameOrKey).trim().split(/\s+/)[0] || '';
+};
 // ⚠️ HELPER CANONIQUE — nom COMPLET normalisé (prénom + nom, accents/casse/espaces neutralisés).
 // Sert à distinguer deux homonymes de prénom (« Jean Dupont » ≠ « Jean Martin ») SANS casser le
 // rapprochement historique par prénom seul (qui reste le repli quand la donnée n'a qu'un prénom).

@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260928p">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260928q">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260928p"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260928q"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260928p">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260928q">
 <style>
   .notif { display: flex; gap: .8rem; align-items: flex-start; padding: .85rem 1rem; border-radius: 14px; border: 1px solid var(--fp-border); background: var(--fp-surface, #fff); text-decoration: none; transition: box-shadow .15s ease, transform .15s ease, border-color .15s ease; box-shadow: 0 1px 2px rgba(15,30,61,.04); }
   .notif + .notif { margin-top: .55rem; }
@@ -148,8 +148,8 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260928p"></script>
-<script src="../assets/js/supabase-client.js?v=20260928p"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260928q"></script>
+<script src="../assets/js/supabase-client.js?v=20260928q"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -165,11 +165,11 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260928p"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260928q"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20260928p"></script>
+<script src="../assets/js/app.min.js?v=20260928q"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -264,8 +264,24 @@
   // Réglé par l'utilisateur → on respecte son choix ; sinon replié par défaut si la colonne est VIDE.
   function colCollapsed(title, hasAlerts) { const s = readColState(); return (title in s) ? !!s[title] : !hasAlerts; }
 
+  let _lastRenderSig = null;
   function render() {
     const alerts = FP.buildAlertes(data);
+    // ⚡ ANTI-FLASH : render() est appelé plusieurs fois au chargement (fp:data-ready + chargements
+    // async relevé km / EDL / QR / conducteurs). Si l'ENSEMBLE des alertes n'a pas changé, on NE
+    // réécrit PAS le DOM → plus de clignotement « ancienne alerte qui apparaît puis part ». Une vraie
+    // modif (montant, échéance, +1 véhicule, « Vu », masquage…) change la signature → re-render normal.
+    let _sig = '';
+    try {
+      const _mq = (FP.alertes && FP.alertes.masquees) ? FP.alertes.masquees() : [];
+      _sig = JSON.stringify({
+        a: alerts.map(a => [a.message, a.niveau, a.categorie, a.target, a.detail, a.muteKey, a.seenKey,
+              (a.vehicules || []).map(x => x.label + '|' + (x.target || '') + '|' + (x.immoId || '') + '|' + (x.edlToken || '')).join('~')]),
+        m: _mq
+      });
+    } catch (e) { _sig = ''; }
+    if (_sig && _sig === _lastRenderSig) return;   // rien n'a changé → pas de réécriture (évite le flash)
+    _lastRenderSig = _sig;
     const cont = document.getElementById('notif-cols');
     // Colonnes NON VIDES d'abord (dans l'ordre COLS), puis les vides → « Autres » (états des lieux, etc.)
     // remonte tout seul en haut dès qu'il a du contenu, plus besoin de scroller en bas.
@@ -1070,7 +1086,7 @@
       const S = RK_STATUT[r.statut];
       const v = r.v;
       const km = FP.kmActuel ? FP.kmActuel(v) : (Number(v.km) || 0);
-      const chauffeur = (v.chauffeur && v.chauffeur !== '—') ? FP.esc(v.chauffeur) : '<span style="color:var(--fp-muted)">— sans chauffeur</span>';
+      const chauffeur = (v.chauffeur && v.chauffeur !== '—') ? FP.esc(FP.prenomAffiche ? FP.prenomAffiche(v.chauffeur) : v.chauffeur) : '<span style="color:var(--fp-muted)">— sans chauffeur</span>';
       const lastTxt = r.lastDate
         ? `${FP.dateNum(r.last.used_at)} <span class="rk-since">(il y a ${r.daysSince} j · ${rkChannel(r.last)})</span>`
         : '<span style="color:var(--fp-muted)">jamais</span>';
@@ -1221,7 +1237,7 @@
     const byId = (id) => flotte.find(v => String(v.id) === String(id));
     const rowHtml = (v) => {
       const on = !FP.kmSuivi || FP.kmSuivi(v);
-      const ch = (v.chauffeur && v.chauffeur !== '—') ? E(v.chauffeur) : '—';
+      const ch = (v.chauffeur && v.chauffeur !== '—') ? E(FP.prenomAffiche ? FP.prenomAffiche(v.chauffeur) : v.chauffeur) : '—';
       return `<label style="display:flex;align-items:center;gap:10px;padding:9px 6px;border-bottom:1px solid var(--fp-border);cursor:pointer">
         <input type="checkbox" class="km-cfg-cb" data-id="${E(v.id)}" ${on ? 'checked' : ''} style="width:18px;height:18px;accent-color:var(--fp-accent);flex:none">
         <span style="flex:1;min-width:0">
@@ -1486,7 +1502,7 @@
       return `<button type="button" class="suivi-cell" data-veh="${FP.esc(v.id)}" data-col="${x.c.k}" title="${FP.esc(tit)}" style="flex:1 1 88px;min-width:88px;display:flex;align-items:center;gap:5px;justify-content:center;background:${bg};color:${cl};border:none;border-radius:9px;padding:7px 6px;font-weight:800;font-size:12px;cursor:pointer">${x.c.emo} ${ic}</button>`;
     };
     const card = (v) => {
-      const cond = (v.chauffeur && v.chauffeur !== '—') ? v.chauffeur : '';
+      const cond = (v.chauffeur && v.chauffeur !== '—') ? (FP.prenomAffiche ? FP.prenomAffiche(v.chauffeur) : v.chauffeur) : '';
       const ok = isComplete(v);
       return `<div style="border:1px solid ${ok ? 'var(--fp-border)' : '#FCA5A5'};border-radius:12px;padding:11px 13px;background:${ok ? '#fff' : '#FFF7F5'}">
         <div class="flex items-center gap-2 flex-wrap mb-2"><a href="vehicules.html?veh=${encodeURIComponent(v.id)}" style="font-weight:800;color:var(--fp-primary)">${FP.esc(v.immat || '?')}</a><span class="text-xs text-slate-400">${FP.esc(((v.marque || '') + ' ' + (v.modele || '')).trim())}</span>${cond ? `<span class="text-xs" style="color:#F97316;font-weight:600">${FP.esc(cond)}</span>` : ''}${ok ? '<span class="text-xs" style="color:#16a34a;font-weight:700">✓ complet</span>' : ''}</div>
