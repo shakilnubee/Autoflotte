@@ -489,44 +489,11 @@
           settingsLoaded = true;   // pull initial OK → pas besoin de la retry 3 s (évite un 2ᵉ SELECT app_settings)
           const key = (FP.settings && FP.settings._key) ? FP.settings._key() : 'auto_flotte_settings';
           let _prevSettingsRaw = null; try { _prevSettingsRaw = localStorage.getItem(key); } catch (_) {}
-          // ⚠️⚠️ « VU »/« IGNORÉ » D'ALERTE QUI REVIENT (bug vécu) : au chargement, les réglages du SERVEUR
-          //   écrasaient le localStorage EN BLOC. Or un clic « Vu » suivi d'une navigation IMMÉDIATE peut ne
-          //   pas encore avoir atteint le serveur (l'écriture est en file durable, flushée un peu plus tard) →
-          //   le serveur (sans le « Vu ») écrasait la version locale → l'alerte REVENAIT au retour sur la page.
-          //   On PRÉSERVE donc les accusés de lecture d'alertes saisis localement (union avec le serveur).
-          //   ⚠️ Ce sont de simples ACCUSÉS (muteKey→signature / liste de clés) : les garder ne peut JAMAIS
-          //   perdre une donnée métier (au pire une alerte reste masquée un peu plus longtemps). La vraie
-          //   synchro multi-appareils se fait quand même via la file d'écriture (FP.persist) au prochain flush.
-          try {
-            const lp = _prevSettingsRaw ? JSON.parse(_prevSettingsRaw) : null;
-            if (lp && typeof lp === 'object') {
-              if (lp.alertesVues && typeof lp.alertesVues === 'object')
-                shared.alertesVues = Object.assign({}, shared.alertesVues || {}, lp.alertesVues);
-              if (Array.isArray(lp.alertesMasquees))
-                shared.alertesMasquees = Array.from(new Set([...(Array.isArray(shared.alertesMasquees) ? shared.alertesMasquees : []), ...lp.alertesMasquees]));
-              if (lp.alertesMasqueesInfo && typeof lp.alertesMasqueesInfo === 'object')
-                shared.alertesMasqueesInfo = Object.assign({}, shared.alertesMasqueesInfo || {}, lp.alertesMasqueesInfo);
-            }
-          } catch (_) {}
-          // ⚠️⚠️ MAILS/PROFIL QUI « REVIENNENT AU TEXTE PAR DÉFAUT » (même appareil) — CORRECTIF.
-          //   Cause : au chargement, les réglages du SERVEUR écrasent le cache local EN BLOC (ligne
-          //   plus bas). Or un modèle d'e-mail (ou tout champ du profil société) enregistré JUSTE avant
-          //   un rechargement peut être ENCORE EN VOL dans la file d'écriture durable (FP.persist) — pas
-          //   encore confirmé côté serveur. Le serveur (avec l'ANCIEN texte / le défaut) écrasait alors
-          //   l'édition → le mail « revenait au texte de base ». On RÉ-APPLIQUE donc, CHAMP PAR CHAMP,
-          //   les éditions de `profil` ENCORE EN ATTENTE d'envoi de CE poste par-dessus la version serveur
-          //   (la file finit d'envoyer ces éditions au serveur juste après). Non destructif : on ne touche
-          //   qu'aux champs que CE poste vient de saisir et qui n'ont pas encore été confirmés.
-          //   (Même esprit que la préservation des accusés d'alerte ci-dessus.)
-          try {
-            const q = (window.FP && FP.persist && FP.persist._loadQ) ? FP.persist._loadQ() : [];
-            let pend = null;   // dernière écriture app_settings EN ATTENTE portant un profil = intention la plus récente
-            for (let i = q.length - 1; i >= 0; i--) {
-              const it = q[i];
-              if (it && it.op === 'upsert' && it.table === 'app_settings' && it.row && it.row.data && it.row.data.profil && typeof it.row.data.profil === 'object') { pend = it.row.data.profil; break; }
-            }
-            if (pend) shared.profil = Object.assign({}, shared.profil || {}, pend);   // les éditions en vol priment
-          } catch (_) {}
+          // ⚠️ SOURCE UNIQUE de réconciliation (voir _reconcileServerSettings) : on préserve les accusés
+          //   d'alerte « ✓ Vu » saisis localement ET on ré-applique les réglages ENCORE EN ATTENTE d'envoi
+          //   (file durable) AVANT d'écraser le cache — sinon un pull serveur fait « revenir » une alerte
+          //   cochée ou « repartir » un réglage saisi (mails, rappels km…).
+          shared = _reconcileServerSettings(shared, _prevSettingsRaw);
           const _freshSettingsRaw = JSON.stringify(shared);
           settingsChanged = (_prevSettingsRaw !== _freshSettingsRaw);
           localStorage.setItem(key, _freshSettingsRaw);
@@ -573,6 +540,47 @@
     }
   })();
 
+  // ⚠️⚠️ SOURCE UNIQUE — réconcilie les réglages SERVEUR avec le local NON ENCORE CONFIRMÉ, AVANT
+  // d'écraser le cache local. Utilisé au chargement (loadAll) ET à chaque re-synchro (refreshSettings :
+  // focus / online / 3 s). Sans ça, un pull serveur écrase EN BLOC :
+  //  • les accusés d'alerte « ✓ Vu » (alertesVues/alertesMasquees/alertesMasqueesInfo) cochés à l'instant
+  //    → l'alerte REVIENT sans raison (bug « les notifs reviennent trop souvent ») ;
+  //  • un réglage saisi juste avant (profil e-mails, rappels km `notif`, couleurs, date de cycle…) encore
+  //    dans la file d'écriture durable → la valeur « repart » à l'ancienne (bug « ça remet une autre valeur »).
+  // Règle : (1) accusés d'alerte = UNION local∪serveur ; (2) écritures app_settings ENCORE EN ATTENTE de CE
+  // poste (file durable) ré-appliquées PAR-DESSUS le serveur (objets = fusion champ par champ ; scalaires /
+  // tableaux = valeur en attente). Non destructif : la file finit d'envoyer ces écritures juste après.
+  function _reconcileServerSettings(shared, prevRaw) {
+    shared = (shared && typeof shared === 'object') ? shared : {};
+    try {
+      const lp = prevRaw ? JSON.parse(prevRaw) : null;
+      if (lp && typeof lp === 'object') {
+        if (lp.alertesVues && typeof lp.alertesVues === 'object') shared.alertesVues = Object.assign({}, shared.alertesVues || {}, lp.alertesVues);
+        if (Array.isArray(lp.alertesMasquees)) shared.alertesMasquees = Array.from(new Set([].concat(Array.isArray(shared.alertesMasquees) ? shared.alertesMasquees : [], lp.alertesMasquees)));
+        if (lp.alertesMasqueesInfo && typeof lp.alertesMasqueesInfo === 'object') shared.alertesMasqueesInfo = Object.assign({}, shared.alertesMasqueesInfo || {}, lp.alertesMasqueesInfo);
+      }
+    } catch (_) {}
+    try {
+      const q = (window.FP && FP.persist && FP.persist._loadQ) ? FP.persist._loadQ() : [];
+      let pend = null;   // dernière écriture app_settings EN ATTENTE = intention la plus récente de ce poste
+      for (let i = q.length - 1; i >= 0; i--) {
+        const it = q[i];
+        if (it && it.op === 'upsert' && it.table === 'app_settings' && it.row && it.row.data && typeof it.row.data === 'object') { pend = it.row.data; break; }
+      }
+      if (pend) {
+        Object.keys(pend).forEach(k => {
+          const pv = pend[k];
+          if (pv && typeof pv === 'object' && !Array.isArray(pv) && shared[k] && typeof shared[k] === 'object' && !Array.isArray(shared[k])) {
+            shared[k] = Object.assign({}, shared[k], pv);   // objets (profil, notif, maps de données…) : les champs en attente priment
+          } else {
+            shared[k] = pv;   // scalaires (couleur, date de cycle, booléens) + tableaux + nouveaux objets : valeur en attente
+          }
+        });
+      }
+    } catch (_) {}
+    return shared;
+  }
+
   // ============================================================
   // RE-SYNCHRO DES RÉGLAGES — anti « cache périmé » (congés / leasing / loueurs / assureurs… vivent
   // dans app_settings, pas dans les tables véhicules/amendes/factures). RE-LIT le serveur et rafraîchit
@@ -600,6 +608,10 @@
         try { FP.settings._effectiveId = effId; } catch (e) {}
         const key = FP.settings._key ? FP.settings._key() : 'auto_flotte_settings';
         let prev = null; try { prev = localStorage.getItem(key); } catch (e) {}
+        // ⚠️ MÊME réconciliation qu'au chargement : ce refresh (focus / online / 3 s après load) écrasait
+        //   le cache SANS préserver ni les accusés « ✓ Vu » (→ alertes qui reviennent) ni les réglages
+        //   encore en attente d'envoi (→ mails / rappels km qui « repartent »). On réconcilie AVANT d'écraser.
+        shared = _reconcileServerSettings(shared, prev);
         const fresh = JSON.stringify(shared);
         const changed = (prev !== fresh);
         try { localStorage.setItem(key, fresh); } catch (e) {}

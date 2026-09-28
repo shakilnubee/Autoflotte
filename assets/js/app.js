@@ -2357,11 +2357,32 @@ FP.kmCollecte = {
   },
   // ⚠️ SOURCE UNIQUE (règle consigne utilisateur, MÊME logique partout : relances, suivi Relevé KM, aJour) :
   // relevés qui « COMPTENT comme réponse » à une relance. Un relevé par MAIL (lien) ou une SAISIE MANUELLE
-  // du gestionnaire compte TOUJOURS. Un SCAN QR ne compte QUE s'il est arrivé APRÈS l'envoi d'une relance
-  // mail pour ce véhicule (sinon = relevé spontané → ne retire pas le véhicule des relances).
+  // du gestionnaire compte TOUJOURS. Un vrai relevé QR (le chauffeur SCANNE et SAISIT son km) compte comme
+  // une réponse dès que l'utilisateur « a demandé le km » — cf. _qrGate.
   recusComptesDe(v) {
-    const sent = this._lastSentAt(v);
-    return this.recusDe(v).filter(r => (r.source !== 'qr') || (sent && new Date(r.used_at).getTime() >= sent));
+    const gate = this._qrGate(v);
+    return this.recusDe(v).filter(r => (r.source !== 'qr') || (gate != null && new Date(r.used_at).getTime() >= gate));
+  },
+  // Relance MAIL la plus récente envoyée à N'IMPORTE QUEL véhicule (campagne lancée), ou null.
+  _lastSentAny() {
+    try { const m = (this._cache || []).reduce((mx, r) => r.sent_at ? Math.max(mx, new Date(r.sent_at).getTime()) : mx, 0); return m || null; } catch (e) { return null; }
+  },
+  // Date (ms) À PARTIR DE LAQUELLE un relevé QR spontané COMPTE comme réponse. L'utilisateur « demande le
+  // km » dès qu'il a : (a) envoyé une relance mail à CE véhicule, (b) fixé la date de cycle « tout le monde
+  // redonne son km à partir du… », OU (c) envoyé une relance à AU MOINS un véhicule (campagne). On prend le
+  // repère le plus ANCIEN (le + permissif) → un vrai relevé QR après ce repère compte, MÊME pour un véhicule
+  // SANS e-mail (sinon il restait coincé « à relancer » à vie alors que le chauffeur a bien donné son km via
+  // le QR). `aJour` applique ensuite la fraîcheur (_cutoff / date de cycle). Null = rien demandé encore →
+  // un QR spontané ne compte pas (règle « seulement quand je demande »).
+  _qrGate(v) {
+    const cands = [];
+    const perVeh = this._lastSentAt(v); if (perVeh) cands.push(perVeh);
+    const g = this._lastSentAny(); if (g) cands.push(g);
+    try {
+      const deb = (FP.notifCfg ? FP.notifCfg() : {}).releveKmDebut;
+      if (deb) { const t = new Date(String(deb).slice(0, 10) + 'T00:00:00').getTime(); if (Number.isFinite(t)) cands.push(t); }
+    } catch (e) {}
+    return cands.length ? Math.min.apply(null, cands) : null;
   },
   // ⚠️ SOURCE UNIQUE — DATE-SEUIL « à jour » (ms). Un relevé qui COMPTE et daté APRÈS cette date = à jour.
   // Combine les DEUX réglages (Paramètres → Notifications / panneau Relevé KM) :

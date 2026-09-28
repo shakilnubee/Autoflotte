@@ -168,6 +168,32 @@ Sortie = `fichier:ligne` + snippet + helper attendu, **vérifié dans le code r�
   (0 si Remboursé/PEC, jamais le brut) ; emprunt « en retard » via `FP.empEnRetard` (règle
   > 2 jours, jamais réimplémentée) ; identité conducteur via `FP.normPrenom`.
 
+## 15. Échecs SILENCIEUX à l'exécution & pertes invisibles (famille « le bug photo »)
+Classe de bugs que les auditeurs « par domaine/page » NE voient PAS : le code **a l'air correct**
+(il compile, il tourne, rien ne casse en lecture), mais **à l'exécution il perd une donnée sans
+RIEN dire à l'utilisateur** — sur une entrée précise (HEIC iPhone, réseau coupé, fichier lourd).
+Lancer un **agent dédié** qui traque, sur TOUT le projet (pages + `app.js` + `v.html`/`km.html` +
+Edge Functions), ces 4 motifs — et EXIGE un **feedback utilisateur visible** partout où une action
+peut échouer :
+- **15a. Photos / fichiers / uploads perdus en silence** : `Image.onerror`/`FileReader.onerror`
+  qui renvoient `null` et **droppent** le fichier (HEIC non décodable → il faut un **repli fichier
+  brut**, jamais un drop) ; `accept="image/*"` qui **rejette un type vide** (HEIC) ; `FP.uploadScan`
+  dont l'échec est **avalé** (`.catch(()=>null)`, `if(url)` sans `else`) → l'enregistrement se fait
+  **sans le document** en affichant « ✓ ».
+- **15b. Écritures/envois avalés** : `catch{}` / `.catch(()=>{})` autour d'un `insert/upsert/update/
+  delete`, d'un `send-email`, d'un `functions.invoke` (qui **ne LÈVE PAS** sur erreur → il FAUT lire
+  `res.error`/`res.data.error`) → l'utilisateur croit que c'est enregistré/envoyé.
+- **15c. Limites cachées / troncatures** : `slice(0,N)`, `arr.length<N`, `files[0]` alors que
+  `multiple`, `Math.min(pdf.numPages,N)` (pages OCR ignorées) → des données coupées **sans message**.
+  ⚠️ **Cap client ET serveur doivent être ALIGNÉS** (bug vécu : cap client 20, cap serveur `km-collect`
+  resté à 8 → photos 9+ jetées côté serveur).
+- **15d. Compteurs menteurs** : un lot qui affiche « N enregistrés » sans compter les **échecs**
+  (« 3 photos rattachées » alors que 2 ont échoué). Toujours comparer réussis **vs** total et
+  **DIRE** ce qui a échoué.
+Règle de sortie : pour chaque cas, prouver le scénario concret (entrée → ce que l'utilisateur PERD →
+pourquoi il ne le voit pas), `fichier:ligne`. Réf. CLAUDE.md 0-perte ③ (« échec d'écriture silencieux
+= INTERDIT ») et ⑥. **Le correctif d'un cas doit ajouter un vrai retour visible**, jamais juste logger.
+
 ---
 
 *Historique : batterie constituée les 2026-07-30 après plusieurs incohérences
