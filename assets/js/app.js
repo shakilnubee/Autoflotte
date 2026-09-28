@@ -760,15 +760,19 @@ FP.releveKm = (function () {
     const vehs = (D().vehicules || []).filter(v => !(FP.horsFlotte && FP.horsFlotte(v)) && (!FP.kmSuivi || FP.kmSuivi(v)));
     return vehs.map(v => {
       const readings = (KC && KC.recusDe) ? KC.recusDe(v) : [];
-      const last = readings[0] || null;
+      const last = readings[0] || null;                                   // dernier relevé AFFICHÉ (tout canal)
       const stt = (KC && KC.statusFor) ? KC.statusFor(v) : null;
       const pending = (stt && stt.sent_at && !stt.used_at) ? stt : null;
       const lastDate = last ? new Date(last.used_at) : null;
       const daysSince = lastDate ? Math.floor((today - lastDate) / 86400000) : null;
+      // Statut = même règle que les Relances (source unique) : un scan QR ne compte que s'il suit une
+      // relance mail. Le dernier relevé AFFICHÉ (date + canal) reste, lui, le plus récent tout canal.
+      const lastCompte = (KC && KC.recusComptesDe) ? (KC.recusComptesDe(v)[0] || null) : last;
+      const cDays = lastCompte ? Math.floor((today - new Date(lastCompte.used_at)) / 86400000) : null;
       let statut;
-      if (lastDate && daysSince <= seuil) statut = 'ajour';
+      if (lastCompte && cDays <= seuil) statut = 'ajour';
       else if (pending) statut = 'attente';
-      else if (last) statut = 'relancer';
+      else if (readings.length) statut = 'relancer';
       else statut = 'jamais';
       const email = (KC && KC.emailDe) ? KC.emailDe(v) : '';
       return { v, readings, last, pending, lastDate, daysSince, statut, email };
@@ -2342,11 +2346,27 @@ FP.kmCollecte = {
     return this.recus().filter(r => r.vehicule_id === v.id)
       .sort((a, b) => new Date(b.used_at) - new Date(a.used_at));
   },
+  // Dernière relance/demande MAIL envoyée pour ce véhicule (sent_at le plus récent), ou null.
+  _lastSentAt(v) {
+    try {
+      const id = v && v.id; if (!id) return null;
+      const m = (this._cache || []).reduce((mx, r) => (r.vehicule_id === id && r.sent_at) ? Math.max(mx, new Date(r.sent_at).getTime()) : mx, 0);
+      return m || null;
+    } catch (e) { return null; }
+  },
+  // ⚠️ SOURCE UNIQUE (règle consigne utilisateur, MÊME logique partout : relances, suivi Relevé KM, aJour) :
+  // relevés qui « COMPTENT comme réponse » à une relance. Un relevé par MAIL (lien) ou une SAISIE MANUELLE
+  // du gestionnaire compte TOUJOURS. Un SCAN QR ne compte QUE s'il est arrivé APRÈS l'envoi d'une relance
+  // mail pour ce véhicule (sinon = relevé spontané → ne retire pas le véhicule des relances).
+  recusComptesDe(v) {
+    const sent = this._lastSentAt(v);
+    return this.recusDe(v).filter(r => (r.source !== 'qr') || (sent && new Date(r.used_at).getTime() >= sent));
+  },
   // ⚠️ SOURCE UNIQUE — « à jour » = un relevé a été REÇU il y a ≤ releveKmJours (même définition que
   // l'onglet Alertes → Relevé KM, statut « ajour »). Sert à ne relancer QUE ceux qui n'ont pas répondu.
   aJour(v) {
     try {
-      const last = this.recusDe(v)[0];
+      const last = this.recusComptesDe(v)[0];   // relevé qui COMPTE (mail/manuel, ou QR après relance)
       if (!last || !last.used_at) return false;
       const seuil = (FP.notifCfg ? (FP.notifCfg().releveKmJours || 45) : 45);
       const days = Math.floor((Date.now() - new Date(last.used_at)) / 86400000);
@@ -14949,13 +14969,10 @@ FP.relances = {
     (data.vehicules || []).forEach(v => {
       if (FP.horsFlotte && FP.horsFlotte(v)) return; if (FP.kmSuivi && !FP.kmSuivi(v)) return;
       const readings = KC.recusDe ? KC.recusDe(v) : [];
-      // ⚠️ RÈGLE (consigne utilisateur) : un relevé fait par SCAN QR ne « compte comme réponse » (et ne
-      // retire le véhicule de la liste) QUE s'il arrive APRÈS une relance mail envoyée pour ce véhicule.
-      // Un scan spontané (aucune relance envoyée) laisse le véhicule dans la liste → à toi de relancer.
-      // Les relevés par MAIL (lien) et la SAISIE MANUELLE du gestionnaire comptent toujours.
-      const lastSentAt = (KC._cache || []).reduce((m, r) => (r.vehicule_id === v.id && r.sent_at) ? Math.max(m, new Date(r.sent_at).getTime()) : m, 0) || null;
-      const compte = (r) => (r.source !== 'qr') || (lastSentAt && new Date(r.used_at).getTime() >= lastSentAt);
-      const last = readings.find(compte) || null;   // dernier relevé qui COMPTE (mail/manuel, ou QR après relance)
+      // ⚠️ RÈGLE (consigne utilisateur) — SOURCE UNIQUE FP.kmCollecte.recusComptesDe : un relevé par SCAN QR
+      // ne « compte comme réponse » (et ne retire le véhicule) QUE s'il suit une relance mail envoyée pour ce
+      // véhicule. Mail (lien) + saisie manuelle comptent toujours. Un scan spontané laisse le véhicule listé.
+      const last = (KC.recusComptesDe ? KC.recusComptesDe(v)[0] : readings[0]) || null;
       const stt = KC.statusFor ? KC.statusFor(v) : null; const pending = (stt && stt.sent_at && !stt.used_at) ? stt : null;
       const lastDate = last ? new Date(last.used_at) : null; const days = lastDate ? Math.floor((today - lastDate) / 86400000) : null;
       let statut; if (lastDate && days <= seuil) statut = 'ajour'; else if (pending) statut = 'attente'; else if (readings.length) statut = 'relancer'; else statut = 'jamais';
