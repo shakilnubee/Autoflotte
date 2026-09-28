@@ -389,8 +389,13 @@
       const electrifie = /lectri|hydrog|hybrid/.test(carb);
       if (electrifie) elec++;
       if (/lectri|hydrog/.test(carb)) { sumCo2 += 0; nCo2++; return; } // 0 à l'usage
-      const c = Number(v.co2);
-      if (Number.isFinite(c) && c > 0) { totalG += c * KM_AN; sumCo2 += c; nCo2++; }
+      // ⚠️ Un CO₂ SAISI = renseigné, MÊME s'il vaut 0 (véhicule 0 émission / électrique dont le champ
+      // carburant n'est pas encore rempli). Avant, `c > 0` renvoyait un 0 saisi dans « à compléter » →
+      // impossible à satisfaire pour un électrique. Désormais 0 compte comme 0 (pris dans la moyenne).
+      const raw = v.co2;
+      const hasCo2 = raw !== null && raw !== undefined && String(raw).trim() !== '' && Number.isFinite(Number(raw)) && Number(raw) >= 0;
+      const c = Number(raw);
+      if (hasCo2) { if (c > 0) totalG += c * KM_AN; sumCo2 += c; nCo2++; }
       else if (!IG.has('co2:' + v.id)) missingVehs.push(v); // « à compléter » sauf si ignoré
     });
     const missing = missingVehs.length;
