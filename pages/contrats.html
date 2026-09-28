@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260928g">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260928h">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260928g"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260928h"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260928g">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260928h">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -641,8 +641,8 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260928g"></script>
-<script src="../assets/js/supabase-client.js?v=20260928g"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260928h"></script>
+<script src="../assets/js/supabase-client.js?v=20260928h"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -658,11 +658,11 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260928g"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260928h"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20260928g"></script>
+<script src="../assets/js/app.min.js?v=20260928h"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -2168,7 +2168,25 @@
       if (off.loyer != null && !($('lease-loyer').value || '').trim()) { $('lease-loyer').value = off.loyer; filled.push('loyer'); }
       if (off.kmContrat != null && !($('lease-km').value || '').trim()) { $('lease-km').value = off.kmContrat; filled.push('forfait km'); }
       if (off.dureeMois != null && (!($('lease-duree').value || '').trim() || $('lease-duree').value === '36')) { $('lease-duree').value = off.dureeMois; filled.push('durée'); }
-      show(filled.length ? ('✓ Lu : ' + filled.join(' · ') + '. Vérifie puis Enregistrer.') : 'Rien lu automatiquement — saisis à la main (le format de l\'offre n\'est pas reconnu).', filled.length ? '#047857' : '#B45309');
+      const lu = filled.length ? ('✓ Lu : ' + filled.join(' · ') + '. ') : 'Rien lu automatiquement (format non reconnu) — saisis à la main. ';
+      // ➕ EN PLUS de la lecture : on RANGE directement le PDF comme document du contrat de ce véhicule
+      //    (même stockage que « Contrat PDF » → settings.leasingDocs[immat]), pour ne pas re-téléverser à
+      //    la main. Anti-doublon par nom de fichier. (Cohérent avec le modal LLD qui lit + attache déjà.)
+      let docMsg = '';
+      try {
+        const isPdf = /pdf/i.test(file.type || '') || /\.pdf$/i.test(file.name || '');
+        if (leaseEditImmat && FP.uploadScan && isPdf) {
+          const exist = bpceDocs(leaseEditImmat);
+          if (exist.some(d => d && d.name === (file.name || ''))) { docMsg = '📎 Ce document est déjà rangé dans le contrat.'; }
+          else {
+            show(lu + '📎 Enregistrement du document…', '#475569');
+            const url = await FP.uploadScan(file, 'contrats-leasing');
+            if (url) { const list = exist.slice(); list.push({ url, name: file.name || 'Offre de leasing.pdf' }); setBpceDocs(leaseEditImmat, list); try { renderLeasing(); } catch (e) {} docMsg = '📎 Document rangé dans le contrat.'; }
+            else docMsg = '(document non enregistré, réessaie)';
+          }
+        }
+      } catch (e) { console.warn('[lease offre doc]', e); docMsg = '(document non enregistré)'; }
+      show(lu + docMsg + (filled.length ? ' Vérifie puis Enregistrer.' : ''), filled.length ? '#047857' : (docMsg && docMsg.indexOf('rangé') >= 0 ? '#047857' : '#B45309'));
     } catch (err) { console.warn('[lease offer scan]', err); show('Impossible de lire ce PDF.', '#B91C1C'); }
   });
 
