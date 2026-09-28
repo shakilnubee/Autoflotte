@@ -568,10 +568,10 @@
     { k: 'immat', label: 'Immatriculation' }, { k: 'marque', label: 'Marque' }, { k: 'modele', label: 'Modèle' },
     { k: 'categorie', label: 'Catégorie' }, { k: 'carburant', label: 'Carburant' },
     { k: 'dateMiseEnCirculation', label: 'Date de 1re immat.' },
-    { k: 'km', label: 'Kilométrage', empty: v => !(FP.kmActuel ? FP.kmActuel(v) > 0 : (v.km != null && String(v.km).trim() !== '')) },
+    { k: 'km', label: 'Kilométrage', suivi: 'km', empty: v => !(FP.kmActuel ? FP.kmActuel(v) > 0 : (v.km != null && String(v.km).trim() !== '')) },
     { k: 'prochainCT', label: 'Prochain CT', skip: v => !!(FP.ctIgnored && FP.ctIgnored(v)) }, { k: 'proprietaire', label: 'Propriétaire' },
     { k: 'puissanceFiscale', label: 'Puissance fiscale' }, { k: 'vin', label: 'N° de châssis (VIN)' },
-    { k: 'assurance', label: 'Assurance', val: v => v.assurance || (FP.assureurLabelVeh && FP.assureurLabelVeh(v)) || (FP.assuranceLabel && FP.assuranceLabel()) },
+    { k: 'assurance', label: 'Assurance', suivi: 'assur', val: v => v.assurance || (FP.assureurLabelVeh && FP.assureurLabelVeh(v)) || (FP.assuranceLabel && FP.assuranceLabel()) },
     { k: 'co2', label: 'CO₂', skip: v => /lectri|hydrog/i.test(v.carburant || '') },
     { k: 'antiPollution', label: 'Contrôle anti-pollution', skip: v => !(FP.concerneAntiPollution && FP.concerneAntiPollution(v)) },
     // ⚠️ On demande la masse tant qu'elle n'est pas SAISIE À LA MAIN (settings.vehMasse), MÊME s'il existe
@@ -585,14 +585,14 @@
     { k: 'valeurAchat', label: "Valeur d'achat (avantage en nature, TCO, revente)", skip: v => estLeasing(v), empty: v => !(Number(v.valeurAchat) > 0) },
     // Carte grise + carte mémo : doivent être HÉBERGÉES SUR LA PLATEFORME (pas Google Drive) pour
     // apparaître dans le QR conducteur → « Mes documents ». On les remplit par UPLOAD (PDF/photo).
-    { k: 'carteGrise', label: 'Carte grise à importer sur la plateforme (pour le QR véhicule)', empty: v => !hasCgPlatform(v) },
+    { k: 'carteGrise', label: 'Carte grise à importer sur la plateforme (pour le QR véhicule)', suivi: 'cg', empty: v => !hasCgPlatform(v) },
     { k: 'carteMemo', label: 'Carte mémo à importer sur la plateforme (pour le QR véhicule)', empty: v => !hasMemoDoc(v) },
-    { k: 'edlPhotos', label: 'Photos d\'état des lieux à enregistrer', empty: v => !hasEdlPhotos(v) },
-    { k: 'edlSigne', label: 'État des lieux SIGNÉ (document) à enregistrer', empty: v => !hasEdlSigne(v) },
+    { k: 'edlPhotos', label: 'Photos d\'état des lieux à enregistrer', suivi: 'edlp', empty: v => !hasEdlPhotos(v) },
+    { k: 'edlSigne', label: 'État des lieux SIGNÉ (document) à enregistrer', suivi: 'edls', empty: v => !hasEdlSigne(v) },
     // Clés & carte grise : détenteur non renseigné = ni « Siège » ni « Salarié » sélectionné (rubrique « Clés & carte grise » de la fiche).
-    { k: 'cleDetenteur', label: 'Détenteur du double de clé', empty: v => !v.cleSiege && !v.cleSalarie },
+    { k: 'cleDetenteur', label: 'Détenteur du double de clé', suivi: 'cle', empty: v => !v.cleSiege && !v.cleSalarie },
     { k: 'cgDetenteur', label: 'Détenteur de la carte grise', empty: v => !v.cgOrigSiege && !v.cgOrigSalarie },
-    { k: 'leasing', label: 'Forfait leasing (km/durée)', skip: v => !estLeasing(v), empty: v => !leasingForfait(v), target: 'contrats.html' },
+    { k: 'leasing', label: 'Forfait leasing (km/durée)', suivi: 'leasing', skip: v => !estLeasing(v), empty: v => !leasingForfait(v), target: 'contrats.html' },
     // Dates d'expiration carte carburant / badge : demandées SEULEMENT si le n° correspondant est
     // renseigné (sinon on ne réclame pas une date pour une carte que le véhicule n'a pas).
     // ⚠️ Source unique : le n° de carte/badge peut vivre sur le CONDUCTEUR (pas seulement le véhicule) →
@@ -628,7 +628,13 @@
   ];
   // Renvoie les champs manquants sous forme [{k,label}]. Si ignPrefix est fourni, on saute
   // les champs marqués « ignorés » (ex. véhicule étranger, moto sans CO₂/masse…) — persistant.
-  const missOf = (x, fields, ignPrefix) => { const m = []; fields.forEach(f => { if (f.skip && f.skip(x)) return; if (ignPrefix && window.FP && FP.ignore && FP.ignore.has(ignPrefix + f.k)) return; const e = f.empty ? f.empty(x) : isEmptyV(f.val ? f.val(x) : x[f.k]); if (e) m.push({ k: f.k, label: f.label, target: f.target || null }); }); return m; };
+  const missOf = (x, fields, ignPrefix) => { const m = []; fields.forEach(f => { if (f.skip && f.skip(x)) return; if (ignPrefix && window.FP && FP.ignore && FP.ignore.has(ignPrefix + f.k)) return;
+    // ⚠️ LIEN AVEC LE SUIVI FLOTTE (source unique) : si l'utilisateur a coché « fait » ou « non suivi »
+    // la case correspondante dans l'onglet Suivi flotte, la même info est considérée réglée ici → les
+    // deux ne vivent plus chacun de leur côté. (Concepts identiques : km, photos EDL, EDL signé, carte
+    // grise, assurance, clés, leasing.)
+    if (f.suivi && window.FP && FP.suivi && FP.suivi.override && x && x.id != null) { const ov = FP.suivi.override(x.id, f.suivi); if (ov === 'fait' || ov === 'ignore') return; }
+    const e = f.empty ? f.empty(x) : isEmptyV(f.val ? f.val(x) : x[f.k]); if (e) m.push({ k: f.k, label: f.label, target: f.target || null }); }); return m; };
   const compItem = (nom, miss, target, ignPrefix, type, entId) => ({ nom, miss, target, ignPrefix: ignPrefix || '', type: type || '', entId: (entId == null ? '' : String(entId)) });
   const LIMIT_COMP = 10;   // au-delà, on replie la section (bouton « Voir tout »)
   function rowCompHTML(it) {
