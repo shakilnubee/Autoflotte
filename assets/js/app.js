@@ -3872,6 +3872,12 @@ FP.MAIL_DEFAUT = {
   // Rappel automatique la VEILLE (reprend les infos du rendez-vous).
   rappelgarage: `Bonjour {prenom},\n\nPetit rappel : un rendez-vous est prévu demain pour le véhicule {immat}. 🗓️\nMotif : {motif}\n\nBelle journée, et à très vite ! 🙂`,
   invitation: `Bonjour,\n\nBienvenue sur Parc Pilot ! 🎉 Ton accès à la plateforme de gestion de flotte est prêt.\n\nChoisis ton mot de passe en un clic (bouton juste en dessous) et tu pourras te connecter tout de suite. Tout est réuni au même endroit, simple et rapide.\n\nTon identifiant : {email}\n\nÀ très vite ! 🚗`,
+  // ===== RELANCES (écran « 📣 Relances ») — rappels envoyés au conducteur. TOUS ÉDITABLES. =====
+  relanceCt: `Bonjour {prenom},\n🔧 Le contrôle technique du véhicule {immat} approche (échéance le {date}) ⏳ — un petit rendez-vous à caler ! 📅`,
+  relanceEntretien: `Bonjour {prenom},\n🛠️ Le véhicule {immat} a un entretien à prévoir (échéance le {date}) 🚗 — pense à caler un passage au garage.`,
+  relanceGarage: `Bonjour {prenom},\n🔧 Rendez-vous garage pour le véhicule {immat} ({motif}) : prévu le {date} 📅 — pense à t'organiser.`,
+  relanceKm: `Bonjour {prenom},\n📸 Un petit coup d'œil au compteur du véhicule {immat} ? 😊 Ça file en 30 secondes !`,
+  relanceAmende: `Bonjour {prenom},\n🎫 Une amende concerne le véhicule {immat} — pense à la régler pour éviter une majoration 💵\nRegarde ta boîte mail 📩`,
 };
 // Remplissage GÉNÉRIQUE des balises d'un modèle e-mail ({prenom} = 1er mot ; {plaque}/{immat}/{motif}/
 // {date}/{email}). Une balise vide disparaît proprement (avec son espace). Source unique côté site + repli.
@@ -3915,6 +3921,11 @@ FP.MAIL_OBJET_DEFAUT = {
   rdvgarage: '{motif} le {date} ({immat})',
   rappelgarage: 'Rappel : {motif} demain ({immat})',
   invitation: 'Bienvenue sur Parc Pilot 🎉 — ton accès',
+  relanceCt: 'Contrôle technique — {immat}',
+  relanceEntretien: 'Entretien à prévoir — {immat}',
+  relanceGarage: 'Rendez-vous garage — {immat}',
+  relanceKm: 'Relevé kilométrique — {immat}',
+  relanceAmende: 'Amende à régler — {immat}',
 };
 // Objet e-mail ACTIF (personnalisé société sinon défaut), balises déjà remplies. `defKey` = clé de
 // MAIL_OBJET_DEFAUT ; le champ profil correspondant est `mailObjet<DefKey>` (1re lettre en maj).
@@ -3966,6 +3977,17 @@ FP.PROFIL_CHAMPS = [
   { key: 'mailModeleRappelGarage', label: "Modèle e-mail — rappel rendez-vous garage (la veille)", type: 'textarea', ph: 'Balises : {prenom}, {immat}, {motif}. Envoyé automatiquement la veille du rendez-vous.', default: FP.MAIL_DEFAUT.rappelgarage },
   { key: 'mailObjetInvitation',    label: "Objet e-mail — invitation à un compte",  type: 'text', ph: 'Balises : {email}.', default: FP.MAIL_OBJET_DEFAUT.invitation },
   { key: 'mailModeleInvitation',   label: "Modèle e-mail — invitation à un compte",        type: 'textarea', ph: 'Balises : {email}. Le bouton « Définir mon mot de passe » est ajouté automatiquement.', default: FP.MAIL_DEFAUT.invitation },
+  // ── RELANCES (écran « 📣 Relances » — rappels manuels envoyés au conducteur). Balises {prenom}{immat}{date}{motif}. ──
+  { key: 'mailObjetRelanceCt',        label: "Objet — relance contrôle technique",   type: 'text', ph: 'Balises : {immat}, {prenom}.', default: FP.MAIL_OBJET_DEFAUT.relanceCt },
+  { key: 'mailModeleRelanceCt',       label: "Relance — contrôle technique",          type: 'textarea', ph: 'Balises : {prenom}, {immat}, {date}.', default: FP.MAIL_DEFAUT.relanceCt },
+  { key: 'mailObjetRelanceEntretien', label: "Objet — relance entretien",             type: 'text', ph: 'Balises : {immat}, {prenom}.', default: FP.MAIL_OBJET_DEFAUT.relanceEntretien },
+  { key: 'mailModeleRelanceEntretien',label: "Relance — entretien à prévoir",         type: 'textarea', ph: 'Balises : {prenom}, {immat}, {date}.', default: FP.MAIL_DEFAUT.relanceEntretien },
+  { key: 'mailObjetRelanceGarage',    label: "Objet — relance rendez-vous garage",    type: 'text', ph: 'Balises : {immat}, {prenom}.', default: FP.MAIL_OBJET_DEFAUT.relanceGarage },
+  { key: 'mailModeleRelanceGarage',   label: "Relance — rendez-vous garage",          type: 'textarea', ph: 'Balises : {prenom}, {immat}, {date}, {motif}.', default: FP.MAIL_DEFAUT.relanceGarage },
+  { key: 'mailObjetRelanceKm',        label: "Objet — relance relevé km",             type: 'text', ph: 'Balises : {immat}, {prenom}.', default: FP.MAIL_OBJET_DEFAUT.relanceKm },
+  { key: 'mailModeleRelanceKm',       label: "Relance — relevé kilométrique",         type: 'textarea', ph: 'Balises : {prenom}, {immat}. Le lien de relevé est ajouté automatiquement.', default: FP.MAIL_DEFAUT.relanceKm },
+  { key: 'mailObjetRelanceAmende',    label: "Objet — relance amende à régler",       type: 'text', ph: 'Balises : {immat}, {prenom}.', default: FP.MAIL_OBJET_DEFAUT.relanceAmende },
+  { key: 'mailModeleRelanceAmende',   label: "Relance — amende à régler",             type: 'textarea', ph: 'Balises : {prenom}, {immat}.', default: FP.MAIL_DEFAUT.relanceAmende },
   // ⚠️ Le champ « Signature (bas des e-mails d'amende) » a été RETIRÉ (2026-09-25) : les e-mails
   //    partent désormais via la plateforme avec un pied de page brandé (société · via Parc Pilot),
   //    plus besoin d'une signature manuelle. L'ancienne valeur settings.mailSignature est ignorée.
@@ -14632,6 +14654,28 @@ FP.sendMailTest = async function (key, to) {
       text: 'L\'état des lieux signé du véhicule ' + d.immat + ' est disponible : ' + d.link
     })
   });
+  // 7) RELANCES (écran « 📣 Relances ») — mêmes modèles éditables que FP.relances.message.
+  [
+    { key: 'relance-ct',        defObj: 'relanceCt',        mkey: 'mailModeleRelanceCt',        dkey: 'relanceCt',        label: 'Relance — contrôle technique' },
+    { key: 'relance-entretien', defObj: 'relanceEntretien', mkey: 'mailModeleRelanceEntretien', dkey: 'relanceEntretien', label: 'Relance — entretien à prévoir' },
+    { key: 'relance-garage',    defObj: 'relanceGarage',    mkey: 'mailModeleRelanceGarage',    dkey: 'relanceGarage',    label: 'Relance — rendez-vous garage' },
+    { key: 'relance-km',        defObj: 'relanceKm',        mkey: 'mailModeleRelanceKm',        dkey: 'relanceKm',        label: 'Relance — relevé kilométrique' },
+    { key: 'relance-amende',    defObj: 'relanceAmende',    mkey: 'mailModeleRelanceAmende',    dkey: 'relanceAmende',    label: 'Relance — amende à régler' },
+  ].forEach(function (r) {
+    FP.registerMail({
+      key: r.key, label: r.label, group: 'Relances',
+      sample: () => ({ prenom: 'Alex', immat: 'AA-123-AA', date: '30/09/2026', motif: 'Révision' }),
+      build: (d) => {
+        const tags = { prenom: d.prenom, immat: d.immat, date: d.date, motif: d.motif };
+        const t = tpl(r.mkey, r.dkey, tags);
+        return {
+          subject: (FP.mailObjet ? FP.mailObjet(r.defObj, tags) : '') || (r.label + ' — ' + d.immat),
+          html: FP.mailBrand({ title: r.label, prenom: '', plaque: d.immat, nomSoc: d.nomSoc, logoUrl: d.logoUrl, bodyHtml: bodyText(t) }),
+          text: t
+        };
+      }
+    });
+  });
 })();
 
 // ===== TESTEUR D'E-MAILS (modale) — aperçu + envoi de test, liste auto depuis FP.mails =====
@@ -14972,13 +15016,18 @@ FP.relances = {
 
   // Message prêt (texte SMS/WhatsApp + sujet + HTML e-mail brandé) pour un item. Async (lien km).
   async message(item) {
-    const p = this._prenom(item.conducteur); const bonjour = p ? ('Bonjour ' + p + ',') : 'Bonjour,';
-    const nbp = this._nbp(item.immat); let text = '', subject = '', emailText = '';
-    if (item.type === 'ct') { const d = this._fdate(item.dueDate); subject = 'Contrôle technique — ' + item.immat; text = `${bonjour}\n🔧 Le contrôle technique du véhicule ${nbp} approche (échéance le ${d}) ⏳ — un petit rendez-vous à caler ! 📅`; emailText = text; }
-    else if (item.type === 'entretien') { const d = this._fdate(item.dueDate); subject = 'Entretien à prévoir — ' + item.immat; text = `${bonjour}\n🛠️ Le véhicule ${nbp} a un entretien à prévoir (échéance le ${d}) 🚗 — pense à caler un passage au garage.`; emailText = text; }
-    else if (item.type === 'garage') { const d = this._fdate(item.dueDate); const mot = item.motif ? (' (' + item.motif + ')') : ''; subject = 'Rendez-vous garage — ' + item.immat; text = `${bonjour}\n🔧 Rendez-vous garage pour le véhicule ${nbp}${mot} : prévu le ${d} 📅 — pense à t'organiser.`; emailText = text; }
-    else if (item.type === 'km') { const l = await this._liens(item.veh); subject = 'Relevé kilométrique — ' + item.immat; text = `${bonjour}\n📸 Un petit coup d'œil au compteur du véhicule ${nbp} ? 😊 Ça file en 30 secondes` + (l.kmLink ? `, c'est par ici 👇\n${l.kmLink}` : ' !'); emailText = text; }
-    else if (item.type === 'amende') { const d = item.dueDate ? this._fdate(item.dueDate) : ''; subject = 'Amende à régler — ' + item.immat; const avant = d ? ` avant le ${d}` : ''; text = `${bonjour}\n🎫 Une amende concerne le véhicule ${nbp} — pense à la régler${avant} pour éviter une majoration 💵\nRegarde ta boîte mail 📩`; emailText = `${bonjour}\n🎫 Une amende concerne le véhicule ${nbp} — pense à la régler${avant} pour éviter une majoration 💵`; }
+    // Messages ÉDITABLES (Paramètres → E-mails → « Relance — … ») via FP.mailModeleProfil + FP.mailObjet.
+    // Balises : {prenom} {immat} {date} {motif}. Repli automatique sur le texte par défaut (MAIL_DEFAUT).
+    const p = this._prenom(item.conducteur);
+    const _tags = { prenom: p, immat: item.immat, date: this._fdate(item.dueDate), motif: item.motif || '' };
+    const _msg = (mkey, dkey) => (FP.mailModeleProfil && FP.fillTags) ? FP.fillTags(FP.mailModeleProfil(mkey, dkey), _tags) : (FP.MAIL_DEFAUT[dkey] || '');
+    const _obj = (dkey, fallback) => (FP.mailObjet ? (FP.mailObjet(dkey, _tags) || fallback) : fallback);
+    let text = '', subject = '', emailText = '';
+    if (item.type === 'ct') { subject = _obj('relanceCt', 'Contrôle technique — ' + item.immat); text = _msg('mailModeleRelanceCt', 'relanceCt'); emailText = text; }
+    else if (item.type === 'entretien') { subject = _obj('relanceEntretien', 'Entretien à prévoir — ' + item.immat); text = _msg('mailModeleRelanceEntretien', 'relanceEntretien'); emailText = text; }
+    else if (item.type === 'garage') { subject = _obj('relanceGarage', 'Rendez-vous garage — ' + item.immat); text = _msg('mailModeleRelanceGarage', 'relanceGarage'); emailText = text; }
+    else if (item.type === 'km') { const l = await this._liens(item.veh); subject = _obj('relanceKm', 'Relevé kilométrique — ' + item.immat); text = _msg('mailModeleRelanceKm', 'relanceKm') + (l.kmLink ? ('\n👉 ' + l.kmLink) : ''); emailText = text; }
+    else if (item.type === 'amende') { subject = _obj('relanceAmende', 'Amende à régler — ' + item.immat); text = _msg('mailModeleRelanceAmende', 'relanceAmende'); emailText = text; }
     let nomSoc = '', logoUrl = '';
     try { const s = FP.settings.get() || {}; const pr = s.profil || {}; const so = s.societe || {}; nomSoc = so.nom || pr.societe || ''; logoUrl = pr.logoDataUrl || pr.logoUrl || ''; } catch (e) {}
     const esc = FP.esc || (x => String(x == null ? '' : x));
