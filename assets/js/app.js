@@ -2540,9 +2540,9 @@ FP.kmCollecte = {
       : { subject: 'Relevé kilométrique', hi: 'Bonjour', title: 'Relevé kilométrique demandé', ask1: "Merci d'indiquer le <b>kilométrage actuel</b> de ton véhicule", ask2: ". C'est rapide : un clic, un nombre, terminé.", btn: 'Indiquer mon kilométrage →', fb: 'Si le bouton ne fonctionne pas, ', fbLink: 'cliquez ici', askTxt: "Merci d'indiquer le kilométrage actuel de ton véhicule", clickTxt: 'Clique sur ce lien :' };
     // Objet : FR = ÉDITABLE (Paramètres → E-mails → « Objet — relevé km »), balises {immat}{prenom} ;
     // EN = objet anglais par défaut. Repli sur l'ancien format si le helper n'est pas dispo.
-    const subject = (L !== 'en' && FP.mailObjet)
-      ? (FP.mailObjet('relevekm', { immat: v.immat, prenom: cPrenom }) || (T.subject + (v.immat ? ' (' + v.immat + ')' : '')))
-      : (T.subject + (v.immat ? ' (' + v.immat + ')' : ''));   // sujet = texte brut (pas d'échappement HTML)
+    const subject = (FP.mailObjetL)
+      ? (FP.mailObjetL('relevekm', { immat: v.immat, prenom: cPrenom }, L) || (T.subject + (v.immat ? ' (' + v.immat + ')' : '')))
+      : (T.subject + (v.immat ? ' (' + v.immat + ')' : ''));   // sujet = texte brut (pas d'échappement HTML), objet ÉDITABLE FR+EN
     const socName = nomSoc ? FP.esc(nomSoc) : '';
     // Logo société HÉBERGÉ (URL http) — jamais le data-URI (cassé dans les e-mails). Rempli par
     // FP.hostSocieteLogo() appelé dans send() AVANT la construction du mail.
@@ -2567,8 +2567,8 @@ FP.kmCollecte = {
       + '</div>'
       // ── Corps blanc : demande + bouton ── (FR = message ÉDITABLE Paramètres → E-mails ; EN = défaut)
       + '<div style="border:1px solid #E7EBF0;border-top:none;padding:20px 22px">'
-      + ((L !== 'en' && FP.mailModeleProfil && FP.fillTags)
-          ? '<div style="white-space:pre-wrap;line-height:1.55">' + FP.esc(FP.fillTags(FP.mailModeleProfil('mailModeleReleveKm', 'relevekm'), { prenom: cPrenom, immat: v.immat })).replace(/\n/g, '<br>') + '</div>'
+      + ((FP.mailModeleProfilL && FP.fillTags)
+          ? '<div style="white-space:pre-wrap;line-height:1.55">' + FP.esc(FP.fillTags(FP.mailModeleProfilL('mailModeleReleveKm', 'relevekm', L), { prenom: cPrenom, immat: v.immat })).replace(/\n/g, '<br>') + '</div>'
           : ('<p style="margin:0 0 16px">' + T.hi + (cPrenom ? ' ' + FP.esc(cPrenom) : '') + ',</p>'
              + '<p style="margin:0 0 16px;line-height:1.5">' + T.ask1 + (plaque ? ' <b style="white-space:nowrap">' + plaque + '</b>' : '') + (marque ? ' (' + marque + ')' : '') + T.ask2 + '</p>'))
       + '<p style="text-align:center;margin:24px 0 6px">'
@@ -2579,8 +2579,8 @@ FP.kmCollecte = {
       + '</div>'
       + (FP.mailFooterHtml ? FP.mailFooterHtml(nomSoc || '') : '')
       + '</div>';
-    const text = (L !== 'en' && FP.mailModeleProfil && FP.fillTags)
-      ? (FP.fillTags(FP.mailModeleProfil('mailModeleReleveKm', 'relevekm'), { prenom: cPrenom, immat: v.immat }) + '\n\n' + T.clickTxt + ' ' + link + '\n\n' + (nomSoc || 'Parc Pilot'))
+    const text = (FP.mailModeleProfilL && FP.fillTags)
+      ? (FP.fillTags(FP.mailModeleProfilL('mailModeleReleveKm', 'relevekm', L), { prenom: cPrenom, immat: v.immat }) + '\n\n' + T.clickTxt + ' ' + link + '\n\n' + (nomSoc || 'Parc Pilot'))
       : ((fullName ? T.hi + ' ' + fullName + ',\n\n' : T.hi + ',\n\n')
         + T.askTxt + (plaque ? ' ' + (v.immat || '') : '') + '.\n'
         + T.clickTxt + ' ' + link + '\n\n' + (nomSoc || 'Parc Pilot'));
@@ -3959,6 +3959,26 @@ FP.MAIL_DEFAUT = {
   relanceGarage: `Bonjour {prenom},\n🔧 Rendez-vous garage pour le véhicule {immat} ({motif}) : prévu le {date} 📅 — pense à t'organiser.`,
   relanceKm: `Bonjour {prenom},\n📸 Un petit coup d'œil au compteur du véhicule {immat} ? 😊 Ça file en 30 secondes !`,
   relanceAmende: `Bonjour {prenom},\n🎫 Une amende concerne le véhicule {immat} — pense à la régler pour éviter une majoration 💵\nRegarde ta boîte mail 📩`,
+  // Modèle FR de la demande de signature d'état des lieux (SOURCE UNIQUE — utilisé aussi comme défaut du champ éditable).
+  signature: `Bonjour {prenom},\n\nDernière étape avant de rouler ! 🚀 Signe l'état des lieux de ta {modele} ({immat}) en quelques secondes, directement depuis ce mail.`,
+  // ===== VERSIONS ANGLAISES (envoyées quand la langue du conducteur n'est pas le français). TOUTES
+  // ÉDITABLES dans Paramètres → E-mails (section « English e-mails ») — jamais en dur. =====
+  relevekm_en: `Hello {prenom},\n\nPlease share the current mileage of vehicle {immat}. It's quick: one tap, one number, done.`,
+  prevAcces_en:     `Hello {prenom},\n🔑 Here's the space for vehicle {immat} 🎉 mileage, documents and small issues, all in one place 👇\n{lien}`,
+  prevCarteGrise_en:`Hello {prenom},\n🪪 The registration document for vehicle {immat} is waiting here — open the link then "My documents" 👇\n{lien}`,
+  prevRelanceKm_en: `Hello {prenom},\n📸 A quick look at the odometer of vehicle {immat}? 😊 It takes 30 seconds, it's right here 👇\n{lien}`,
+  prevCt_en:        `Hello {prenom},\n🔧 The roadworthiness test for vehicle {immat} is coming up (due {date}) ⏳ — time to book a slot! 📅`,
+  prevRevision_en:  `Hello {prenom},\n🛠️ Vehicle {immat} will soon need a trip to the garage 🚗 (service / maintenance due).`,
+  prevAnnonce_en:   `Hello,\n🏷️ Good deal ahead! Vehicle {immat} is for sale — photos and details here 👇\n{lien}`,
+  rdvgarage_en: `Hello {prenom},\n\nAn appointment is scheduled for vehicle {immat} on {date}. 🗓️\nReason: {motif}\n\nYou'll get a quick reminder the day before, no worries 🙂\nAnd feel free to ask if you have any question!`,
+  rappelgarage_en: `Hello {prenom},\n\nQuick reminder: an appointment is scheduled tomorrow for vehicle {immat}. 🗓️\nReason: {motif}\n\nHave a great day, and see you soon! 🙂`,
+  invitation_en: `Hello,\n\nWelcome to Parc Pilot! 🎉 Your access to the fleet management platform is ready.\n\nChoose your password in one click (button just below) and you can log in right away. Everything in one place, simple and fast.\n\nYour login: {email}\n\nSee you soon! 🚗`,
+  signature_en: `Hello {prenom},\n\nLast step before hitting the road! 🚀 Sign the condition report for your {modele} ({immat}) in seconds, right from this email.`,
+  relanceCt_en: `Hello {prenom},\n🔧 The roadworthiness test for vehicle {immat} is coming up (due {date}) ⏳ — time to book a slot! 📅`,
+  relanceEntretien_en: `Hello {prenom},\n🛠️ Vehicle {immat} has maintenance due ({date}) 🚗 — remember to book a garage visit.`,
+  relanceGarage_en: `Hello {prenom},\n🔧 Garage appointment for vehicle {immat} ({motif}): scheduled on {date} 📅 — please plan ahead.`,
+  relanceKm_en: `Hello {prenom},\n📸 A quick look at the odometer of vehicle {immat}? 😊 It takes 30 seconds!`,
+  relanceAmende_en: `Hello {prenom},\n🎫 A fine concerns vehicle {immat} — remember to settle it to avoid a surcharge 💵\nCheck your inbox 📩`,
 };
 // Remplissage GÉNÉRIQUE des balises d'un modèle e-mail ({prenom} = 1er mot ; {plaque}/{immat}/{motif}/
 // {date}/{email}). Une balise vide disparaît proprement (avec son espace). Source unique côté site + repli.
@@ -3982,8 +4002,16 @@ FP.fillTags = function (tpl, o) {
     .trim();
 };
 // Modèle e-mail ACTIF : texte personnalisé de la société (profil[profilKey]) sinon défaut (MAIL_DEFAUT[defKey]).
-FP.mailModeleProfil = function (profilKey, defKey) {
+FP.mailModeleProfil = function (profilKey, defKey) { return FP.mailModeleProfilL(profilKey, defKey, 'fr'); };
+// Idem, mais SELON LA LANGUE (fr/en). lang==='en' → modèle EN personnalisé (profil[key+'_en']) sinon
+// défaut EN (MAIL_DEFAUT[def+'_en']) ; à défaut, repli sur le FR (édité sinon défaut). ⚠️ SOURCE UNIQUE :
+// tout e-mail passe par ici → éditer le champ EN dans Paramètres change bien le mail envoyé (jamais en dur).
+FP.mailModeleProfilL = function (profilKey, defKey, lang) {
   let prof = {}; try { prof = FP.societeProfil ? FP.societeProfil() : {}; } catch (e) {}
+  if (String(lang) === 'en') {
+    const ve = prof[profilKey + '_en']; if (ve && String(ve).trim()) return String(ve);
+    const de = FP.MAIL_DEFAUT[defKey + '_en']; if (de && String(de).trim()) return String(de);
+  }
   const v = prof[profilKey]; if (v && String(v).trim()) return String(v);
   return FP.MAIL_DEFAUT[defKey] || '';
 };
@@ -4007,13 +4035,34 @@ FP.MAIL_OBJET_DEFAUT = {
   relanceGarage: 'Rendez-vous garage — {immat}',
   relanceKm: 'Relevé kilométrique — {immat}',
   relanceAmende: 'Amende à régler — {immat}',
+  // Objets ANGLAIS (éditables — section « English e-mails »).
+  signature_en: 'Condition report to sign — {immat}',
+  bienvenue_en: 'Welcome on board 🚗 — your vehicle space',
+  relevekm_en: 'Mileage reading — {immat}',
+  rdvgarage_en: '{motif} on {date} ({immat})',
+  rappelgarage_en: 'Reminder: {motif} tomorrow ({immat})',
+  invitation_en: 'Welcome to Parc Pilot 🎉 — your access',
+  relanceCt_en: 'Roadworthiness test — {immat}',
+  relanceEntretien_en: 'Maintenance due — {immat}',
+  relanceGarage_en: 'Garage appointment — {immat}',
+  relanceKm_en: 'Mileage reading — {immat}',
+  relanceAmende_en: 'Fine to settle — {immat}',
 };
 // Objet e-mail ACTIF (personnalisé société sinon défaut), balises déjà remplies. `defKey` = clé de
 // MAIL_OBJET_DEFAUT ; le champ profil correspondant est `mailObjet<DefKey>` (1re lettre en maj).
-FP.mailObjet = function (defKey, tags) {
+FP.mailObjet = function (defKey, tags) { return FP.mailObjetL(defKey, tags, 'fr'); };
+// Objet e-mail ACTIF selon la langue (fr/en). En anglais : profil[mailObjet<Def>_en] sinon défaut EN,
+// sinon repli FR. `defKey` NE DOIT PAS déjà contenir « _en » (le suffixe est ajouté ici).
+FP.mailObjetL = function (defKey, tags, lang) {
   let prof = {}; try { prof = FP.societeProfil ? FP.societeProfil() : {}; } catch (e) {}
-  const pk = 'mailObjet' + String(defKey).charAt(0).toUpperCase() + String(defKey).slice(1);
-  const raw = (prof[pk] && String(prof[pk]).trim()) ? String(prof[pk]) : (FP.MAIL_OBJET_DEFAUT[defKey] || '');
+  const Cap = String(defKey).charAt(0).toUpperCase() + String(defKey).slice(1);
+  let raw = '';
+  if (String(lang) === 'en') {
+    const pe = prof['mailObjet' + Cap + '_en'];
+    if (pe && String(pe).trim()) raw = String(pe);
+    else if (FP.MAIL_OBJET_DEFAUT[defKey + '_en']) raw = FP.MAIL_OBJET_DEFAUT[defKey + '_en'];
+  }
+  if (!raw) { const p = prof['mailObjet' + Cap]; raw = (p && String(p).trim()) ? String(p) : (FP.MAIL_OBJET_DEFAUT[defKey] || ''); }
   const out = FP.fillTags ? FP.fillTags(raw, tags || {}) : raw;
   return String(out || '').trim();
 };
@@ -4077,6 +4126,38 @@ FP.PROFIL_CHAMPS = [
   { key: 'mailModelePrevCt',          label: "Prévenir — CT bientôt",                  type: 'textarea', ph: 'Balises : {prenom}, {immat}, {date}.', default: FP.MAIL_DEFAUT.prevCt },
   { key: 'mailModelePrevRevision',    label: "Prévenir — Révision",                    type: 'textarea', ph: 'Balises : {prenom}, {immat}.', default: FP.MAIL_DEFAUT.prevRevision },
   { key: 'mailModelePrevAnnonce',     label: "Prévenir — Annonce de vente",            type: 'textarea', ph: 'Balises : {immat}, {lien}.', default: FP.MAIL_DEFAUT.prevAnnonce },
+  // ===== VERSIONS ANGLAISES ÉDITABLES (section « English e-mails » des Paramètres). lang:'en' →
+  //   le formulaire les regroupe à part. Chaque champ ALIMENTE l'e-mail réel (mailModeleProfilL /
+  //   mailObjetL) : quand on l'édite, le mail EN change (jamais en dur). Vide = défaut EN traduit. =====
+  { key: 'mailObjetAmende_en', label: "EN subject — fines (payment / designation / reminder)", type: 'text', ph: 'Tags: {avis}, {plaque}.', default: FP.MAIL_OBJET_DEFAUT.amende_en, lang: 'en' },
+  { key: 'mailObjetSignature_en', label: "EN subject — condition report to sign", type: 'text', ph: 'Tags: {immat}, {modele}, {prenom}.', default: FP.MAIL_OBJET_DEFAUT.signature_en, lang: 'en' },
+  { key: 'mailObjetBienvenue_en', label: "EN subject — welcome (driver)", type: 'text', ph: 'Tags: {prenom}, {plaque}.', default: FP.MAIL_OBJET_DEFAUT.bienvenue_en, lang: 'en' },
+  { key: 'mailObjetRelevekm_en', label: "EN subject — mileage request", type: 'text', ph: 'Tags: {prenom}, {immat}.', default: FP.MAIL_OBJET_DEFAUT.relevekm_en, lang: 'en' },
+  { key: 'mailObjetRdvgarage_en', label: "EN subject — garage appointment", type: 'text', ph: 'Tags: {immat}, {date}, {motif}, {prenom}.', default: FP.MAIL_OBJET_DEFAUT.rdvgarage_en, lang: 'en' },
+  { key: 'mailObjetRappelgarage_en', label: "EN subject — garage reminder (day before)", type: 'text', ph: 'Tags: {immat}, {motif}, {prenom}.', default: FP.MAIL_OBJET_DEFAUT.rappelgarage_en, lang: 'en' },
+  { key: 'mailObjetInvitation_en', label: "EN subject — account invitation", type: 'text', ph: 'Tags: {email}.', default: FP.MAIL_OBJET_DEFAUT.invitation_en, lang: 'en' },
+  { key: 'mailObjetRelanceCt_en', label: "EN subject — roadworthiness test reminder", type: 'text', ph: 'Tags: {immat}, {prenom}.', default: FP.MAIL_OBJET_DEFAUT.relanceCt_en, lang: 'en' },
+  { key: 'mailObjetRelanceEntretien_en', label: "EN subject — maintenance reminder", type: 'text', ph: 'Tags: {immat}, {prenom}.', default: FP.MAIL_OBJET_DEFAUT.relanceEntretien_en, lang: 'en' },
+  { key: 'mailObjetRelanceGarage_en', label: "EN subject — garage appointment reminder", type: 'text', ph: 'Tags: {immat}, {prenom}.', default: FP.MAIL_OBJET_DEFAUT.relanceGarage_en, lang: 'en' },
+  { key: 'mailObjetRelanceKm_en', label: "EN subject — mileage reminder", type: 'text', ph: 'Tags: {immat}, {prenom}.', default: FP.MAIL_OBJET_DEFAUT.relanceKm_en, lang: 'en' },
+  { key: 'mailObjetRelanceAmende_en', label: "EN subject — fine reminder", type: 'text', ph: 'Tags: {immat}, {prenom}.', default: FP.MAIL_OBJET_DEFAUT.relanceAmende_en, lang: 'en' },
+  { key: 'mailModeleBienvenue_en', label: "EN — Welcome on board (driver · QR)", type: 'textarea', ph: 'Tags: {prenom}, {plaque}.', default: FP.MAIL_DEFAUT.bienvenue_en, lang: 'en' },
+  { key: 'mailModeleInvitation_en', label: "EN — Account invitation", type: 'textarea', ph: 'Tags: {email}.', default: FP.MAIL_DEFAUT.invitation_en, lang: 'en' },
+  { key: 'mailModeleReleveKm_en', label: "EN — Mileage request", type: 'textarea', ph: 'Tags: {prenom}, {immat}.', default: FP.MAIL_DEFAUT.relevekm_en, lang: 'en' },
+  { key: 'mailModeleRdvGarage_en', label: "EN — Garage appointment announcement", type: 'textarea', ph: 'Tags: {prenom}, {immat}, {motif}, {date}.', default: FP.MAIL_DEFAUT.rdvgarage_en, lang: 'en' },
+  { key: 'mailModeleRappelGarage_en', label: "EN — Garage appointment reminder (day before)", type: 'textarea', ph: 'Tags: {prenom}, {immat}, {motif}.', default: FP.MAIL_DEFAUT.rappelgarage_en, lang: 'en' },
+  { key: 'mailModeleSignature_en', label: "EN — Condition report to sign", type: 'textarea', ph: 'Tags: {prenom}, {immat}, {modele}, {date}.', default: FP.MAIL_DEFAUT.signature_en, lang: 'en' },
+  { key: 'mailModeleRelanceCt_en', label: "EN — Reminder: roadworthiness test", type: 'textarea', ph: 'Tags: {prenom}, {immat}, {date}.', default: FP.MAIL_DEFAUT.relanceCt_en, lang: 'en' },
+  { key: 'mailModeleRelanceEntretien_en', label: "EN — Reminder: maintenance due", type: 'textarea', ph: 'Tags: {prenom}, {immat}, {date}.', default: FP.MAIL_DEFAUT.relanceEntretien_en, lang: 'en' },
+  { key: 'mailModeleRelanceGarage_en', label: "EN — Reminder: garage appointment", type: 'textarea', ph: 'Tags: {prenom}, {immat}, {date}, {motif}.', default: FP.MAIL_DEFAUT.relanceGarage_en, lang: 'en' },
+  { key: 'mailModeleRelanceKm_en', label: "EN — Reminder: mileage reading", type: 'textarea', ph: 'Tags: {prenom}, {immat}.', default: FP.MAIL_DEFAUT.relanceKm_en, lang: 'en' },
+  { key: 'mailModeleRelanceAmende_en', label: "EN — Reminder: fine to settle", type: 'textarea', ph: 'Tags: {prenom}, {immat}.', default: FP.MAIL_DEFAUT.relanceAmende_en, lang: 'en' },
+  { key: 'mailModelePrevAcces_en', label: "EN — Notify: vehicle access", type: 'textarea', ph: 'Tags: {prenom}, {immat}, {lien}.', default: FP.MAIL_DEFAUT.prevAcces_en, lang: 'en' },
+  { key: 'mailModelePrevCarteGrise_en', label: "EN — Notify: registration", type: 'textarea', ph: 'Tags: {prenom}, {immat}, {lien}.', default: FP.MAIL_DEFAUT.prevCarteGrise_en, lang: 'en' },
+  { key: 'mailModelePrevRelanceKm_en', label: "EN — Notify: mileage", type: 'textarea', ph: 'Tags: {prenom}, {immat}, {lien}.', default: FP.MAIL_DEFAUT.prevRelanceKm_en, lang: 'en' },
+  { key: 'mailModelePrevCt_en', label: "EN — Notify: MOT soon", type: 'textarea', ph: 'Tags: {prenom}, {immat}, {date}.', default: FP.MAIL_DEFAUT.prevCt_en, lang: 'en' },
+  { key: 'mailModelePrevRevision_en', label: "EN — Notify: service", type: 'textarea', ph: 'Tags: {prenom}, {immat}.', default: FP.MAIL_DEFAUT.prevRevision_en, lang: 'en' },
+  { key: 'mailModelePrevAnnonce_en', label: "EN — Notify: for sale", type: 'textarea', ph: 'Tags: {immat}, {lien}.', default: FP.MAIL_DEFAUT.prevAnnonce_en, lang: 'en' },
   // ⚠️ Le champ « Signature (bas des e-mails d'amende) » a été RETIRÉ (2026-09-25) : les e-mails
   //    partent désormais via la plateforme avec un pied de page brandé (société · via Parc Pilot),
   //    plus besoin d'une signature manuelle. L'ancienne valeur settings.mailSignature est ignorée.
@@ -11498,6 +11579,9 @@ FP.edl = {
               // fier au paramètre `who` (falsifiable). `who` reste dans l'URL pour l'affichage/compat.
               const link = base + '?t=' + encodeURIComponent(s.sigToken || token) + '&who=' + s.role;
               const prenomS = String(s.nom || '').trim().split(/\s+/)[0] || '';
+              // Conducteur en anglais → modèle EN éditable + libellés EN (le signataire société reste FR).
+              const _sen = (s.role !== 'societe') && !!(FP.condLangue && FP.condLangue(s.nom) === 'en');
+              const _tplSign = (FP.mailModeleProfilL ? FP.mailModeleProfilL('mailModeleSignature', 'signature', _sen ? 'en' : 'fr') : tpl) || tpl;
               // La plaque ne doit JAMAIS se couper en deux lignes → span nowrap partout où elle apparaît.
               const plaqueHtml = '<span style="white-space:nowrap">' + esc(data.immat) + '</span>';
               // Deux messages distincts : le CONDUCTEUR reçoit le modèle configurable (ton libre) ;
@@ -11507,16 +11591,16 @@ FP.edl = {
               if (s.role === 'societe') {
                 intro = 'Bonjour ' + esc(prenomS) + ',<br><br>Merci de vérifier et de signer l\'état des lieux du ' + esc(data.modele) + ' (' + plaqueHtml + ') <b>pour la société</b>. Une fois validé, le conducteur recevra automatiquement le lien pour signer à son tour.';
               } else {
-                intro = esc(tpl).replace(/\{prenom\}/g, esc(prenomS)).replace(/\{immat\}/g, plaqueHtml).replace(/\{modele\}/g, esc(data.modele)).replace(/\{date\}/g, esc(FP.date(data.date))).replace(/\n/g, '<br>');
+                intro = esc(_tplSign).replace(/\{prenom\}/g, esc(prenomS)).replace(/\{immat\}/g, plaqueHtml).replace(/\{modele\}/g, esc(data.modele)).replace(/\{date\}/g, esc(FP.date(data.date))).replace(/\n/g, '<br>');
               }
               const html = `<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:520px;margin:0 auto;color:#0f172a">
   ${logoSrc ? `<div style="text-align:center;padding:6px 0"><img src="${esc(logoSrc)}" alt="" style="max-height:46px"></div>` : ''}
   <div style="background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:22px 24px">
-    <div style="font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#F97316">État des lieux à signer</div>
+    <div style="font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#F97316">${_sen ? 'Condition report to sign' : 'État des lieux à signer'}</div>
     <div style="font-size:15px;line-height:1.55;margin:10px 0 2px">${intro}</div>
-    <div style="background:#f8fafc;border-radius:10px;padding:11px 14px;margin:14px 0;font-size:13px;color:#334155">🚗 <b>${esc(data.modele)}</b> · ${plaqueHtml}${isRestit ? ' · restitution' : ''} · ${esc(FP.date(data.date))}</div>
-    <div style="text-align:center;margin:18px 0 6px"><a href="${link}" style="display:inline-block;background:#0F1E3D;color:#fff;padding:13px 32px;border-radius:10px;text-decoration:none;font-weight:800;font-size:15px">✍️ Signer le document</a></div>
-    <div style="text-align:center;font-size:11.5px;color:#94a3b8;margin-top:8px">Signature électronique sécurisée · quelques secondes suffisent</div>
+    <div style="background:#f8fafc;border-radius:10px;padding:11px 14px;margin:14px 0;font-size:13px;color:#334155">🚗 <b>${esc(data.modele)}</b> · ${plaqueHtml}${isRestit ? (_sen ? ' · return' : ' · restitution') : ''} · ${esc(FP.date(data.date))}</div>
+    <div style="text-align:center;margin:18px 0 6px"><a href="${link}" style="display:inline-block;background:#0F1E3D;color:#fff;padding:13px 32px;border-radius:10px;text-decoration:none;font-weight:800;font-size:15px">${_sen ? '✍️ Sign the document' : '✍️ Signer le document'}</a></div>
+    <div style="text-align:center;font-size:11.5px;color:#94a3b8;margin-top:8px">${_sen ? 'Secure electronic signature · takes just seconds' : 'Signature électronique sécurisée · quelques secondes suffisent'}</div>
   </div>
   <div style="text-align:center;font-size:11px;color:#cbd5e1;margin-top:10px">— ${esc(data.socNom || 'Gestion de flotte')} · via Parc Pilot</div>
 </div>`;
@@ -11524,8 +11608,8 @@ FP.edl = {
               // {immat}{modele}{prenom} ; le signataire SOCIÉTÉ garde son objet dédié (rôle différent).
               const _subjSign = (s.role === 'societe')
                 ? ('À signer pour la société — état des lieux ' + data.immat)
-                : ((FP.mailObjet ? FP.mailObjet('signature', { immat: data.immat, modele: data.modele, prenom: prenomS }) : '') || ('À signer — état des lieux ' + data.immat));
-              return { link, subject: _subjSign, html, text: 'Signer l\'état des lieux : ' + link };
+                : ((FP.mailObjetL ? FP.mailObjetL('signature', { immat: data.immat, modele: data.modele, prenom: prenomS }, _sen ? 'en' : 'fr') : '') || (_sen ? ('To sign — condition report ' + data.immat) : ('À signer — état des lieux ' + data.immat)));
+              return { link, subject: _subjSign, html, text: (_sen ? 'Sign the condition report: ' : 'Signer l\'état des lieux : ') + link };
             };
             const minOrdre = Math.min.apply(null, signersList.map(s => s.ordre));
             const rec = {
@@ -14369,9 +14453,11 @@ FP.msg = {
       if (!(window.FP && FP.sendEmail)) { if (FP.toast) FP.toast('Envoi e-mail indisponible'); return; }
       // ⚠️ RÈGLE : dans un E-MAIL, jamais d'URL brute → on la remplace par un lien « cliquez ici ».
       //    (Le SMS/WhatsApp, lui, garde l'URL en clair via `text` — un lien n'y est pas cliquable.)
-      const _linkify = (s) => esc(s).replace(/\n/g, '<br>').replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" style="color:#0EA5A0;font-weight:700;text-decoration:underline">cliquez ici</a>');
+      const _mlang = (String(opts.lang) === 'en') ? 'en' : 'fr';
+      const _clic = (_mlang === 'en') ? 'click here' : 'cliquez ici';
+      const _linkify = (s) => esc(s).replace(/\n/g, '<br>').replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" style="color:#0EA5A0;font-weight:700;text-decoration:underline">' + _clic + '</a>');
       const html = (typeof opts.emailHtml === 'function') ? opts.emailHtml(tx())
-        : (opts.emailHtml || (FP.mailBrand ? FP.mailBrand({ title: opts.emailSubject || opts.title || '', prenom: opts.nom || '', nomSoc: opts.emailNomSoc || '', logoUrl: opts.emailLogo || '', bodyHtml: '<div style="white-space:pre-wrap;line-height:1.5">' + _linkify(tx()) + '</div>' }) : ('<div style="white-space:pre-wrap">' + _linkify(tx()) + '</div>')));
+        : (opts.emailHtml || (FP.mailBrand ? FP.mailBrand({ title: opts.emailSubject || opts.title || '', prenom: opts.nom || '', nomSoc: opts.emailNomSoc || '', logoUrl: opts.emailLogo || '', lang: _mlang, bodyHtml: '<div style="white-space:pre-wrap;line-height:1.5">' + _linkify(tx()) + '</div>' }) : ('<div style="white-space:pre-wrap">' + _linkify(tx()) + '</div>')));
       const oldTxt = eb.textContent; eb.disabled = true; eb.textContent = 'Envoi…';
       try {
         await FP.sendEmail(Object.assign({ to: opts.email, subject: opts.emailSubject || opts.title || 'Message', html: html, text: tx() }, opts.emailOpts || {}));
@@ -14521,6 +14607,11 @@ FP.calendarBtnHtml = function (ev, opts) {
 FP.mailBrand = function (o) {
   o = o || {};
   const esc = FP.esc || (x => String(x == null ? '' : x));
+  // Libellés de l'ossature (en-tête sombre) selon la langue de l'e-mail (fr/en).
+  const _en = (String(o.lang) === 'en');
+  const LBL = _en
+    ? { dest: 'Recipient', montant: 'Amount', avis: 'Notice no.' }
+    : { dest: 'Destinataire', montant: 'Montant', avis: "N° d'avis" };
   const nomSoc = o.nomSoc || '';
   const logoUrl = /^https?:\/\//.test(String(o.logoUrl || '')) ? String(o.logoUrl) : '';
   // Prénom SEUL (jamais le nom de famille dans l'e-mail au conducteur — consigne).
@@ -14546,8 +14637,8 @@ FP.mailBrand = function (o) {
   let infoBlock = '';
   if (hasMontant || hasAvis) {
     const cells = [];
-    if (hasMontant) cells.push('<td width="' + (hasAvis ? '50%' : '100%') + '" style="text-align:center;padding:2px 10px;vertical-align:top"><div style="font-size:10px;color:#94A3B8;text-transform:uppercase;letter-spacing:1px;font-weight:700">Montant</div><div style="font-size:18px;font-weight:800;color:#ffffff;margin-top:4px">' + esc(eur(o.montant)) + '</div></td>');
-    if (hasAvis) cells.push('<td width="' + (hasMontant ? '50%' : '100%') + '" style="text-align:center;padding:2px 10px;vertical-align:top"><div style="font-size:10px;color:#94A3B8;text-transform:uppercase;letter-spacing:1px;font-weight:700">N° d\'avis</div><div style="font-size:14px;font-weight:800;color:#ffffff;margin-top:6px;font-family:Consolas,monospace">' + esc(o.numeroAvis) + '</div></td>');
+    if (hasMontant) cells.push('<td width="' + (hasAvis ? '50%' : '100%') + '" style="text-align:center;padding:2px 10px;vertical-align:top"><div style="font-size:10px;color:#94A3B8;text-transform:uppercase;letter-spacing:1px;font-weight:700">' + esc(LBL.montant) + '</div><div style="font-size:18px;font-weight:800;color:#ffffff;margin-top:4px">' + esc(eur(o.montant)) + '</div></td>');
+    if (hasAvis) cells.push('<td width="' + (hasMontant ? '50%' : '100%') + '" style="text-align:center;padding:2px 10px;vertical-align:top"><div style="font-size:10px;color:#94A3B8;text-transform:uppercase;letter-spacing:1px;font-weight:700">' + esc(LBL.avis) + '</div><div style="font-size:14px;font-weight:800;color:#ffffff;margin-top:6px;font-family:Consolas,monospace">' + esc(o.numeroAvis) + '</div></td>');
     infoBlock = '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:18px"><tr><td style="border-top:1px solid rgba(255,255,255,.14);padding-top:14px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>' + cells.join('') + '</tr></table></td></tr></table>';
   }
   return FP.mailDocument(''
@@ -14558,7 +14649,7 @@ FP.mailBrand = function (o) {
     +   (o.title ? '<div style="font-size:19px;font-weight:800;font-style:italic;margin-top:14px;line-height:1.25;color:#ffffff">' + esc(o.title) + '</div>' : '')
     +   (plate ? '<div style="margin-top:16px">' + plate + '</div>' : '')
     +   (o.vehicule ? '<div style="font-size:13px;color:#CBD5E1;margin-top:8px;font-weight:600">' + esc(o.vehicule) + '</div>' : '')
-    +   (prenom ? '<div style="margin-top:16px"><div style="font-size:10px;color:#94A3B8;text-transform:uppercase;letter-spacing:1px;font-weight:700">Destinataire</div><div style="font-size:16px;font-weight:700;color:#ffffff;margin-top:3px">' + esc(prenom) + '</div></div>' : '')
+    +   (prenom ? '<div style="margin-top:16px"><div style="font-size:10px;color:#94A3B8;text-transform:uppercase;letter-spacing:1px;font-weight:700">' + esc(LBL.dest) + '</div><div style="font-size:16px;font-weight:700;color:#ffffff;margin-top:3px">' + esc(prenom) + '</div></div>' : '')
     +   infoBlock
     + '</div>'
     // ── LIGNE ORANGE ──
@@ -14631,18 +14722,20 @@ FP.mailModeleAmende = function (kind, prenom) {
 FP.renderMailAmende = function (kind, a, ctx) {
   a = a || {}; ctx = ctx || {};
   const esc = FP.esc || (x => String(x == null ? '' : x));
-  const titleMap = { paiement: 'Contravention à régler', designation: 'Contravention à désigner', relance: 'Rappel de contravention' };
   const prenom = a.prenom || '';
+  const _amEn = !!(FP.condLangue && FP.condLangue(prenom) === 'en');
+  const titleMap = _amEn
+    ? { paiement: 'Fine to pay', designation: 'Fine to designate', relance: 'Fine reminder' }
+    : { paiement: 'Contravention à régler', designation: 'Contravention à désigner', relance: 'Rappel de contravention' };
   const plaque = (FP.amendePlaque ? FP.amendePlaque(a) : (a.immatriculation || a.plaque || ''));
   const bodyText = FP.applyMailTags(FP.mailModeleAmende(kind, prenom), { prenom, plaque });
   const bodyHtml = esc(bodyText).replace(/\n/g, '<br>');
   const html = FP.mailBrand({
-    title: titleMap[kind] || 'Avis de contravention',
-    prenom, plaque, montant: a.montant, numeroAvis: a.numeroAvis,
+    title: titleMap[kind] || (_amEn ? 'Fine notice' : 'Avis de contravention'),
+    prenom, plaque, montant: a.montant, numeroAvis: a.numeroAvis, lang: _amEn ? 'en' : 'fr',
     nomSoc: ctx.nomSoc || '', logoUrl: ctx.logoUrl || '', bodyHtml
   });
   // Objet ÉDITABLE (Paramètres → E-mails → « Objet — amendes »), partagé par les 3 types → même fil.
-  const _amEn = !!(FP.condLangue && FP.condLangue(prenom) === 'en');
   const _defSubj = 'CONTRAVENTION' + (a.numeroAvis ? ' ' + a.numeroAvis : '');
   const subjectBase = (FP.mailObjet ? (FP.mailObjet(_amEn ? 'amende_en' : 'amende', { avis: a.numeroAvis, plaque }) || _defSubj) : _defSubj);
   return { subject: (kind === 'relance' ? 'Re: ' : '') + subjectBase, html, text: bodyText };
@@ -14681,8 +14774,8 @@ FP.mailTestRecipient = function () {
   return '';
 };
 // Envoi d'un e-mail de TEST à `to` (objet préfixé [TEST], aucune pièce jointe, aucune vraie donnée).
-FP.sendMailTest = async function (key, to) {
-  const m = await FP.buildMail(key); if (!m) throw new Error('E-mail inconnu : ' + key);
+FP.sendMailTest = async function (key, to, lang) {
+  const m = await FP.buildMail(key, lang === 'en' ? { lang: 'en' } : undefined); if (!m) throw new Error('E-mail inconnu : ' + key);
   if (!(window.FP && FP.sendEmail)) throw new Error('Envoi indisponible');
   await FP.sendEmail({ to, subject: '[TEST] ' + (m.subject || m.label), html: m.html, text: m.text || '' });
   return m;
@@ -14695,7 +14788,7 @@ FP.sendMailTest = async function (key, to) {
   const btn = (href, label) => '<a href="' + esc(href || '#') + '" style="display:inline-block;background:#0B1220;color:#ffffff;padding:14px 30px;border-radius:10px;text-decoration:none;font-weight:800;font-size:15px">' + esc(label) + '</a>';
   // Corps = message ÉDITABLE (texte simple, sauts de ligne conservés). La mise en page reste fixe.
   const bodyText = (t) => '<div style="white-space:pre-wrap;line-height:1.55">' + esc(t).replace(/\n/g, '<br>') + '</div>';
-  const tpl = (profilKey, defKey, tags) => FP.fillTags(FP.mailModeleProfil(profilKey, defKey), tags || {});
+  const tpl = (profilKey, defKey, tags, lang) => FP.fillTags(FP.mailModeleProfilL(profilKey, defKey, lang || 'fr'), tags || {});
   const amendeSample = () => ({ prenom: 'Alex Martin', immatriculation: 'AA-123-AA', montant: 90, numeroAvis: '2026ABCD1234567' });
   // 1) AMENDES (exactement l'e-mail réel — FP.renderMailAmende)
   ['paiement', 'designation', 'relance'].forEach(kind => {
@@ -14712,15 +14805,14 @@ FP.sendMailTest = async function (key, to) {
     key: 'bienvenue-conducteur', label: 'Bienvenue à bord (conducteur · QR)', group: 'Comptes',
     sample: () => ({ prenom: 'Alex', plaque: 'AA-123-AA', portail: '#' }),
     build: (d) => {
-      // Bilingue : si le conducteur est en « English » (d.lang), on prend le modèle EN par défaut
-      //   (pas de modèle EN personnalisé pour la bienvenue) + libellés EN. Sinon FR (modèle éditable).
-      const en = (d.lang === 'en');
-      const t = en ? FP.fillTags((FP.MAIL_DEFAUT.bienvenue_en || FP.MAIL_DEFAUT.bienvenue || ''), { prenom: d.prenom, plaque: d.plaque })
-                   : tpl('mailModeleBienvenue', 'bienvenue', { prenom: d.prenom, plaque: d.plaque });
+      // Bilingue : le corps ET l'objet sont ÉDITABLES en EN (mailModeleBienvenue_en / mailObjetBienvenue_en) —
+      // repli sur le défaut EN puis FR. Rien en dur : éditer le champ EN change le mail.
+      const en = (d.lang === 'en'); const lg = en ? 'en' : 'fr';
+      const t = tpl('mailModeleBienvenue', 'bienvenue', { prenom: d.prenom, plaque: d.plaque }, lg);
       return {
-        subject: en ? 'Welcome on board 🚗 · your vehicle space'
-                    : ((FP.mailObjet ? FP.mailObjet('bienvenue', { prenom: d.prenom, plaque: d.plaque }) : '') || 'Bienvenue à bord 🚗 · l\'espace véhicule'),
-        html: FP.mailBrand({ title: en ? 'Welcome on board' : 'Bienvenue à bord', prenom: d.prenom, plaque: d.plaque, nomSoc: d.nomSoc, logoUrl: d.logoUrl,
+        subject: FP.mailObjetL('bienvenue', { prenom: d.prenom, plaque: d.plaque }, lg)
+                 || (en ? 'Welcome on board 🚗 · your vehicle space' : 'Bienvenue à bord 🚗 · l\'espace véhicule'),
+        html: FP.mailBrand({ title: en ? 'Welcome on board' : 'Bienvenue à bord', prenom: d.prenom, plaque: d.plaque, nomSoc: d.nomSoc, logoUrl: d.logoUrl, lang: lg,
           bodyHtml: bodyText(t), buttonHtml: btn(d.portail, en ? 'Access my space →' : 'Accéder à mon espace →') }),
         text: t + (d.portail && d.portail !== '#' ? ('\n\n' + (en ? 'Your space: ' : 'Ton espace : ') + d.portail) : '')
       };
@@ -14731,10 +14823,10 @@ FP.sendMailTest = async function (key, to) {
     key: 'bienvenue', label: 'Invitation à un compte (accès plateforme)', group: 'Comptes', from: 'plateforme',
     note: "Différent du « Bienvenue à bord » conducteur : celui-ci ouvre un COMPTE (connexion). Envoyé au nom de Parc Pilot → l'envoi réel nécessite le domaine parc-pilot.fr vérifié dans Resend.",
     sample: () => ({ email: 'alex.martin@exemple.fr', link: '#' }),
-    build: (d) => { const t = tpl('mailModeleInvitation', 'invitation', { email: d.email }); return {
-      subject: (FP.mailObjet ? FP.mailObjet('invitation', { email: d.email }) : '') || 'Ton accès à Parc Pilot · définis ton mot de passe',
-      html: FP.mailShell({ brand: 'Parc Pilot', logoUrl: '', title: 'Bienvenue !',
-        bodyHtml: bodyText(t), buttonHtml: btn(d.link, 'Définir mon mot de passe →') }),
+    build: (d) => { const en=(d.lang==='en'); const lg=en?'en':'fr'; const t = tpl('mailModeleInvitation', 'invitation', { email: d.email }, lg); return {
+      subject: FP.mailObjetL('invitation', { email: d.email }, lg) || (en ? 'Your Parc Pilot access · set your password' : 'Ton accès à Parc Pilot · définis ton mot de passe'),
+      html: FP.mailShell({ brand: 'Parc Pilot', logoUrl: '', title: en ? 'Welcome!' : 'Bienvenue !',
+        bodyHtml: bodyText(t), buttonHtml: btn(d.link, en ? 'Set my password →' : 'Définir mon mot de passe →') }),
       text: t + '\n\n' + d.link + '\n\nParc Pilot · parc-pilot.fr'
     }; }
   });
@@ -14742,10 +14834,10 @@ FP.sendMailTest = async function (key, to) {
   FP.registerMail({
     key: 'releve-km', label: 'Relevé kilométrique', group: 'Kilométrage',
     sample: () => ({ prenom: 'Alex', immat: 'AA-123-AA', link: '#', relance: false }),
-    build: (d) => { const t = tpl('mailModeleReleveKm', 'relevekm', { prenom: d.prenom, immat: d.immat }); return {
-      subject: (FP.mailObjet ? FP.mailObjet('relevekm', { prenom: d.prenom, immat: d.immat }) : '') || ('Relevé kilométrique' + (d.immat ? ' (' + d.immat + ')' : '')),
-      html: FP.mailShell({ brand: d.nomSoc, logoUrl: d.logoUrl, title: 'Relevé kilométrique demandé',
-        bodyHtml: bodyText(t), buttonHtml: btn(d.link, 'Indiquer mon kilométrage →') }),
+    build: (d) => { const en=(d.lang==='en'); const lg=en?'en':'fr'; const t = tpl('mailModeleReleveKm', 'relevekm', { prenom: d.prenom, immat: d.immat }, lg); return {
+      subject: FP.mailObjetL('relevekm', { prenom: d.prenom, immat: d.immat }, lg) || ((en?'Mileage reading':'Relevé kilométrique') + (d.immat ? ' (' + d.immat + ')' : '')),
+      html: FP.mailShell({ brand: d.nomSoc, logoUrl: d.logoUrl, title: en ? 'Mileage reading requested' : 'Relevé kilométrique demandé',
+        bodyHtml: bodyText(t), buttonHtml: btn(d.link, en ? 'Enter my mileage →' : 'Indiquer mon kilométrage →') }),
       text: t + '\n\n' + d.link
     }; }
   });
@@ -14753,12 +14845,12 @@ FP.sendMailTest = async function (key, to) {
   FP.registerMail({
     key: 'rdv-garage', label: 'Annonce rendez-vous garage', group: 'Kilométrage',
     sample: () => ({ prenom: 'Alex', immat: 'AA-123-AA', motif: 'Révision', date: '05/10/2026' }),
-    build: (d) => { const t = tpl('mailModeleRdvGarage', 'rdvgarage', { prenom: d.prenom, immat: d.immat, motif: d.motif, date: d.date });
+    build: (d) => { const en=(d.lang==='en'); const lg=en?'en':'fr'; const t = tpl('mailModeleRdvGarage', 'rdvgarage', { prenom: d.prenom, immat: d.immat, motif: d.motif, date: d.date }, lg);
       const iso = (function (s) { const m = /^(\d{2})\/(\d{2})\/(\d{4})/.exec(String(s || '')); return m ? (m[3] + '-' + m[2] + '-' + m[1]) : String(s || '').slice(0, 10); })(d.date);
       const cal = FP.calendarBtnHtml ? FP.calendarBtnHtml({ title: (d.motif || 'Rendez-vous') + (d.immat ? ' · ' + d.immat : ''), date: iso, description: d.immat ? ('Véhicule : ' + d.immat) : '' }) : '';
       return {
-      subject: (FP.mailObjet ? FP.mailObjet('rdvgarage', { motif: d.motif, date: d.date, immat: d.immat, prenom: d.prenom }) : '') || ((d.motif || 'Rendez-vous garage') + (d.date ? ' le ' + d.date : '') + (d.immat ? ' (' + d.immat + ')' : '')),
-      html: FP.mailShell({ brand: d.nomSoc, logoUrl: d.logoUrl, title: (d.motif || 'Rendez-vous garage'), bodyHtml: bodyText(t) + cal }),
+      subject: FP.mailObjetL('rdvgarage', { motif: d.motif, date: d.date, immat: d.immat, prenom: d.prenom }, lg) || ((d.motif || (en?'Garage appointment':'Rendez-vous garage')) + (d.date ? (en?' on ':' le ') + d.date : '') + (d.immat ? ' (' + d.immat + ')' : '')),
+      html: FP.mailShell({ brand: d.nomSoc, logoUrl: d.logoUrl, title: (d.motif || (en?'Garage appointment':'Rendez-vous garage')), bodyHtml: bodyText(t) + cal }),
       text: t
     }; }
   });
@@ -14767,12 +14859,12 @@ FP.sendMailTest = async function (key, to) {
   FP.registerMail({
     key: 'rappel-entretien', label: 'Rappel rendez-vous garage (la veille)', group: 'Kilométrage',
     sample: () => ({ prenom: 'Alex', immat: 'AA-123-AA', motif: 'Révision', link: '#' }),
-    build: (d) => { const t = tpl('mailModeleRappelGarage', 'rappelgarage', { prenom: d.prenom, immat: d.immat, motif: d.motif });
+    build: (d) => { const en=(d.lang==='en'); const lg=en?'en':'fr'; const t = tpl('mailModeleRappelGarage', 'rappelgarage', { prenom: d.prenom, immat: d.immat, motif: d.motif }, lg);
       const demain = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
       const cal = FP.calendarBtnHtml ? FP.calendarBtnHtml({ title: (d.motif || 'Rendez-vous') + (d.immat ? ' · ' + d.immat : ''), date: demain, description: d.immat ? ('Véhicule : ' + d.immat) : '' }) : '';
       return {
-      subject: (FP.mailObjet ? FP.mailObjet('rappelgarage', { motif: d.motif, immat: d.immat, prenom: d.prenom }) : '') || ('Rappel : ' + String(d.motif).toLowerCase() + ' demain' + (d.immat ? ' (' + d.immat + ')' : '')),
-      html: FP.mailShell({ brand: d.nomSoc, logoUrl: d.logoUrl, title: esc(d.motif) + ' demain', bodyHtml: bodyText(t) + cal }),
+      subject: FP.mailObjetL('rappelgarage', { motif: d.motif, immat: d.immat, prenom: d.prenom }, lg) || ((en?'Reminder: ':'Rappel : ') + String(d.motif).toLowerCase() + (en?' tomorrow':' demain') + (d.immat ? ' (' + d.immat + ')' : '')),
+      html: FP.mailShell({ brand: d.nomSoc, logoUrl: d.logoUrl, title: esc(d.motif) + (en?' tomorrow':' demain'), bodyHtml: bodyText(t) + cal }),
       text: t
     }; }
   });
@@ -14781,12 +14873,12 @@ FP.sendMailTest = async function (key, to) {
     key: 'edl-a-signer', label: 'État des lieux à signer', group: 'États des lieux',
     sample: () => ({ prenom: 'Alex', immat: 'AA-123-AA', modele: 'Peugeot 208', link: '#' }),
     build: (d) => {
-      const def = "Bonjour {prenom},\n\nDernière étape avant de rouler ! 🚀 Signe l'état des lieux de ta {modele} ({immat}) en quelques secondes, directement depuis ce mail.";
-      let raw = def; try { const p = FP.societeProfil ? FP.societeProfil() : {}; if (p.mailModeleSignature && String(p.mailModeleSignature).trim()) raw = String(p.mailModeleSignature); } catch (e) {}
-      const t = FP.fillTags(raw.replace(/\{modele\}/gi, d.modele || ''), { prenom: d.prenom, immat: d.immat });
+      const en=(d.lang==='en'); const lg=en?'en':'fr';
+      const raw = FP.mailModeleProfilL('mailModeleSignature', 'signature', lg);
+      const t = FP.fillTags(String(raw).replace(/\{modele\}/gi, d.modele || ''), { prenom: d.prenom, immat: d.immat });
       return {
-        subject: (FP.mailObjet ? FP.mailObjet('signature', { immat: d.immat, modele: d.modele, prenom: d.prenom }) : '') || ('État des lieux à signer (' + d.immat + ')'),
-        html: FP.mailShell({ brand: d.nomSoc, logoUrl: d.logoUrl, title: 'État des lieux à signer', bodyHtml: bodyText(t), buttonHtml: btn(d.link, 'Signer le document →') }),
+        subject: FP.mailObjetL('signature', { immat: d.immat, modele: d.modele, prenom: d.prenom }, lg) || ((en?'Condition report to sign (':'État des lieux à signer (') + d.immat + ')'),
+        html: FP.mailShell({ brand: d.nomSoc, logoUrl: d.logoUrl, title: en?'Condition report to sign':'État des lieux à signer', bodyHtml: bodyText(t), buttonHtml: btn(d.link, en?'Sign the document →':'Signer le document →') }),
         text: t + '\n\n' + d.link
       };
     }
@@ -14866,6 +14958,13 @@ FP.openMailTester = function () {
     +   '<div style="padding:16px 20px">'
     +     '<label style="font-size:12px;font-weight:700;color:var(--fp-muted)">Adresse de test (la tienne)</label>'
     +     '<input id="fp-mt-to" type="email" value="' + esc(rcpt) + '" placeholder="ton adresse e-mail" style="width:100%;margin-top:5px;padding:10px 12px;border:1px solid var(--fp-border);border-radius:10px;background:var(--fp-bg);color:var(--fp-text);font-size:14px">'
+    +     '<div style="margin-top:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
+    +       '<span style="font-size:12px;font-weight:700;color:var(--fp-muted)">Langue de l\'aperçu / du test :</span>'
+    +       '<div id="fp-mt-lang" style="display:inline-flex;border:1px solid var(--fp-border);border-radius:9999px;overflow:hidden">'
+    +         '<button type="button" data-lang="fr" class="fp-mt-lang-btn" style="border:none;padding:6px 14px;font-weight:800;cursor:pointer;background:var(--fp-primary);color:#fff">🇫🇷 FR</button>'
+    +         '<button type="button" data-lang="en" class="fp-mt-lang-btn" style="border:none;padding:6px 14px;font-weight:800;cursor:pointer;background:transparent;color:var(--fp-text)">🇬🇧 EN</button>'
+    +       '</div>'
+    +     '</div>'
     +     rowsHtml
     +     '<div style="margin-top:16px;text-align:right"><button id="fp-mt-sendall" class="btn btn-primary text-sm">✉️ M\'envoyer TOUS les tests</button></div>'
     +   '</div>'
@@ -14875,11 +14974,21 @@ FP.openMailTester = function () {
   ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
   ov.querySelector('#fp-mt-close').addEventListener('click', close);
   const toVal = () => String((ov.querySelector('#fp-mt-to') || {}).value || '').trim();
+  // Langue d'aperçu / de test (FR par défaut ; EN pour voir/tester les modèles anglais).
+  let mtLang = 'fr';
+  ov.querySelectorAll('.fp-mt-lang-btn').forEach(btn => btn.addEventListener('click', () => {
+    mtLang = btn.getAttribute('data-lang') || 'fr';
+    ov.querySelectorAll('.fp-mt-lang-btn').forEach(x => {
+      const on = x.getAttribute('data-lang') === mtLang;
+      x.style.background = on ? 'var(--fp-primary)' : 'transparent';
+      x.style.color = on ? '#fff' : 'var(--fp-text)';
+    });
+  }));
   // Aperçu → modale avec l'e-mail rendu dans un iframe (CSS isolé, comme une vraie boîte mail).
   ov.querySelectorAll('[data-mail-preview]').forEach(b => b.addEventListener('click', async () => {
     const key = b.getAttribute('data-mail-preview');
     const old = b.textContent; b.disabled = true; b.textContent = '…';
-    try { const m = await FP.buildMail(key); if (m) FP._mailPreviewModal(m, toVal()); }
+    try { const m = await FP.buildMail(key, mtLang === 'en' ? { lang: 'en' } : undefined); if (m) FP._mailPreviewModal(m, toVal()); }
     catch (e) { if (FP.toast) FP.toast('Aperçu impossible'); }
     finally { b.disabled = false; b.textContent = old; }
   }));
@@ -14888,7 +14997,7 @@ FP.openMailTester = function () {
     const to = toVal(); if (!to) { if (FP.toast) FP.toast('Renseigne ton adresse de test'); return; }
     const key = b.getAttribute('data-mail-send');
     const old = b.textContent; b.disabled = true; b.textContent = 'Envoi…';
-    try { await FP.sendMailTest(key, to); if (FP.toast) FP.toast('✓ Test envoyé à ' + to); }
+    try { await FP.sendMailTest(key, to, mtLang); if (FP.toast) FP.toast('✓ Test' + (mtLang === 'en' ? ' EN' : '') + ' envoyé à ' + to); }
     catch (e) { if (FP.notifyError) FP.notifyError('Échec : ' + (e && e.message || e)); else alert('Échec : ' + (e && e.message || e)); }
     finally { b.disabled = false; b.textContent = old; }
   }));
@@ -14900,7 +15009,7 @@ FP.openMailTester = function () {
     allBtn.disabled = true; const old = allBtn.textContent; let ok = 0, ko = 0;
     for (const key of FP.mailKinds) {
       allBtn.textContent = 'Envoi ' + (ok + ko + 1) + '/' + FP.mailKinds.length + '…';
-      try { await FP.sendMailTest(key, to); ok++; } catch (e) { ko++; }
+      try { await FP.sendMailTest(key, to, mtLang); ok++; } catch (e) { ko++; }
     }
     allBtn.disabled = false; allBtn.textContent = old;
     alert('✓ ' + ok + ' test(s) envoyé(s)' + (ko ? ' · ' + ko + ' échec(s) (souvent un domaine non vérifié)' : '') + '.');
@@ -15174,9 +15283,12 @@ FP.relances = {
     // Messages ÉDITABLES (Paramètres → E-mails → « Relance — … ») via FP.mailModeleProfil + FP.mailObjet.
     // Balises : {prenom} {immat} {date} {motif}. Repli automatique sur le texte par défaut (MAIL_DEFAUT).
     const p = this._prenom(item.conducteur);
+    // Langue du conducteur (fr/en) → modèle + objet EN éditables (repli FR). Rien en dur.
+    const _lg = (FP.condLangue && FP.condLangue(item.conducteur) === 'en') ? 'en' : 'fr';
+    const _en = (_lg === 'en');
     const _tags = { prenom: p, immat: item.immat, date: this._fdate(item.dueDate), motif: item.motif || '' };
-    const _msg = (mkey, dkey) => (FP.mailModeleProfil && FP.fillTags) ? FP.fillTags(FP.mailModeleProfil(mkey, dkey), _tags) : (FP.MAIL_DEFAUT[dkey] || '');
-    const _obj = (dkey, fallback) => (FP.mailObjet ? (FP.mailObjet(dkey, _tags) || fallback) : fallback);
+    const _msg = (mkey, dkey) => (FP.mailModeleProfilL && FP.fillTags) ? FP.fillTags(FP.mailModeleProfilL(mkey, dkey, _lg), _tags) : (FP.MAIL_DEFAUT[dkey] || '');
+    const _obj = (dkey, fallback) => (FP.mailObjetL ? (FP.mailObjetL(dkey, _tags, _lg) || fallback) : fallback);
     let text = '', subject = '', emailText = '', kmLink = '';
     if (item.type === 'ct') { subject = _obj('relanceCt', 'Contrôle technique — ' + item.immat); text = _msg('mailModeleRelanceCt', 'relanceCt'); emailText = text; }
     else if (item.type === 'entretien') { subject = _obj('relanceEntretien', 'Entretien à prévoir — ' + item.immat); text = _msg('mailModeleRelanceEntretien', 'relanceEntretien'); emailText = text; }
@@ -15188,8 +15300,8 @@ FP.relances = {
     const esc = FP.esc || (x => String(x == null ? '' : x));
     // Corps HTML : message échappé, puis (pour le km) un lien PROPRE « 👉 Cliquez ici » au lieu de l'URL brute.
     let bodyHtml = '<div style="white-space:pre-wrap;line-height:1.5">' + esc(emailText).replace(/\n/g, '<br>') + '</div>';
-    if (kmLink) bodyHtml += '<p style="margin:14px 0 0">👉 <a href="' + esc(kmLink) + '" style="color:#F97316;font-weight:700;text-decoration:underline">Cliquez ici</a></p>';
-    const emailHtml = FP.mailBrand ? FP.mailBrand({ title: subject, prenom: '', nomSoc, logoUrl, plaque: item.immat, bodyHtml: bodyHtml }) : bodyHtml;
+    if (kmLink) bodyHtml += '<p style="margin:14px 0 0">👉 <a href="' + esc(kmLink) + '" style="color:#F97316;font-weight:700;text-decoration:underline">' + (_en ? 'Click here' : 'Cliquez ici') + '</a></p>';
+    const emailHtml = FP.mailBrand ? FP.mailBrand({ title: subject, prenom: '', nomSoc, logoUrl, plaque: item.immat, lang: _lg, bodyHtml: bodyHtml }) : bodyHtml;
     return { text, subject, emailHtml };
   }
 };
