@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260929a">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260929b">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260929a"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260929b"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260929a">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260929b">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -1122,8 +1122,8 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260929a"></script>
-<script src="../assets/js/supabase-client.js?v=20260929a"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260929b"></script>
+<script src="../assets/js/supabase-client.js?v=20260929b"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -1139,13 +1139,13 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260929a"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260929b"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
-<script src="../assets/js/fleet-docs.js?v=20260929a"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260929a"></script>
+<script src="../assets/js/fleet-docs.js?v=20260929b"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260929b"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20260929a"></script>
+<script src="../assets/js/app.min.js?v=20260929b"></script>
 <script>
   lucide.createIcons();
 
@@ -1400,9 +1400,13 @@
 
   function docsSectionHTML(v){
     const builtin = builtinDocs(v);
-    // Les PHOTOS d'état des lieux ont leur propre galerie (edlSectionHTML) → exclues d'ici. En revanche
-    // le PDF de l'état des lieux (signé ou non) EST un document → il apparaît bien dans « Documents ».
-    const docs = getVehDocs(v.id).filter(d => !edlIsPhoto(d));
+    // ⚠️ ORGANISATION (demande utilisateur « faut bien s'organiser ») : la section « Documents » ne garde
+    // que les documents PERMANENTS du VÉHICULE (carte grise, CT, assurance, facture, mémo, contrat). Les
+    // ÉTATS DES LIEUX (photos ET PDF signé) — qui sont propres à un CONDUCTEUR / une période d'affectation —
+    // ont leur PROPRE section organisée par conducteur (« États des lieux par conducteur », edlHistoHTML) :
+    // on ne les répète donc PAS ici. Rien n'est supprimé : quand un salarié part, ses EDL RESTENT dans la
+    // fiche véhicule, rattachés à sa période d'affectation (preuve de l'état du véhicule = à conserver).
+    const docs = getVehDocs(v.id).filter(d => (d.type || '') !== 'etat-des-lieux');
     // « Assurance (carte verte) » et « Carte mémo » faisaient doublon → on ne propose que « Carte mémo »
     // dans le menu (le type 'assurance' reste reconnu pour AFFICHER les anciens documents déjà ajoutés).
     const typeOptions = DOC_TYPES.filter(t => t.key !== 'assurance').map(t => `<option value="${t.key}">${t.label}</option>`).join('');
@@ -2937,9 +2941,12 @@
     // Véhicule neuf : pas encore de révision attendue (0 km et aucune révision enregistrée)
     const estNeuf = !rev.hasRev && (Number(v.km) || 0) < 1000;
     const revColor = rev.niveau === 'danger' ? 'color:var(--fp-danger)' : rev.niveau === 'warn' ? 'color:var(--fp-warn)' : '';
+    // « 1ʳᵉ révision » quand aucune révision n'a encore été enregistrée : la cible est fixe (1 intervalle,
+    // ex. 15 000 km) et non un multiple d'odomètre → un véhicule déjà au-delà est en retard (rouge).
+    const revPref = (!rev.hasRev && !estNeuf) ? '1ʳᵉ révision · ' : '';
     const revProchaine = rev.prochaineKm
-      ? `~${FP.num(rev.prochaineKm)} km${rev.prochaineDate ? ' ou ' + FP.dateNum(rev.prochaineDate.toISOString()) : ''}`
-      : (rev.prochaineDate ? FP.dateNum(rev.prochaineDate.toISOString()) : '—');
+      ? `${revPref}~${FP.num(rev.prochaineKm)} km${rev.prochaineDate ? ' ou ' + FP.dateNum(rev.prochaineDate.toISOString()) : ''}`
+      : (rev.prochaineDate ? revPref + FP.dateNum(rev.prochaineDate.toISOString()) : '—');
     const lease = FP.leasingInfo(v);
     // Concerné par le contrôle anti-pollution (utilitaires + camions diesel, hors chariot)
     const isUtilitaire = FP.concerneAntiPollution(v);

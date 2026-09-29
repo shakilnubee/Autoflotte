@@ -6769,8 +6769,16 @@ FP.revisionInfo = (v) => {
     const joursDepuisRev = Math.max(0, (today - dRev) / 86400000);
     kmRestant = Math.round(intervalle.km - pace * joursDepuisRev);
     prochaineKm = Math.round(km + kmRestant);
+  } else if (!hasRev) {
+    // 3) PREMIÈRE révision jamais faite → cible FIXE = 1 intervalle (ex. 15 000 km),
+    //    JAMAIS un multiple d'odomètre. Un véhicule à 20 765 km sans révision enregistrée
+    //    est donc EN RETARD sur sa 1ʳᵉ révision (kmRestant négatif = rouge), au lieu d'afficher
+    //    « 30 000 km » comme s'il avait déjà fait celle des 15 000. Une fois la 1ʳᵉ révision
+    //    saisie (fiche ou facture), la suivante repart de (km réel de la révision + intervalle).
+    prochaineKm = intervalle.km;
+    kmRestant = intervalle.km - km;
   } else {
-    // 3) Faute de mieux (dont véhicule neuf km=0) : prochain palier d'odomètre
+    // 4) Révision déjà faite mais km inconnu → repli palier d'odomètre
     prochaineKm = Math.ceil(km / intervalle.km) * intervalle.km;
     if (prochaineKm <= km) prochaineKm = km + intervalle.km;
     kmRestant = prochaineKm - km;

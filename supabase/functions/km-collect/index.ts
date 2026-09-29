@@ -127,6 +127,10 @@ function prochaineRevision(v: Record<string, unknown>, revKm: number, revMois: n
   let kmDue: number | null = null;
   let kmRestant: number | null = null;
   if (kmRev) { kmDue = kmRev + revKm; kmRestant = kmDue - km; }
+  // PREMIÈRE révision jamais faite → cible FIXE = 1 intervalle (ex. 15 000 km), jamais un multiple
+  // d'odomètre : un véhicule à 20 765 km sans révision enregistrée est EN RETARD sur sa 1ʳᵉ révision
+  // (kmRestant négatif = rouge), au lieu d'afficher « 30 000 km ». MÊME logique que FP.revisionInfo (app.js).
+  else if (!hasRev) { kmDue = revKm; kmRestant = kmDue - km; }
   else { kmDue = Math.ceil(km / revKm) * revKm; if (kmDue <= km) kmDue = km + revKm; kmRestant = kmDue - km; }
   // Niveau d'alerte — MÊME règle que FP.revisionInfo : dépassé = danger (rouge), proche = warn (orange).
   const lvlKm = kmRestant === null ? null : (kmRestant <= 0 ? "danger" : (kmRestant <= alerteKm ? "warn" : null));
