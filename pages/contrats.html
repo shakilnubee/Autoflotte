@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260929e">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260929f">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260929e"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260929f"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260929e">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260929f">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -209,9 +209,14 @@
     <style>
       /* Séparation Leasing / Assurance pilotée par [data-ctab] sur #contrat-sections. Le !important
          garde la main même quand les fonctions de rendu remettent section.style.display=''. */
-      #contrat-sections[data-ctab="leasing"]   .contrat-section[data-section="assurance"] { display:none !important; }
+      #contrat-sections[data-ctab="leasing"]   .contrat-section[data-section="assurance"],
+      #contrat-sections[data-ctab="leasing"]   .contrat-section[data-section="cadre"] { display:none !important; }
       #contrat-sections[data-ctab="assurance"] .contrat-section[data-section="leasing"],
-      #contrat-sections[data-ctab="assurance"] .contrat-section[data-section="localease"] { display:none !important; }
+      #contrat-sections[data-ctab="assurance"] .contrat-section[data-section="localease"],
+      #contrat-sections[data-ctab="assurance"] .contrat-section[data-section="cadre"] { display:none !important; }
+      #contrat-sections[data-ctab="cadre"]     .contrat-section[data-section="leasing"],
+      #contrat-sections[data-ctab="cadre"]     .contrat-section[data-section="localease"],
+      #contrat-sections[data-ctab="cadre"]     .contrat-section[data-section="assurance"] { display:none !important; }
       #contrat-tabbar .ctab { display:inline-flex; align-items:center; gap:7px; padding:10px 20px; font-size:14px; font-weight:700; background:none; border:none; border-bottom:2px solid transparent; color:#94A3B8; cursor:pointer; transition:color .15s, border-color .15s, transform .12s; }
       #contrat-tabbar .ctab:hover { color:var(--fp-primary); transform:translateY(-1px); }
       #contrat-tabbar .ctab.active { color:var(--fp-primary); border-bottom-color:var(--fp-accent); }
@@ -223,9 +228,40 @@
     <div id="contrat-tabbar" style="display:none">
       <button id="ctab-leasing" type="button" class="ctab">Leasing</button>
       <button id="ctab-assurance" type="button" class="ctab">Assurance</button>
+      <button id="ctab-cadre" type="button" class="ctab">Contrats cadre</button>
     </div>
     <p class="text-xs text-slate-500 mb-3 flex items-center gap-1.5" id="contrat-drag-hint"><i data-lucide="grip-vertical" class="w-3.5 h-3.5"></i> Glisse une section par sa poignée pour changer l'ordre — l'ordre est mémorisé.</p>
     <div id="contrat-sections">
+
+    <!-- ===== Section CONTRATS CADRE (archivage accords prestataires) ===== -->
+    <div class="card p-6 mb-6 contrat-section" data-section="cadre">
+      <div class="section-title" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <i data-lucide="folder-open" class="w-5 h-5"></i> Contrats cadre
+        <span class="text-xs font-normal text-slate-400">accords prestataires — carte carburant, péage, maintenance, assurance par entité…</span>
+        <button id="cadre-add" type="button" class="btn btn-dark text-xs ml-auto" style="padding:4px 12px"><i data-lucide="plus" class="w-3.5 h-3.5"></i> Ajouter un contrat</button>
+      </div>
+      <p class="text-sm text-slate-600 mb-4">Archive tes <b>contrats-cadre</b> par prestataire : dates, coût, PDF consultable, véhicule(s) concerné(s), pays/entité. Une <b>alerte de renouvellement</b> apparaît à l'approche de l'échéance (comme le contrôle technique). <i>(Le leasing reste dans son onglet — ce sont des bons de commande.)</i></p>
+      <!-- KPIs (recalculés selon les FILTRES actifs) -->
+      <div class="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4" id="cadre-kpis">
+        <div class="kpi p-3"><div class="kpi-label">Contrats affichés</div><div class="kpi-value" id="cadre-kpi-nb">—</div></div>
+        <div class="kpi p-3"><div class="kpi-label">Coût annuel total</div><div class="kpi-value" id="cadre-kpi-cout" style="color:var(--fp-primary)">—</div></div>
+        <div class="kpi p-3"><div class="kpi-label">À renouveler bientôt</div><div class="kpi-value" id="cadre-kpi-ech">—</div></div>
+      </div>
+      <!-- Barre de filtres -->
+      <div id="cadre-filters" class="flex items-center gap-2 flex-wrap mb-4">
+        <input id="cadre-search" type="search" placeholder="Rechercher (prestataire, n°, notes…)" class="field-input !py-1.5 !text-sm" style="width:auto;min-width:200px">
+        <select id="cadre-f-type" class="field-input !py-1.5 !text-sm" style="width:auto"></select>
+        <select id="cadre-f-prest" class="field-input !py-1.5 !text-sm" style="width:auto"></select>
+        <select id="cadre-f-zone" class="field-input !py-1.5 !text-sm" style="width:auto"></select>
+        <select id="cadre-f-ech" class="field-input !py-1.5 !text-sm" style="width:auto">
+          <option value="all">Toutes échéances</option>
+          <option value="expire">⚠️ Expiré</option>
+          <option value="bientot">🟠 Bientôt</option>
+          <option value="ok">🟢 OK</option>
+        </select>
+      </div>
+      <div id="cadre-list"></div>
+    </div>
 
     <!-- Section Leasing -->
     <div class="card p-6 mb-6 contrat-section" data-section="leasing">
@@ -642,8 +678,8 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260929e"></script>
-<script src="../assets/js/supabase-client.js?v=20260929e"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260929f"></script>
+<script src="../assets/js/supabase-client.js?v=20260929f"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -659,11 +695,11 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260929e"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260929f"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20260929e"></script>
+<script src="../assets/js/app.min.js?v=20260929f"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -2361,16 +2397,18 @@
 
   // ===== Onglets Leasing / Assurance : chaque onglet n'affiche QUE ses sections (séparation nette). =====
   // Leasing = sections leasing (BPCE) + localease (Ayvens/LLD). Assurance = section assurance.
-  const CONTRAT_TABS = { leasing: ['leasing', 'localease'], assurance: ['assurance'] };
+  const CONTRAT_TABS = { leasing: ['leasing', 'localease'], assurance: ['assurance'], cadre: ['cadre'] };
   function switchContratTab(name){
     if (!CONTRAT_TABS[name]) name = 'leasing';
     // ⚠️ On pilote la séparation par un ATTRIBUT sur le conteneur + CSS `!important` : les fonctions
     // de rendu (renderLocalease/renderAssurance…) remettent `section.style.display=''` à chaque
     // rafraîchissement — un toggle inline se ferait donc écraser. La règle CSS, elle, tient bon.
     const host = $('contrat-sections'); if (host) host.setAttribute('data-ctab', name);
-    const bl = document.getElementById('ctab-leasing'), ba = document.getElementById('ctab-assurance');
+    const bl = document.getElementById('ctab-leasing'), ba = document.getElementById('ctab-assurance'), bc = document.getElementById('ctab-cadre');
     if (bl) bl.classList.toggle('active', name === 'leasing');
     if (ba) ba.classList.toggle('active', name === 'assurance');
+    if (bc) bc.classList.toggle('active', name === 'cadre');
+    if (name === 'cadre') { try { renderCadre(); } catch (e) {} }
     // Filtre « par loueur » + astuce de réorganisation = pertinents seulement sur Leasing.
     const lw = document.getElementById('leasing-loueur-filter-outer') || document.getElementById('leasing-loueur-filter-wrap'); if (lw) lw.style.display = (name === 'leasing') ? '' : 'none';
     const dh = document.getElementById('contrat-drag-hint'); if (dh) dh.style.display = (name === 'leasing') ? '' : 'none';
@@ -2378,9 +2416,275 @@
     if (window.lucide) lucide.createIcons();
   }
   window.__fpSetTab = switchContratTab; // aiguilleur pour le menu déroulant sidebar (bascule en place)
+
+  // ============================================================================
+  //  CONTRATS CADRE — archivage par prestataire, KPI FILTRE-CONSCIENTS, alertes d'échéance.
+  //  Données : FP.contratsCadre (app_settings.contratsCadre, synchronisé + protégé anti-perte).
+  // ============================================================================
+  (function cadreModule(){
+    const esc = (s) => (window.FP && FP.esc) ? FP.esc(s) : String(s == null ? '' : s);
+    const euro = (n) => (window.FP && FP.euro) ? FP.euro(n) : (Number(n) || 0) + ' €';
+    const dnum = (d) => { try { return d ? (FP.dateNum ? FP.dateNum(String(d).slice(0,10)) : String(d).slice(0,10)) : ''; } catch (e) { return d || ''; } };
+    const vehsAll = () => ((window.data && Array.isArray(data.vehicules)) ? data.vehicules : ((window.FP_DATA && FP_DATA.vehicules) || []));
+    const state = { search: '', type: 'all', prest: 'all', zone: 'all', ech: 'all' };
+
+    function filtered(){
+      const list = FP.contratsCadre.list();
+      const q = state.search.trim().toLowerCase();
+      return list.filter(c => {
+        if (!c) return false;
+        if (state.type !== 'all' && (c.type || 'autre') !== state.type) return false;
+        if (state.prest !== 'all' && String(c.prestataire || '').trim() !== state.prest) return false;
+        if (state.zone !== 'all' && String(c.paysEntite || '').trim() !== state.zone) return false;
+        if (state.ech !== 'all') {
+          const n = (FP.contratCadreEcheance(c) || {}).niveau;
+          if (state.ech === 'expire' && n !== 'danger') return false;
+          if (state.ech === 'bientot' && n !== 'warn' && n !== 'info') return false;
+          if (state.ech === 'ok' && (n === 'danger' || n === 'warn' || n === 'info')) return false;
+        }
+        if (q) {
+          const hay = [c.prestataire, c.numero, c.notes, FP.contratCadreTypeLabel(c.type), c.paysEntite, (c.vehicules || []).join(' ')].join(' ').toLowerCase();
+          if (!hay.includes(q)) return false;
+        }
+        return true;
+      });
+    }
+
+    function syncFilterOptions(){
+      const list = FP.contratsCadre.list();
+      const selType = document.getElementById('cadre-f-type');
+      if (selType && !selType.dataset.built) {
+        selType.innerHTML = '<option value="all">Tous les types</option>' + (FP.CONTRAT_CADRE_TYPES || []).map(t => `<option value="${t.key}">${esc(t.label)}</option>`).join('');
+        selType.dataset.built = '1';
+      }
+      const prestas = Array.from(new Set(list.map(c => String(c.prestataire || '').trim()).filter(Boolean))).sort((a,b)=>a.localeCompare(b));
+      const selP = document.getElementById('cadre-f-prest');
+      if (selP) selP.innerHTML = '<option value="all">Tous les prestataires</option>' + prestas.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
+      const zones = Array.from(new Set(list.map(c => String(c.paysEntite || '').trim()).filter(Boolean))).sort((a,b)=>a.localeCompare(b));
+      const selZ = document.getElementById('cadre-f-zone');
+      if (selZ) selZ.innerHTML = '<option value="all">Tous pays / entités</option>' + zones.map(z => `<option value="${esc(z)}">${esc(z)}</option>`).join('');
+      // Re-sélectionne les valeurs de state (au cas où)
+      if (selType) selType.value = state.type;
+      if (selP) selP.value = prestas.includes(state.prest) ? state.prest : (state.prest = 'all', 'all');
+      if (selZ) selZ.value = zones.includes(state.zone) ? state.zone : (state.zone = 'all', 'all');
+    }
+
+    function echBadge(c){
+      const e = FP.contratCadreEcheance(c) || {};
+      if (!c.dateFin) return '<span class="text-xs text-slate-400">pas de date de fin</span>';
+      const col = e.niveau === 'danger' ? '#B91C1C' : e.niveau === 'warn' ? '#B45309' : e.niveau === 'info' ? '#1D4ED8' : '#16A34A';
+      const txt = e.jours == null ? '' : (e.jours < 0 ? `expiré depuis ${-e.jours} j` : (e.jours === 0 ? "expire aujourd'hui" : `dans ${e.jours} j`));
+      return `<span style="color:${col};font-weight:700;font-size:12px">${esc(dnum(c.dateFin))} · ${esc(txt)}</span>`;
+    }
+
+    function perimetreTxt(c){
+      const vs = Array.isArray(c.vehicules) ? c.vehicules.filter(Boolean) : [];
+      if (!vs.length) return '<span class="text-xs text-slate-500">Toute la flotte</span>';
+      return '<span class="text-xs text-slate-700">' + vs.map(esc).join(' · ') + '</span>';
+    }
+
+    function render(){
+      syncFilterOptions();
+      const list = filtered();
+      // KPI = SUR LES CONTRATS FILTRÉS (demande utilisateur : « si je filtre 3 sur 5, je vois ces 3 »)
+      const cout = list.reduce((s, c) => s + FP.contratCadreCoutAnnuel(c), 0);
+      const nEch = list.filter(c => { const n = (FP.contratCadreEcheance(c) || {}).niveau; return n === 'danger' || n === 'warn'; }).length;
+      const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+      set('cadre-kpi-nb', String(list.length));
+      set('cadre-kpi-cout', euro(cout) + ' /an');
+      set('cadre-kpi-ech', String(nEch));
+      // Liste GROUPÉE PAR PRESTATAIRE (chaque prestataire = un dossier)
+      const box = document.getElementById('cadre-list'); if (!box) return;
+      if (!FP.contratsCadre.list().length) {
+        box.innerHTML = '<div class="p-6 text-center text-slate-500 text-sm border border-dashed border-slate-300 rounded-xl">Aucun contrat cadre pour le moment. Clique <b>« Ajouter un contrat »</b> pour archiver ton premier accord prestataire (assurance par entité, carte carburant, péage, maintenance…).</div>';
+        return;
+      }
+      if (!list.length) { box.innerHTML = '<div class="p-6 text-center text-slate-500 text-sm">Aucun contrat ne correspond à ces filtres.</div>'; return; }
+      const groups = {};
+      list.forEach(c => { const k = String(c.prestataire || '').trim() || FP.contratCadreTypeLabel(c.type) || 'Sans prestataire'; (groups[k] = groups[k] || []).push(c); });
+      const keys = Object.keys(groups).sort((a,b)=>a.localeCompare(b));
+      box.innerHTML = keys.map(k => {
+        const arr = groups[k];
+        const sous = arr.reduce((s,c)=>s+FP.contratCadreCoutAnnuel(c),0);
+        const rows = arr.map(c => `
+          <div class="p-3 rounded-lg border border-slate-200 bg-white" data-cc="${esc(c.id)}" style="margin-top:8px">
+            <div style="display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap">
+              <div style="flex:1;min-width:200px">
+                <div class="font-semibold text-slate-800 text-sm">${esc(FP.contratCadreTypeLabel(c.type))}${c.numero ? ' · <span class="font-normal text-slate-500">n° ' + esc(c.numero) + '</span>' : ''}</div>
+                <div class="text-xs text-slate-500 mt-0.5">${c.dateDebut ? 'du ' + esc(dnum(c.dateDebut)) + ' ' : ''}${c.dateFin ? 'au ' + esc(dnum(c.dateFin)) : ''}</div>
+                <div class="mt-1">${echBadge(c)}</div>
+                <div class="mt-1 flex items-center gap-3 flex-wrap">${perimetreTxt(c)}${c.paysEntite ? '<span class="text-xs" style="background:#EEF2FF;color:#3730A3;padding:1px 8px;border-radius:9999px;font-weight:600">' + esc(c.paysEntite) + '</span>' : ''}</div>
+                ${c.notes ? '<div class="text-xs text-slate-500 mt-1">' + esc(c.notes) + '</div>' : ''}
+              </div>
+              <div style="text-align:right">
+                <div class="font-bold text-slate-900">${c.montant ? euro(c.montant) + '<span class="text-xs font-normal text-slate-400">/' + (c.periode === 'mois' ? 'mois' : 'an') + '</span>' : '<span class="text-xs text-slate-400">—</span>'}</div>
+                <div class="mt-2 flex gap-1 justify-end flex-wrap">
+                  ${(Array.isArray(c.pdf) ? c.pdf : []).filter(p=>p&&p.url).map(p => `<a href="${esc(p.url)}" target="_blank" rel="noopener" class="btn btn-outline !py-1 !px-2 text-xs"><i data-lucide="eye" class="w-3.5 h-3.5"></i> PDF</a>`).join('')}
+                  <button type="button" class="btn btn-outline !py-1 !px-2 text-xs" data-cc-edit="${esc(c.id)}"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
+                  <button type="button" class="p-1.5 hover:bg-red-50 rounded text-slate-300 hover:text-red-600" data-cc-del="${esc(c.id)}" title="Supprimer"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+                </div>
+              </div>
+            </div>
+          </div>`).join('');
+        return `<div class="p-4 rounded-xl border border-slate-200 bg-slate-50 mb-3">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <i data-lucide="folder" class="w-4 h-4 text-slate-500"></i>
+            <span class="font-bold text-slate-900">${esc(k)}</span>
+            <span class="text-xs text-slate-500">${arr.length} contrat${arr.length>1?'s':''}</span>
+            ${sous ? '<span class="text-xs font-semibold text-slate-600 ml-auto">' + euro(sous) + ' /an</span>' : ''}
+          </div>
+          ${rows}
+        </div>`;
+      }).join('');
+      if (window.lucide) lucide.createIcons();
+    }
+    window.renderCadre = render;
+
+    // ---- Modale Ajouter / Modifier ----
+    function openModal(id){
+      const c = id ? (FP.contratsCadre.get(id) || {}) : {};
+      const vehChips = Array.isArray(c.vehicules) ? c.vehicules.slice() : [];
+      const typeOpts = (FP.CONTRAT_CADRE_TYPES || []).map(t => `<option value="${t.key}" ${((c.type||'autre')===t.key)?'selected':''}>${esc(t.label)}</option>`).join('');
+      const vehOpts = '<option value="">— choisir un véhicule —</option>' + vehsAll().slice().sort((a,b)=>String(a.immat||'').localeCompare(String(b.immat||''))).map(v => `<option value="${esc(v.immat||'')}">${esc(v.immat||'')} — ${esc((v.marque||'')+' '+(v.modele||''))}</option>`).join('');
+      const ov = document.createElement('div');
+      ov.className = 'modal-backdrop open'; ov.id = 'cadre-modal';
+      ov.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(15,30,61,.55);display:flex;align-items:flex-start;justify-content:center;padding:18px;overflow-y:auto';
+      ov.innerHTML = `<div style="background:#fff;border-radius:16px;max-width:560px;width:100%;box-shadow:0 24px 60px -20px rgba(0,0,0,.5);margin-top:4vh">
+        <div style="padding:14px 18px;border-bottom:1px solid #eef2f7;display:flex;align-items:center;gap:10px">
+          <div style="font-size:16px;font-weight:800;color:#0f1e3d">${id ? 'Modifier le contrat' : 'Ajouter un contrat cadre'}</div>
+          <button type="button" data-cc-x style="margin-left:auto;border:none;background:none;font-size:22px;line-height:1;cursor:pointer;color:#64748b">×</button>
+        </div>
+        <div style="padding:16px 18px;display:grid;gap:10px">
+          <label class="text-xs font-semibold text-slate-600">Type de contrat
+            <select id="cc-type" class="field-input !py-2 mt-1" style="width:100%">${typeOpts}</select></label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <label class="text-xs font-semibold text-slate-600">Prestataire
+              <input id="cc-prest" class="field-input !py-2 mt-1" style="width:100%" placeholder="DKV, Total, Ulys…" value="${esc(c.prestataire||'')}"></label>
+            <label class="text-xs font-semibold text-slate-600">N° de contrat
+              <input id="cc-num" class="field-input !py-2 mt-1" style="width:100%" value="${esc(c.numero||'')}"></label>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <label class="text-xs font-semibold text-slate-600">Date de début
+              <input id="cc-debut" type="date" class="field-input !py-2 mt-1" style="width:100%" value="${esc((c.dateDebut||'').slice(0,10))}"></label>
+            <label class="text-xs font-semibold text-slate-600">Date de fin / échéance
+              <input id="cc-fin" type="date" class="field-input !py-2 mt-1" style="width:100%" value="${esc((c.dateFin||'').slice(0,10))}"></label>
+          </div>
+          <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px">
+            <label class="text-xs font-semibold text-slate-600">Montant
+              <input id="cc-montant" inputmode="decimal" class="field-input !py-2 mt-1" style="width:100%" placeholder="ex. 500" value="${c.montant!=null?esc(c.montant):''}"></label>
+            <label class="text-xs font-semibold text-slate-600">Période
+              <select id="cc-periode" class="field-input !py-2 mt-1" style="width:100%"><option value="an" ${c.periode!=='mois'?'selected':''}>par an</option><option value="mois" ${c.periode==='mois'?'selected':''}>par mois</option></select></label>
+          </div>
+          <label class="text-xs font-semibold text-slate-600">Pays / entité (si plusieurs structures)
+            <input id="cc-zone" class="field-input !py-2 mt-1" style="width:100%" placeholder="ex. France, Italie, PXP Retail…" value="${esc(c.paysEntite||'')}"></label>
+          <div>
+            <div class="text-xs font-semibold text-slate-600 mb-1">Véhicule(s) concerné(s) <span class="font-normal text-slate-400">— laisser vide = toute la flotte</span></div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap"><select id="cc-veh" class="field-input !py-2" style="flex:1;min-width:160px">${vehOpts}</select><button type="button" id="cc-veh-add" class="btn btn-outline text-sm">Ajouter</button></div>
+            <div id="cc-veh-chips" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"></div>
+          </div>
+          <label class="text-xs font-semibold text-slate-600">Notes
+            <textarea id="cc-notes" rows="2" class="field-input !py-2 mt-1" style="width:100%" placeholder="conditions, remise, interlocuteur…">${esc(c.notes||'')}</textarea></label>
+          <div>
+            <div class="text-xs font-semibold text-slate-600 mb-1">Document (PDF / photo)</div>
+            <div id="cc-pdf-list" style="display:flex;flex-direction:column;gap:4px;margin-bottom:6px"></div>
+            <input id="cc-pdf-file" type="file" accept="application/pdf,image/*" class="hidden">
+            <button type="button" id="cc-pdf-btn" class="btn btn-outline text-sm"><i data-lucide="upload" class="w-4 h-4"></i> Joindre un fichier</button>
+            <span id="cc-pdf-st" class="text-xs text-slate-500 ml-2"></span>
+          </div>
+          <div id="cc-err" style="display:none;color:#B91C1C;font-size:12px;background:#FEF2F2;border:1px solid #FCA5A5;border-radius:8px;padding:8px 10px"></div>
+        </div>
+        <div style="padding:12px 18px;border-top:1px solid #eef2f7;display:flex;gap:10px;justify-content:flex-end">
+          <button type="button" data-cc-x class="btn btn-outline">Annuler</button>
+          <button type="button" id="cc-save" class="btn btn-dark"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer</button>
+        </div>
+      </div>`;
+      document.body.appendChild(ov);
+      if (window.lucide) lucide.createIcons();
+      try { if (FP.searchSelect) FP.searchSelect(ov.querySelector('#cc-veh'), { placeholder: 'Rechercher un véhicule…' }); } catch (e) {}
+      const pdfs = (Array.isArray(c.pdf) ? c.pdf.slice() : []).filter(p => p && p.url);
+      const close = () => ov.remove();
+      const renderChips = () => {
+        const box = ov.querySelector('#cc-veh-chips');
+        box.innerHTML = vehChips.map((im,i) => `<span style="background:#EEF2F7;border-radius:9999px;padding:2px 8px;font-size:12px;display:inline-flex;align-items:center;gap:5px">${esc(im)}<button type="button" data-chip="${i}" style="border:none;background:none;color:#94A3B8;cursor:pointer;font-size:13px;line-height:1">×</button></span>`).join('');
+      };
+      const renderPdfs = () => {
+        const box = ov.querySelector('#cc-pdf-list');
+        box.innerHTML = pdfs.map((p,i) => `<div style="display:flex;align-items:center;gap:8px;font-size:12px"><a href="${esc(p.url)}" target="_blank" rel="noopener" style="color:#0e7490;font-weight:600">📄 ${esc(p.name||'Document')}</a><button type="button" data-pdf-rm="${i}" style="border:none;background:none;color:#EF4444;cursor:pointer">retirer</button></div>`).join('');
+      };
+      renderChips(); renderPdfs();
+      ov.addEventListener('click', (e) => {
+        if (e.target === ov || e.target.closest('[data-cc-x]')) { close(); return; }
+        const rm = e.target.closest('[data-chip]'); if (rm) { vehChips.splice(+rm.getAttribute('data-chip'), 1); renderChips(); return; }
+        const prm = e.target.closest('[data-pdf-rm]'); if (prm) { pdfs.splice(+prm.getAttribute('data-pdf-rm'), 1); renderPdfs(); return; }
+        if (e.target.closest('#cc-veh-add')) {
+          const sel = ov.querySelector('#cc-veh'); const im = sel && sel.value; if (im && !vehChips.includes(im)) { vehChips.push(im); renderChips(); } return;
+        }
+        if (e.target.closest('#cc-pdf-btn')) { ov.querySelector('#cc-pdf-file').click(); return; }
+      });
+      ov.querySelector('#cc-pdf-file').addEventListener('change', async (e) => {
+        const f = e.target.files && e.target.files[0]; e.target.value = ''; if (!f) return;
+        const st = ov.querySelector('#cc-pdf-st'); st.textContent = '⏳ Envoi…';
+        if (!FP.uploadScan) { st.textContent = '⚠️ Stockage indisponible.'; return; }
+        try { const url = await FP.uploadScan(f, 'contrats-cadre'); if (url) { pdfs.push({ name: f.name || 'Document', url }); renderPdfs(); st.textContent = '✓ Ajouté'; } else { st.textContent = '⚠️ Échec.'; } }
+        catch (err) { console.error('[cadre pdf]', err); st.textContent = '⚠️ Échec de l\'envoi.'; }
+      });
+      ov.querySelector('#cc-save').addEventListener('click', () => {
+        const val = (id2) => { const el = ov.querySelector(id2); return el ? el.value.trim() : ''; };
+        const err = ov.querySelector('#cc-err');
+        const prest = val('#cc-prest');
+        const type = val('#cc-type') || 'autre';
+        if (!prest && type !== 'autre') { err.style.display = 'block'; err.textContent = 'Indique au moins le prestataire.'; return; }
+        const debut = val('#cc-debut'), fin = val('#cc-fin');
+        if (debut && fin && fin < debut) { err.style.display = 'block'; err.textContent = 'La date de fin est avant la date de début.'; return; }
+        const montantRaw = val('#cc-montant').replace(/\s/g,'').replace(',','.');
+        const montant = montantRaw === '' ? null : (Number(montantRaw) || 0);
+        const rec = { type, prestataire: prest, numero: val('#cc-num'), dateDebut: debut, dateFin: fin, montant, periode: val('#cc-periode') || 'an', paysEntite: val('#cc-zone'), vehicules: vehChips.slice(), notes: val('#cc-notes'), pdf: pdfs.slice() };
+        const btn = ov.querySelector('#cc-save'); btn.disabled = true;
+        try { if (id) FP.contratsCadre.update(id, rec); else FP.contratsCadre.add(rec); } catch (e) { btn.disabled = false; err.style.display = 'block'; err.textContent = 'Erreur d\'enregistrement.'; return; }
+        close();
+        render();
+        if (FP.toast) FP.toast(id ? '✓ Contrat modifié' : '✓ Contrat ajouté');
+      });
+    }
+    window.openCadreModal = openModal;
+
+    // ---- Câblage filtres + actions liste ----
+    document.addEventListener('DOMContentLoaded', () => {
+      const add = document.getElementById('cadre-add'); if (add) add.addEventListener('click', () => openModal());
+      const search = document.getElementById('cadre-search');
+      let _t = 0;
+      if (search) search.addEventListener('input', (e) => { state.search = e.target.value; clearTimeout(_t); _t = setTimeout(render, 150); });
+      const bind = (id, key) => { const el = document.getElementById(id); if (el) el.addEventListener('change', () => { state[key] = el.value; render(); }); };
+      bind('cadre-f-type', 'type'); bind('cadre-f-prest', 'prest'); bind('cadre-f-zone', 'zone'); bind('cadre-f-ech', 'ech');
+      // Bouton « Réinitialiser » (règle plateforme) sur la barre de filtres
+      try {
+        const bar = document.getElementById('cadre-filters');
+        if (bar && FP.filterResetButton) FP.filterResetButton(bar, { onReset: () => {
+          state.search = ''; state.type = 'all'; state.prest = 'all'; state.zone = 'all'; state.ech = 'all';
+          if (search) search.value = '';
+          ['cadre-f-type','cadre-f-prest','cadre-f-zone','cadre-f-ech'].forEach(i => { const el = document.getElementById(i); if (el) el.value = 'all'; });
+          render();
+        }});
+      } catch (e) {}
+      const listBox = document.getElementById('cadre-list');
+      if (listBox) listBox.addEventListener('click', async (e) => {
+        const ed = e.target.closest('[data-cc-edit]'); if (ed) { openModal(ed.getAttribute('data-cc-edit')); return; }
+        const del = e.target.closest('[data-cc-del]'); if (del) {
+          const cid = del.getAttribute('data-cc-del'); const c = FP.contratsCadre.get(cid);
+          const ok = FP.confirm ? await FP.confirm(`Supprimer le contrat ${c && c.prestataire ? '« ' + c.prestataire + ' »' : ''} ?`) : confirm('Supprimer ce contrat ?');
+          if (!ok) return; FP.contratsCadre.remove(cid); render(); if (FP.toast) FP.toast('Contrat supprimé');
+        }
+      });
+      // Premier rendu si on ouvre directement sur l'onglet cadre
+      try { if (($('contrat-sections')||{}).getAttribute && $('contrat-sections').getAttribute('data-ctab') === 'cadre') render(); } catch (e) {}
+    });
+    // Re-render quand les données serveur arrivent (échéances/prestataires à jour)
+    document.addEventListener('fp:data-ready', () => { try { if (($('contrat-sections')||{}).getAttribute && $('contrat-sections').getAttribute('data-ctab') === 'cadre') render(); } catch (e) {} });
+  })();
   { const bl = document.getElementById('ctab-leasing'), ba = document.getElementById('ctab-assurance');
     if (bl) bl.addEventListener('click', () => switchContratTab('leasing'));
     if (ba) ba.addEventListener('click', () => switchContratTab('assurance'));
+    { const bc = document.getElementById('ctab-cadre'); if (bc) bc.addEventListener('click', () => switchContratTab('cadre')); }
     // Ouverture : 1) ?tab=… (lien direct sidebar) ; 2) dernier onglet ; 3) Leasing.
     let _ct = ''; try { _ct = new URLSearchParams(location.search).get('tab') || ''; } catch (e) {}
     if (_ct === 'localease') _ct = 'leasing';
