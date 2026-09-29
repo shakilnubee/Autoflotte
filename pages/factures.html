@@ -1683,7 +1683,10 @@
   // Wiring
   // Bouton « Voir plus / Réduire » sous le tableau
   $('fa-more').addEventListener('click', e => { if (e.target.closest('#fa-toggle')) { faExpanded = !faExpanded; renderTable(); } });
-  $('search').addEventListener('input', e => { state.search = e.target.value; faExpanded = false; renderKPIs(); renderTable(); renderCharts(); });
+  // ⚡ PERF : la recherche re-rend KPIs + tableau + 2 graphiques (détruits/recréés) à CHAQUE frappe.
+  // On DÉBOUNCE (~180 ms) → un seul rendu quand tu arrêtes de taper. La valeur du champ reste live.
+  let _faSearchT = 0;
+  $('search').addEventListener('input', e => { state.search = e.target.value; faExpanded = false; clearTimeout(_faSearchT); _faSearchT = setTimeout(() => { renderKPIs(); renderTable(); renderCharts(); }, 180); });
   document.querySelectorAll('#filters-type .filter-chip').forEach(chip => {
     chip.addEventListener('click', () => {
       document.querySelectorAll('#filters-type .filter-chip').forEach(c => c.classList.remove('active'));
