@@ -1234,6 +1234,30 @@
             <span id="rk-save-st" style="font-size:.8rem;color:var(--fp-muted)"></span>
           </div>
           <p style="font-size:.78rem;color:var(--fp-muted);margin:10px 0 0">Synchronisé sur tous tes appareils. Ces réglages pilotent les alertes « relevé km à faire » et « relance ». Tu peux aussi les modifier dans Paramètres → Configuration.</p>
+          ${(() => {
+            // ÉTAT RÉEL de la relance AUTOMATIQUE (tâche planifiée serveur km-relance) — honnête, basé sur
+            // les données : la relance auto écrit dans km_requests avec source 'auto'/'relance' (l'envoi
+            // MANUEL « Demander aux manquants » n'écrit AUCUNE source). On lit donc le dernier envoi AUTO.
+            try {
+              const cache = (window.FP && FP.kmCollecte && FP.kmCollecte._cache) || null;
+              if (!Array.isArray(cache)) return '';   // pas encore chargé → rien (anti-flash)
+              const last = cache.reduce((mx, r) => (r && (r.source === 'auto' || r.source === 'relance') && r.sent_at) ? Math.max(mx, new Date(r.sent_at).getTime()) : mx, 0);
+              const fdate = (t) => { try { return FP.dateNum ? FP.dateNum(new Date(t).toISOString().slice(0, 10)) : new Date(t).toLocaleDateString('fr-FR'); } catch (e) { return ''; } };
+              const days = last ? Math.floor((Date.now() - last) / 864e5) : null;
+              let dot, txt;
+              if (!last) {
+                dot = '#B91C1C';
+                txt = "<b>Envoi automatique : jamais détecté.</b> Le bouton « Demander aux manquants » ci-dessous marche (envoi manuel immédiat), mais la relance <b>automatique</b> quotidienne n'a encore <b>jamais tourné</b> — la tâche planifiée du serveur (1×/jour) doit être activée <b>une seule fois</b>. En attendant, relance à la main avec le bouton.";
+              } else if (days <= 2) {
+                dot = '#16A34A';
+                txt = `<b>Envoi automatique actif</b> — dernière exécution le <b>${fdate(last)}</b>. Chaque matin, la demande de km part toute seule aux chauffeurs (qui ont un e-mail) en retard, jusqu'à réponse.`;
+              } else {
+                dot = '#B45309';
+                txt = `<b>Dernier envoi automatique le ${fdate(last)}</b> (il y a ${days} j). Si des chauffeurs sont en retard depuis, la tâche planifiée est peut-être arrêtée — à faire vérifier. Tu peux relancer à la main avec « Demander aux manquants ».`;
+              }
+              return `<div style="margin-top:12px;display:flex;gap:9px;align-items:flex-start;padding:10px 12px;border:1px solid var(--fp-border);border-radius:10px;background:var(--fp-surface,#fff)"><span style="flex:0 0 auto;width:10px;height:10px;border-radius:50%;background:${dot};margin-top:4px;box-shadow:0 0 0 3px ${dot}22"></span><div style="font-size:.8rem;color:var(--fp-primary);line-height:1.45">${txt}</div></div>`;
+            } catch (e) { return ''; }
+          })()}
         </div>
 
         <div class="rk-card">
