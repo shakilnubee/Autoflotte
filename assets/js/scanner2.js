@@ -41,7 +41,7 @@
       ["marque", "Marque (D.1)"], ["version", "Version (D.2)"], ["modele", "Denomination commerciale (D.3)"],
       ["vin", "VIN (E)"], ["ptac", "PTAC en kg = repere F.2 (masse en charge max admissible)"], ["masse", "Masse EN SERVICE en kg = repere G EXACTEMENT (PAS G.1 poids a vide, PAS F.1/F.2 PTAC)"], ["genre", "Genre national (J.1)"],
       ["puissanceKw", "Puissance nette (P.2)"], ["energie", "Energie (P.3)"], ["puissanceFiscale", "Puissance administrative (P.6)"],
-      ["places", "Nombre de places (S.1)"], ["co2", "CO2 g/km (V.7)"], ["prochainCT", "Date prochain CT (X.1)"], ["mentionsZ", "Mentions particulieres (Z)"]
+      ["places", "Nombre de places (S.1)"], ["co2", "CO2 g/km (V.7)"], ["prochainCT", "Date du PROCHAIN controle technique = repere X.1 UNIQUEMENT, ecrit 'VISITE AVANT LE JJ/MM/AAAA'. Recopie CETTE date exacte. NE JAMAIS prendre le repere I (date d'edition du certificat) ni B (1re immatriculation) a la place. Pour une MOTO/ancienne carte, X.1 peut etre absent → laisser VIDE, ne jamais inventer ni deduire une date."], ["mentionsZ", "Mentions particulieres (Z)"]
     ]},
     permis_conduire: { label: "Permis de conduire", cible: "conducteurs", champs: [
       ["nom", "Nom"], ["prenom", "Prenom"], ["dateNaissance", "Date de naissance"], ["numeroPermis", "Numero du permis"],

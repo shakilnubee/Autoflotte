@@ -5013,6 +5013,8 @@ FP.qrScans = {
       });
       document.body.appendChild(bar);
       document.body.classList.add('fp-tabbar-on');
+      // La barre vient d'être créée → (ré)applique les pastilles connues (dont la pastille rouge Alertes).
+      try { if (FP.reapplyNavBadges) FP.reapplyNavBadges(); } catch (e) {}
 
       // Feuille « Ajout rapide » (mêmes cibles que les raccourcis du tableau de bord).
       const scrim = document.createElement('div'); scrim.className = 'fp-qa-scrim';
@@ -6477,6 +6479,20 @@ FP.setNavBadge = function (navFile, count, title) {
       b.title = title || (count + ' à traiter');
       b.textContent = count > 99 ? '99+' : count;
     });
+    // 📱 MOBILE : petite pastille rouge sur l'onglet correspondant de la barre du bas (fp-tabbar) →
+    // « comme ça je vois que j'en ai » (demande utilisateur). Même source que le badge sidebar.
+    try {
+      document.querySelectorAll('.fp-tabbar a[href*="' + navFile + '"]').forEach(a => {
+        let d = a.querySelector('.fp-tab-dot');
+        if (!count || count < 1) { if (d) d.remove(); return; }
+        if (getComputedStyle(a).position === 'static') a.style.position = 'relative';
+        if (!d) {
+          d = document.createElement('span'); d.className = 'fp-tab-dot'; d.setAttribute('aria-hidden', 'true');
+          d.style.cssText = 'position:absolute;top:4px;left:calc(50% + 6px);width:9px;height:9px;border-radius:50%;background:#EF4444;box-shadow:0 0 0 2px #0b1424';
+          a.appendChild(d);
+        }
+      });
+    } catch (e) {}
   } catch (e) {}
 };
 try { window.addEventListener('fp:data-ready', () => { if (FP.refreshDeclCondBadge) FP.refreshDeclCondBadge(); }); } catch (e) {}
@@ -8112,11 +8128,18 @@ FP.buildAlertes = (data) => {
     // « Ignorer » qui la masquait pour toujours. L'historique complet daté reste sur la fiche véhicule.
     if (Array.isArray(scans) && scans.length && nNew > 0) {
       const rel = (iso) => { const ms = Date.now() - Date.parse(iso); if (!(ms >= 0)) return ''; const mn = Math.round(ms / 60000); if (mn < 60) return 'il y a ' + Math.max(1, mn) + ' min'; const h = Math.round(mn / 60); if (h < 24) return 'il y a ' + h + ' h'; return 'il y a ' + Math.round(h / 24) + ' j'; };
-      const byVeh = new Map(); scans.forEach(s => { if (s && s.vehiculeId && !byVeh.has(s.vehiculeId)) byVeh.set(s.vehiculeId, s); });
+      // ⚠️ RÈGLE (demande utilisateur) : après « ✓ Vu », l'alerte ne doit REMONTRER QUE les scans NOUVEAUX
+      // (postérieurs au « Vu »), jamais ceux déjà acquittés. On filtre donc sur le marqueur « vu » (timestamp
+      // fp_qrscan_seen), pas sur toute la fenêtre 24 h → « seulement la nouvelle, pas celle d'avant ».
+      const _seenIso = (FP.qrScans && FP.qrScans._readSeen) ? FP.qrScans._readSeen() : '';
+      const _fresh = _seenIso ? scans.filter(s => s && s.at && s.at > _seenIso) : scans.slice();
+      const byVeh = new Map(); _fresh.forEach(s => { if (s && s.vehiculeId && !byVeh.has(s.vehiculeId)) byVeh.set(s.vehiculeId, s); });
       const list = Array.from(byVeh.values());
-      const items = list.map(s => ({ label: `${s.plaque || 'Véhicule'} — QR ouvert ${rel(s.at)}`, target: 'vehicules.html?immat=' + encodeURIComponent(s.plaque || '') }));
-      const msg = `${nNew} nouveau${nNew > 1 ? 'x' : ''} scan${nNew > 1 ? 's' : ''} de QR (24 h)`;
-      out.push({ niveau: 'info', categorie: 'Activité QR', message: msg, detail: 'Quelqu\'un a ouvert le portail QR d\'un véhicule (le détail daté est dans la fiche du véhicule). « ✓ Vu » efface l\'alerte — elle reviendra au prochain scan.', sort: 470, seenKey: 'qr', vehicules: items });
+      if (list.length) {
+        const items = list.map(s => ({ label: `${s.plaque || 'Véhicule'} — QR ouvert ${rel(s.at)}`, target: 'vehicules.html?immat=' + encodeURIComponent(s.plaque || '') }));
+        const msg = `${nNew} nouveau${nNew > 1 ? 'x' : ''} scan${nNew > 1 ? 's' : ''} de QR (24 h)`;
+        out.push({ niveau: 'info', categorie: 'Activité QR', message: msg, detail: 'Quelqu\'un a ouvert le portail QR d\'un véhicule (le détail daté est dans la fiche du véhicule). « ✓ Vu » efface l\'alerte — elle reviendra UNIQUEMENT au prochain scan (jamais les scans déjà vus).', sort: 470, seenKey: 'qr', vehicules: items });
+      }
     }
   } catch (e) {}
 
