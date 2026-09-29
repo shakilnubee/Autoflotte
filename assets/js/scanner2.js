@@ -296,10 +296,11 @@
         try {
           const url = model._fileUrl;
           const driveId = ((String(url).match(/\/d\/([-\w]{20,})/) || [])[1]) || ((String(url).match(/[?&]id=([-\w]{20,})/) || [])[1]) || null;
-          const dfmt = d => { try { return d ? (FP.date ? FP.date(d) : d) : ''; } catch (e) { return d || ''; } };
-          const bits = [g('centre'), g('prochainCT') ? ('prochain ' + dfmt(g('prochainCT'))) : (g('date') ? dfmt(g('date')) : '')].filter(Boolean).join(' · ');
+          // ⚠️ TITRE SIMPLE (consigne utilisateur) : le libellé du document = juste le TYPE (« Contrôle
+          // technique »), JAMAIS toute la description scannée (centre, dates…). Les détails du CT sont déjà
+          // enregistrés sur la fiche véhicule (dateDernierCT / prochainCT) → inutile de les répéter dans le titre.
           const drec = { id: uid('D'), societe: societe(), vehiculeId: rec.id, type: 'controle-technique',
-            label: 'Contrôle technique' + (bits ? ' — ' + bits : ''), url: url, driveId: driveId };
+            label: 'Contrôle technique', url: url, driveId: driveId };
           await FP.persist.insert('documents', drec);
           try { if (window.data && Array.isArray(data.documents)) data.documents.push(drec); } catch (e) {}
         } catch (e) { console.warn('[scan2 CT→document]', e); }
@@ -427,9 +428,11 @@
       const dfmt = d => { try { return d ? (FP.date ? FP.date(d) : d) : ''; } catch (e) { return d || ''; } };
       let rec;
       if (t === 'etat_des_lieux') {
-        const bits = [g('typeEtat'), g('km') ? (g('km') + ' km') : '', dfmt(g('date'))].filter(Boolean).join(' · ');
+        // TITRE SIMPLE : type + éventuellement « entrée / sortie » (vraie distinction de type, courte) —
+        // pas le km ni la date, qui alourdissent le titre inutilement.
+        const te = String(g('typeEtat') || '').trim();
         rec = { id: uid('D'), societe: societe(), vehiculeId: veh ? veh.id : null, type: 'etat-des-lieux',
-          label: 'État des lieux' + (bits ? ' — ' + bits : ''), url, driveId };
+          label: 'État des lieux' + (te ? ' — ' + te : ''), url, driveId };
       } else {
         // Assurance (carte verte / attestation) : on garde la trace PDF dans `documents`, ET on alimente
         // le MODÈLE STRUCTURÉ (assureur + n° police + rattachement véhicule + période de validité) via le
@@ -440,9 +443,10 @@
             dateDebut: g('dateDebut'), dateFin: g('dateFin'), numeroAssistance: g('numeroAssistance')
           }, veh);
         } catch (e) { console.warn('[scan2 assurance→modèle]', e); }
-        const bits = [g('assureur'), g('numeroPolice') ? ('n° ' + g('numeroPolice')) : '', g('dateFin') ? ('échéance ' + dfmt(g('dateFin'))) : ''].filter(Boolean).join(' · ');
+        // TITRE SIMPLE : juste le type. Assureur / n° police / échéance sont déjà enregistrés dans le
+        // modèle structuré (FP.assuranceApplyScan → page Contrats), inutile de les répéter dans le titre.
         rec = { id: uid('D'), societe: societe(), vehiculeId: veh ? veh.id : null, type: 'assurance',
-          label: 'Attestation assurance' + (bits ? ' — ' + bits : ''), url, driveId };
+          label: 'Attestation assurance', url, driveId };
       }
       await FP.persist.insert('documents', rec);
       target = { table: 'documents', id: rec.id };
