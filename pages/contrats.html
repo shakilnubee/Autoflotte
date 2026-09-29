@@ -259,6 +259,11 @@
           <option value="bientot">🟠 Bientôt</option>
           <option value="ok">🟢 OK</option>
         </select>
+        <span class="text-xs text-slate-400 ml-1">Grouper&nbsp;par</span>
+        <select id="cadre-groupby" class="field-input !py-1.5 !text-sm" style="width:auto">
+          <option value="prestataire">Prestataire</option>
+          <option value="zone">Pays / entité</option>
+        </select>
       </div>
       <div id="cadre-list"></div>
     </div>
@@ -2426,7 +2431,7 @@
     const euro = (n) => (window.FP && FP.euro) ? FP.euro(n) : (Number(n) || 0) + ' €';
     const dnum = (d) => { try { return d ? (FP.dateNum ? FP.dateNum(String(d).slice(0,10)) : String(d).slice(0,10)) : ''; } catch (e) { return d || ''; } };
     const vehsAll = () => ((window.data && Array.isArray(data.vehicules)) ? data.vehicules : ((window.FP_DATA && FP_DATA.vehicules) || []));
-    const state = { search: '', type: 'all', prest: 'all', zone: 'all', ech: 'all' };
+    const state = { search: '', type: 'all', prest: 'all', zone: 'all', ech: 'all', groupBy: 'prestataire' };
 
     function filtered(){
       const list = FP.contratsCadre.list();
@@ -2500,11 +2505,15 @@
         return;
       }
       if (!list.length) { box.innerHTML = '<div class="p-6 text-center text-slate-500 text-sm">Aucun contrat ne correspond à ces filtres.</div>'; return; }
+      // Regroupement par PRESTATAIRE (défaut) ou par PAYS / ENTITÉ (assurance multi-structures).
+      const byZone = state.groupBy === 'zone';
+      const rawKeyOf = (c) => String((byZone ? c.paysEntite : c.prestataire) || '').trim();
       const groups = {};
-      list.forEach(c => { const k = String(c.prestataire || '').trim() || FP.contratCadreTypeLabel(c.type) || 'Sans prestataire'; (groups[k] = groups[k] || []).push(c); });
+      list.forEach(c => { const raw = rawKeyOf(c); const k = raw || (byZone ? '— Sans entité —' : '— Sans prestataire —'); (groups[k] = groups[k] || []).push(c); });
       const keys = Object.keys(groups).sort((a,b)=>a.localeCompare(b));
       box.innerHTML = keys.map(k => {
         const arr = groups[k];
+        const rawKey = rawKeyOf(arr[0]);   // valeur réelle du champ (vide pour le dossier « Sans … »)
         const sous = arr.reduce((s,c)=>s+FP.contratCadreCoutAnnuel(c),0);
         const rows = arr.map(c => `
           <div class="p-3 rounded-lg border border-slate-200 bg-white" data-cc="${esc(c.id)}" style="margin-top:8px">
@@ -2528,8 +2537,9 @@
           </div>`).join('');
         return `<div class="p-4 rounded-xl border border-slate-200 bg-slate-50 mb-3">
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-            <i data-lucide="folder" class="w-4 h-4 text-slate-500"></i>
+            <i data-lucide="${byZone ? 'map-pin' : 'folder'}" class="w-4 h-4 text-slate-500"></i>
             <span class="font-bold text-slate-900">${esc(k)}</span>
+            <button type="button" class="text-slate-300 hover:text-slate-700" data-cc-rename="${esc(rawKey)}" data-cc-rename-field="${byZone ? 'paysEntite' : 'prestataire'}" title="Renommer ce dossier"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
             <span class="text-xs text-slate-500">${arr.length} contrat${arr.length>1?'s':''}</span>
             ${sous ? '<span class="text-xs font-semibold text-slate-600 ml-auto">' + euro(sous) + ' /an</span>' : ''}
           </div>
@@ -2655,20 +2665,41 @@
       let _t = 0;
       if (search) search.addEventListener('input', (e) => { state.search = e.target.value; clearTimeout(_t); _t = setTimeout(render, 150); });
       const bind = (id, key) => { const el = document.getElementById(id); if (el) el.addEventListener('change', () => { state[key] = el.value; render(); }); };
-      bind('cadre-f-type', 'type'); bind('cadre-f-prest', 'prest'); bind('cadre-f-zone', 'zone'); bind('cadre-f-ech', 'ech');
+      bind('cadre-f-type', 'type'); bind('cadre-f-prest', 'prest'); bind('cadre-f-zone', 'zone'); bind('cadre-f-ech', 'ech'); bind('cadre-groupby', 'groupBy');
       // Bouton « Réinitialiser » (règle plateforme) sur la barre de filtres
       try {
         const bar = document.getElementById('cadre-filters');
         if (bar && FP.filterResetButton) FP.filterResetButton(bar, { onReset: () => {
-          state.search = ''; state.type = 'all'; state.prest = 'all'; state.zone = 'all'; state.ech = 'all';
+          state.search = ''; state.type = 'all'; state.prest = 'all'; state.zone = 'all'; state.ech = 'all'; state.groupBy = 'prestataire';
           if (search) search.value = '';
           ['cadre-f-type','cadre-f-prest','cadre-f-zone','cadre-f-ech'].forEach(i => { const el = document.getElementById(i); if (el) el.value = 'all'; });
+          const gb = document.getElementById('cadre-groupby'); if (gb) gb.value = 'prestataire';
           render();
         }});
       } catch (e) {}
       const listBox = document.getElementById('cadre-list');
       if (listBox) listBox.addEventListener('click', async (e) => {
         const ed = e.target.closest('[data-cc-edit]'); if (ed) { openModal(ed.getAttribute('data-cc-edit')); return; }
+        // Renommer un DOSSIER (prestataire ou pays/entité) → renomme la valeur sur TOUS ses contrats.
+        const rn = e.target.closest('[data-cc-rename]');
+        if (rn) {
+          const field = rn.getAttribute('data-cc-rename-field') || 'prestataire';
+          const cur = rn.getAttribute('data-cc-rename') || '';
+          const label = field === 'paysEntite' ? 'pays / entité' : 'prestataire';
+          let nv = null;
+          try { nv = FP.prompt ? await FP.prompt(`Nouveau nom du ${label} :`, cur) : prompt(`Nouveau nom du ${label} :`, cur); } catch (e2) { nv = null; }
+          if (nv == null) return;
+          nv = String(nv).trim();
+          if (nv === cur) return;
+          // Met à jour tous les contrats dont CE champ vaut la valeur actuelle (y compris vide → on tague).
+          FP.contratsCadre.list().forEach(c => { if (String((c[field] || '')).trim() === cur) FP.contratsCadre.update(c.id, { [field]: nv }); });
+          // Si le filtre pointait sur l'ancien nom, le suivre.
+          if (field === 'prestataire' && state.prest === cur) state.prest = nv;
+          if (field === 'paysEntite' && state.zone === cur) state.zone = nv;
+          render();
+          if (FP.toast) FP.toast('✓ Dossier renommé');
+          return;
+        }
         const del = e.target.closest('[data-cc-del]'); if (del) {
           const cid = del.getAttribute('data-cc-del'); const c = FP.contratsCadre.get(cid);
           const ok = FP.confirm ? await FP.confirm(`Supprimer le contrat ${c && c.prestataire ? '« ' + c.prestataire + ' »' : ''} ?`) : confirm('Supprimer ce contrat ?');
