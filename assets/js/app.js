@@ -5207,9 +5207,20 @@ FP.settings = {
     // nom du loueur leasing, etc. Vide par défaut ; PXP a des valeurs historiques (voir FP.societeProfil).
     profil: {},
   },
+  // ⚡ PERF (cache mémoire) : get() était rappelé des MILLIERS de fois par rendu (Suivi flotte, Contrôle,
+  // buildAlertes…), et chaque appel refaisait un JSON.parse + la reconstruction d'un objet ~40 clés →
+  // secondes de blocage du thread principal sur mobile. On mémorise le résultat, avec une clé = (chaîne
+  // brute localStorage + société active). ⚠️ ANTI-PERTE : toute écriture (save → setItem synchrone, sync
+  // serveur, autre onglet) CHANGE la chaîne brute → le prochain get() reparse tout seul. Les appelants qui
+  // MODIFIENT font get()→mutate→save() de façon synchrone (save change la chaîne → cache invalidé). On ne
+  // met donc JAMAIS en cache un état périmé et on n'écrit rien depuis ce cache : c'est de la lecture pure.
+  _gcRaw: null, _gcSoc: null, _gcVal: null,
   get() {
     try {
-      const stored = JSON.parse(this._readLocal()) || {};
+      const _raw = this._readLocal();
+      const _soc = (FP.activeSociete ? FP.activeSociete() : 'PXP');
+      if (this._gcVal && this._gcRaw === _raw && this._gcSoc === _soc) return this._gcVal;
+      const stored = JSON.parse(_raw) || {};
       const merged = {
         // ⚠️ On REPART de tout ce qui est stocké : ainsi TOUTE nouvelle clé de réglage est
         // conservée automatiquement, même si elle n'est pas listée ci-dessous. (Sans ce spread,
@@ -5273,6 +5284,7 @@ FP.settings = {
           }
         });
       }
+      this._gcRaw = _raw; this._gcSoc = _soc; this._gcVal = merged;
       return merged;
     } catch { return JSON.parse(JSON.stringify(this.defaults)); }
   },
