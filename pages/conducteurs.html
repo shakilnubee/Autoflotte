@@ -1255,6 +1255,15 @@
     });
     return clusters.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   }
+  // ⚠️ SOURCE UNIQUE — coût sinistres d'un conducteur = RESTE À CHARGE (après remboursement assureur),
+  // via FP.resteChargeSinistre, comme le TCO / le Budget / la page Sinistres. Avant, la fiche conducteur
+  // sommait le coût BRUT → un sinistre remboursé était compté à plein ici et net ailleurs (incohérence).
+  function driverSinistreCout(immats) {
+    const _ni = (x) => FP.normImmat ? FP.normImmat(x) : String(x || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const immSet = new Set((immats || []).map(_ni));
+    const sins = (data.factures || []).filter(f => (f.type || '').toLowerCase() === 'sinistre' && f.vehiculeImmat && immSet.has(_ni(f.vehiculeImmat)));
+    return FP.resteChargeSinistre ? FP.resteChargeSinistre(sins) : sins.reduce((a, f) => a + (FP.coutSinistre ? FP.coutSinistre(f) : (Number(f.montantTTC) || 0)), 0);
+  }
   // Repli des longues listes → helper GLOBAL unique FP.clampList (app.js), déroulé géré par
   // l'écouteur global. Repli de secours si FP indisponible.
   const clampList = (rowsHtml, limit) => (window.FP && FP.clampList) ? FP.clampList(rowsHtml, limit) : (rowsHtml || []).filter(Boolean).join('');
@@ -1647,12 +1656,12 @@
     // Points de permis restants (barème 12) — jauge compacte
     const ptsRest = pointsRestants(d);
     const ptsCol = ptsRest >= 9 ? '#10B981' : ptsRest >= 6 ? '#F59E0B' : '#EF4444';
-    const coutSinistres = accs.reduce((s, c) => s + (Number(c.montant) || 0), 0);
+    const coutSinistres = driverSinistreCout(d.vehicules.map(v => v.immat));   // reste à charge (source unique)
     const coutTotalGenere = totalPaye + dus + coutSinistres;
     // Bandeau KPIs = 5 tuiles alignées (pleine largeur sous l'identité) — comme les readouts véhicule.
     const stats = `<div class="cond-kpi-strip">
         <div class="fiche-stat"><div class="kpi-label">Amendes</div><div class="kpi-value" style="color:#6366F1">${d.amendes.length}</div></div>
-        <div class="fiche-stat"><div class="kpi-label">Accidents</div><div class="kpi-value" style="color:#F97316">${accs.length}</div>${coutSinistres ? `<div class="text-xs text-slate-400" style="margin-top:-2px" title="Coût total des sinistres de ses véhicules">${FP.euro(coutSinistres)}</div>` : ''}</div>
+        <div class="fiche-stat"><div class="kpi-label">Accidents</div><div class="kpi-value" style="color:#F97316">${accs.length}</div>${coutSinistres ? `<div class="text-xs text-slate-400" style="margin-top:-2px" title="Coût des sinistres de ses véhicules — reste à charge (après remboursement de l'assureur)">${FP.euro(coutSinistres)}</div>` : ''}</div>
         <div class="fiche-stat"><div class="kpi-label">Payé</div><div class="kpi-value" style="color:#059669">${FP.euro(totalPaye)}</div></div>
         <div class="fiche-stat"><div class="kpi-label">À payer</div><div class="kpi-value" style="color:${dus > 0 ? 'var(--fp-danger)' : 'var(--fp-text)'}">${FP.euro(dus)}</div></div>
         <div class="fiche-stat" title="Amendes payées + à payer + coût des sinistres de ses véhicules"><div class="kpi-label">Coût total généré</div><div class="kpi-value" style="color:var(--fp-primary)">${FP.euro(coutTotalGenere)}</div></div>
