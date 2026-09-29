@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260929f">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260929g">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260929f"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260929g"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260929f">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260929g">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -238,7 +238,9 @@
       <div class="section-title" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         <i data-lucide="folder-open" class="w-5 h-5"></i> Contrats cadre
         <span class="text-xs font-normal text-slate-400">accords prestataires — carte carburant, péage, maintenance, assurance par entité…</span>
-        <button id="cadre-add" type="button" class="btn btn-dark text-xs ml-auto" style="padding:4px 12px"><i data-lucide="plus" class="w-3.5 h-3.5"></i> Ajouter un contrat</button>
+        <button id="cadre-scan" type="button" class="btn btn-outline text-xs ml-auto" style="padding:4px 12px" title="Déposer le PDF : l'IA lit le contrat et pré-remplit les champs (tu vérifies avant d'enregistrer)"><i data-lucide="sparkles" class="w-3.5 h-3.5"></i> Scanner un contrat (IA)</button>
+        <button id="cadre-add" type="button" class="btn btn-dark text-xs" style="padding:4px 12px"><i data-lucide="plus" class="w-3.5 h-3.5"></i> Ajouter un contrat</button>
+        <input id="cadre-scan-file" type="file" accept="application/pdf,image/*" class="hidden">
       </div>
       <p class="text-sm text-slate-600 mb-4">Archive tes <b>contrats-cadre</b> par prestataire : dates, coût, PDF consultable, véhicule(s) concerné(s), pays/entité. Une <b>alerte de renouvellement</b> apparaît à l'approche de l'échéance (comme le contrôle technique). <i>(Le leasing reste dans son onglet — ce sont des bons de commande.)</i></p>
       <!-- KPIs (recalculés selon les FILTRES actifs) -->
@@ -683,8 +685,8 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260929f"></script>
-<script src="../assets/js/supabase-client.js?v=20260929f"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260929g"></script>
+<script src="../assets/js/supabase-client.js?v=20260929g"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -700,11 +702,11 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260929f"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260929g"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20260929f"></script>
+<script src="../assets/js/app.min.js?v=20260929g"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -2478,8 +2480,12 @@
       const e = FP.contratCadreEcheance(c) || {};
       if (!c.dateFin) return '<span class="text-xs text-slate-400">pas de date de fin</span>';
       const col = e.niveau === 'danger' ? '#B91C1C' : e.niveau === 'warn' ? '#B45309' : e.niveau === 'info' ? '#1D4ED8' : '#16A34A';
-      const txt = e.jours == null ? '' : (e.jours < 0 ? `expiré depuis ${-e.jours} j` : (e.jours === 0 ? "expire aujourd'hui" : `dans ${e.jours} j`));
-      return `<span style="color:${col};font-weight:700;font-size:12px">${esc(dnum(c.dateFin))} · ${esc(txt)}</span>`;
+      const lim = FP.contratCadreDateLimite ? FP.contratCadreDateLimite(c) : null;
+      const txt = e.jours == null ? '' : (e.jours < 0 ? (e.surResiliation ? `délai dépassé (${-e.jours} j)` : `expiré depuis ${-e.jours} j`) : (e.jours === 0 ? "aujourd'hui" : `dans ${e.jours} j`));
+      const part = lim
+        ? `<span style="color:${col};font-weight:700">⏰ résilier avant ${esc(dnum(lim))} · ${esc(txt)}</span>`
+        : `<span style="color:${col};font-weight:700">${esc(txt)}</span>`;
+      return `<span style="font-size:12px;color:#475569">Fin ${esc(dnum(c.dateFin))} · ${part}</span>`;
     }
 
     function perimetreTxt(c){
@@ -2519,7 +2525,8 @@
           <div class="p-3 rounded-lg border border-slate-200 bg-white" data-cc="${esc(c.id)}" style="margin-top:8px">
             <div style="display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap">
               <div style="flex:1;min-width:200px">
-                <div class="font-semibold text-slate-800 text-sm">${esc(FP.contratCadreTypeLabel(c.type))}${c.numero ? ' · <span class="font-normal text-slate-500">n° ' + esc(c.numero) + '</span>' : ''}</div>
+                <div class="font-semibold text-slate-800 text-sm">${esc(String(c.intitule||'').trim() || FP.contratCadreTypeLabel(c.type))}${c.numero ? ' · <span class="font-normal text-slate-500">n° ' + esc(c.numero) + '</span>' : ''}</div>
+                <div class="text-xs text-slate-400">${esc(FP.contratCadreTypeLabel(c.type))}${(c.statut && c.statut !== 'actif') ? ' · <b>' + (c.statut === 'resilie' ? 'résilié' : 'en renégociation') + '</b>' : ''}${c.garanties ? ' · ' + esc(c.garanties) : ''}</div>
                 <div class="text-xs text-slate-500 mt-0.5">${c.dateDebut ? 'du ' + esc(dnum(c.dateDebut)) + ' ' : ''}${c.dateFin ? 'au ' + esc(dnum(c.dateFin)) : ''}</div>
                 <div class="mt-1">${echBadge(c)}</div>
                 <div class="mt-1 flex items-center gap-3 flex-wrap">${perimetreTxt(c)}${c.paysEntite ? '<span class="text-xs" style="background:#EEF2FF;color:#3730A3;padding:1px 8px;border-radius:9999px;font-weight:600">' + esc(c.paysEntite) + '</span>' : ''}</div>
@@ -2550,9 +2557,67 @@
     }
     window.renderCadre = render;
 
+    // ---- Scan IA d'un contrat → pré-remplit le pop-up (même moteur que la lecture des offres leasing) ----
+    const CADRE_PROMPT = [
+      "Lis ce CONTRAT (assurance, carte carburant, badge de peage, entretien/maintenance, telematique, ou autre accord-cadre avec un prestataire).",
+      "Comporte-toi comme si on te demandait d'EXPLIQUER le document : lis TOUT le texte et retrouve les informations en t'ancrant sur les LIBELLES. Ne DEVINE jamais : si une info est absente, mets null. Ne prends jamais un nombre au hasard ni le plus grand.",
+      "Renvoie UNIQUEMENT un objet JSON valide, sans texte autour, avec ces cles (null si absent) :",
+      "typeContrat : l'un de 'assurance','carte-carburant','badge-peage','maintenance','telematique','autre' selon la nature du contrat.",
+      "intitule : l'objet / l'intitule du contrat (ex 'Assurance flotte tous risques', 'Contrat cartes carburant DKV').",
+      "prestataire : le nom du PRESTATAIRE / ASSUREUR / FOURNISSEUR (celui qui fournit le service : AXA, DKV, TotalEnergies, Ulys...). Pour une assurance = l'assureur (ou le courtier si c'est lui l'interlocuteur).",
+      "numeroContrat : le numero de contrat ou de police (ex 'Police n°', 'Contrat n°', 'N° client').",
+      "dateDebut : date de debut / prise d'effet, format AAAA-MM-JJ. null si absente.",
+      "dateFin : date de fin / d'echeance / d'expiration, format AAAA-MM-JJ. null si absente.",
+      "montant : le montant recurrent du contrat (prime, cotisation, abonnement), nombre a point decimal (ex 1250.00). PAS un total pluriannuel.",
+      "periode : 'an' si ce montant est annuel, 'mois' s'il est mensuel.",
+      "periodiciteFacturation : 'mensuel','trimestriel' ou 'annuel' si la frequence de facturation est indiquee.",
+      "reconductionTacite : 'oui' si le contrat se reconduit tacitement/automatiquement, 'non' sinon, null si non precise.",
+      "preavisMois : le PREAVIS DE RESILIATION en MOIS (ex 2 ou 3 ; cherche 'resiliation X mois avant l'echeance', 'preavis de X mois', 'denoncer le contrat X mois avant'). null si absent.",
+      "franchise : le montant de la franchise en euros (assurance), nombre. null si absent.",
+      "garanties : la formule / le niveau de garantie (ex 'tous risques', 'tiers', 'bris de glace').",
+      "plafond : le plafond mensuel en euros (carte carburant) si indique, nombre. null sinon.",
+      "paysEntite : le PAYS ou l'ENTITE / structure / etablissement assure ou concerne (ex 'France','Italie', ou le nom de la societe). null sinon.",
+      "interlocuteurNom : nom du contact / commercial / gestionnaire de compte. null si absent.",
+      "interlocuteurEmail : e-mail de contact. null si absent.",
+      "interlocuteurTel : telephone de contact. null si absent.",
+      "dateSignature : date de signature du contrat, format AAAA-MM-JJ. null si absente."
+    ];
+    function mapScan(f){
+      f = f || {};
+      const iso = (d) => { const s = String(d == null ? '' : d).trim(); return /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(0,10) : ''; };
+      const num = (x) => { if (x == null || x === '') return null; const n = Number(String(x).replace(/[^\d.,-]/g,'').replace(',','.')); return (Number.isFinite(n) && n !== 0) ? n : null; };
+      const TYPES = ['assurance','carte-carburant','badge-peage','maintenance','telematique','autre'];
+      let type = String(f.typeContrat || '').toLowerCase().trim(); if (!TYPES.includes(type)) type = 'autre';
+      const low = (x) => String(x == null ? '' : x).toLowerCase().trim();
+      return {
+        type, intitule: f.intitule || '', prestataire: f.prestataire || '', numero: f.numeroContrat || '',
+        dateDebut: iso(f.dateDebut), dateFin: iso(f.dateFin),
+        montant: num(f.montant), periode: (low(f.periode) === 'mois' ? 'mois' : 'an'),
+        periodiciteFacturation: ['mensuel','trimestriel','annuel'].includes(low(f.periodiciteFacturation)) ? low(f.periodiciteFacturation) : '',
+        reconductionTacite: (low(f.reconductionTacite) === 'oui' ? 'oui' : (low(f.reconductionTacite) === 'non' ? 'non' : '')),
+        preavisMois: num(f.preavisMois), franchise: num(f.franchise), plafond: num(f.plafond),
+        garanties: f.garanties || '', paysEntite: f.paysEntite || '',
+        interlocuteurNom: f.interlocuteurNom || '', interlocuteurEmail: f.interlocuteurEmail || '', interlocuteurTel: f.interlocuteurTel || '',
+        dateSignature: iso(f.dateSignature), statut: 'actif'
+      };
+    }
+    async function scanContrat(file){
+      if (!file) return;
+      const busy = FP.busy ? FP.busy("Lecture du contrat par l'IA…") : null;
+      let fields = null;
+      try { fields = (FP.scanIA) ? await FP.scanIA(file, 'contrat-cadre', CADRE_PROMPT, { maxTokens: 8192 }) : null; }
+      catch (e) { console.warn('[cadre scan IA]', e); }
+      let pdfArr = [];
+      try { const url = FP.uploadScan ? await FP.uploadScan(file, 'contrats-cadre') : ''; if (url) pdfArr = [{ name: file.name || 'Contrat', url }]; } catch (e) { console.warn('[cadre pdf join]', e); }
+      if (busy) { if (fields) busy.done('✓ Contrat lu — vérifie les champs'); else busy.fail('Lecture partielle — complète à la main'); }
+      const pf = mapScan(fields || {}); pf.pdf = pdfArr;
+      openModal(null, pf);
+      if (!fields && FP.toast) FP.toast("L'IA n'a pas pu tout lire — vérifie/complète les champs.");
+    }
+
     // ---- Modale Ajouter / Modifier ----
-    function openModal(id){
-      const c = id ? (FP.contratsCadre.get(id) || {}) : {};
+    function openModal(id, prefill){
+      const c = id ? (FP.contratsCadre.get(id) || {}) : (prefill || {});
       const vehChips = Array.isArray(c.vehicules) ? c.vehicules.slice() : [];
       const typeOpts = (FP.CONTRAT_CADRE_TYPES || []).map(t => `<option value="${t.key}" ${((c.type||'autre')===t.key)?'selected':''}>${esc(t.label)}</option>`).join('');
       const vehOpts = '<option value="">— choisir un véhicule —</option>' + vehsAll().slice().sort((a,b)=>String(a.immat||'').localeCompare(String(b.immat||''))).map(v => `<option value="${esc(v.immat||'')}">${esc(v.immat||'')} — ${esc((v.marque||'')+' '+(v.modele||''))}</option>`).join('');
@@ -2567,10 +2632,12 @@
         <div style="padding:16px 18px;display:grid;gap:10px">
           <label class="text-xs font-semibold text-slate-600">Type de contrat
             <select id="cc-type" class="field-input !py-2 mt-1" style="width:100%">${typeOpts}</select></label>
+          <label class="text-xs font-semibold text-slate-600">Intitulé / objet du contrat
+            <input id="cc-intitule" class="field-input !py-2 mt-1" style="width:100%" placeholder="ex. Assurance flotte tous risques, Contrat cartes DKV…" value="${esc(c.intitule||'')}"></label>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-            <label class="text-xs font-semibold text-slate-600">Prestataire
-              <input id="cc-prest" class="field-input !py-2 mt-1" style="width:100%" placeholder="DKV, Total, Ulys…" value="${esc(c.prestataire||'')}"></label>
-            <label class="text-xs font-semibold text-slate-600">N° de contrat
+            <label class="text-xs font-semibold text-slate-600">Prestataire / assureur
+              <input id="cc-prest" class="field-input !py-2 mt-1" style="width:100%" placeholder="DKV, Total, Ulys, AXA…" value="${esc(c.prestataire||'')}"></label>
+            <label class="text-xs font-semibold text-slate-600">N° de contrat / police
               <input id="cc-num" class="field-input !py-2 mt-1" style="width:100%" value="${esc(c.numero||'')}"></label>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
@@ -2579,14 +2646,45 @@
             <label class="text-xs font-semibold text-slate-600">Date de fin / échéance
               <input id="cc-fin" type="date" class="field-input !py-2 mt-1" style="width:100%" value="${esc((c.dateFin||'').slice(0,10))}"></label>
           </div>
-          <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <label class="text-xs font-semibold text-slate-600">Reconduction tacite ?
+              <select id="cc-recond" class="field-input !py-2 mt-1" style="width:100%"><option value="" ${!c.reconductionTacite?'selected':''}>—</option><option value="oui" ${c.reconductionTacite==='oui'?'selected':''}>Oui (se renouvelle seul)</option><option value="non" ${c.reconductionTacite==='non'?'selected':''}>Non</option></select></label>
+            <label class="text-xs font-semibold text-slate-600">Préavis de résiliation (mois)
+              <input id="cc-preavis" inputmode="numeric" class="field-input !py-2 mt-1" style="width:100%" placeholder="ex. 2 ou 3" value="${c.preavisMois!=null?esc(c.preavisMois):''}"></label>
+          </div>
+          <div id="cc-limite-hint" class="text-xs" style="color:#B45309;display:none"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
             <label class="text-xs font-semibold text-slate-600">Montant
               <input id="cc-montant" inputmode="decimal" class="field-input !py-2 mt-1" style="width:100%" placeholder="ex. 500" value="${c.montant!=null?esc(c.montant):''}"></label>
             <label class="text-xs font-semibold text-slate-600">Période
               <select id="cc-periode" class="field-input !py-2 mt-1" style="width:100%"><option value="an" ${c.periode!=='mois'?'selected':''}>par an</option><option value="mois" ${c.periode==='mois'?'selected':''}>par mois</option></select></label>
+            <label class="text-xs font-semibold text-slate-600">Facturation
+              <select id="cc-factu" class="field-input !py-2 mt-1" style="width:100%"><option value="" ${!c.periodiciteFacturation?'selected':''}>—</option><option value="mensuel" ${c.periodiciteFacturation==='mensuel'?'selected':''}>Mensuelle</option><option value="trimestriel" ${c.periodiciteFacturation==='trimestriel'?'selected':''}>Trimestrielle</option><option value="annuel" ${c.periodiciteFacturation==='annuel'?'selected':''}>Annuelle</option></select></label>
           </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <label class="text-xs font-semibold text-slate-600">Garanties / formule <span class="font-normal text-slate-400">(assurance)</span>
+              <input id="cc-garanties" class="field-input !py-2 mt-1" style="width:100%" placeholder="tous risques, tiers…" value="${esc(c.garanties||'')}"></label>
+            <label class="text-xs font-semibold text-slate-600">Franchise (€) <span class="font-normal text-slate-400">(assurance)</span>
+              <input id="cc-franchise" inputmode="decimal" class="field-input !py-2 mt-1" style="width:100%" value="${c.franchise!=null?esc(c.franchise):''}"></label>
+          </div>
+          <label class="text-xs font-semibold text-slate-600">Plafond mensuel (€) <span class="font-normal text-slate-400">(carte carburant)</span>
+            <input id="cc-plafond" inputmode="decimal" class="field-input !py-2 mt-1" style="width:100%" value="${c.plafond!=null?esc(c.plafond):''}"></label>
           <label class="text-xs font-semibold text-slate-600">Pays / entité (si plusieurs structures)
             <input id="cc-zone" class="field-input !py-2 mt-1" style="width:100%" placeholder="ex. France, Italie, PXP Retail…" value="${esc(c.paysEntite||'')}"></label>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+            <label class="text-xs font-semibold text-slate-600">Interlocuteur
+              <input id="cc-int-nom" class="field-input !py-2 mt-1" style="width:100%" placeholder="nom" value="${esc(c.interlocuteurNom||'')}"></label>
+            <label class="text-xs font-semibold text-slate-600">E-mail
+              <input id="cc-int-email" class="field-input !py-2 mt-1" style="width:100%" placeholder="contact@…" value="${esc(c.interlocuteurEmail||'')}"></label>
+            <label class="text-xs font-semibold text-slate-600">Téléphone
+              <input id="cc-int-tel" class="field-input !py-2 mt-1" style="width:100%" value="${esc(c.interlocuteurTel||'')}"></label>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <label class="text-xs font-semibold text-slate-600">Statut
+              <select id="cc-statut" class="field-input !py-2 mt-1" style="width:100%"><option value="actif" ${(c.statut||'actif')==='actif'?'selected':''}>Actif</option><option value="renegociation" ${c.statut==='renegociation'?'selected':''}>En renégociation</option><option value="resilie" ${c.statut==='resilie'?'selected':''}>Résilié</option></select></label>
+            <label class="text-xs font-semibold text-slate-600">Date de signature
+              <input id="cc-signe" type="date" class="field-input !py-2 mt-1" style="width:100%" value="${esc((c.dateSignature||'').slice(0,10))}"></label>
+          </div>
           <div>
             <div class="text-xs font-semibold text-slate-600 mb-1">Véhicule(s) concerné(s) <span class="font-normal text-slate-400">— laisser vide = toute la flotte</span></div>
             <div style="display:flex;gap:6px;flex-wrap:wrap"><select id="cc-veh" class="field-input !py-2" style="flex:1;min-width:160px">${vehOpts}</select><button type="button" id="cc-veh-add" class="btn btn-outline text-sm">Ajouter</button></div>
@@ -2622,6 +2720,19 @@
         box.innerHTML = pdfs.map((p,i) => `<div style="display:flex;align-items:center;gap:8px;font-size:12px"><a href="${esc(p.url)}" target="_blank" rel="noopener" style="color:#0e7490;font-weight:600">📄 ${esc(p.name||'Document')}</a><button type="button" data-pdf-rm="${i}" style="border:none;background:none;color:#EF4444;cursor:pointer">retirer</button></div>`).join('');
       };
       renderChips(); renderPdfs();
+      // Aperçu LIVE de la date limite de résiliation (date de fin − préavis) — l'alerte se cale dessus.
+      const updateLimite = () => {
+        const el = ov.querySelector('#cc-limite-hint'); if (!el) return;
+        const fin = (ov.querySelector('#cc-fin')||{}).value || '';
+        const pm = Number(String((ov.querySelector('#cc-preavis')||{}).value || '').replace(',', '.'));
+        if (fin && Number.isFinite(pm) && pm > 0) {
+          const d = new Date(fin); d.setMonth(d.getMonth() - pm);
+          el.textContent = '⏰ Date limite pour résilier : ' + (FP.dateNum ? FP.dateNum(d.toISOString().slice(0,10)) : d.toISOString().slice(0,10)) + " — c'est sur cette date que porte l'alerte.";
+          el.style.display = 'block';
+        } else { el.style.display = 'none'; }
+      };
+      updateLimite();
+      ['#cc-fin', '#cc-preavis'].forEach(s => { const el = ov.querySelector(s); if (el) el.addEventListener('input', updateLimite); });
       ov.addEventListener('click', (e) => {
         if (e.target === ov || e.target.closest('[data-cc-x]')) { close(); return; }
         const rm = e.target.closest('[data-chip]'); if (rm) { vehChips.splice(+rm.getAttribute('data-chip'), 1); renderChips(); return; }
@@ -2646,9 +2757,18 @@
         if (!prest && type !== 'autre') { err.style.display = 'block'; err.textContent = 'Indique au moins le prestataire.'; return; }
         const debut = val('#cc-debut'), fin = val('#cc-fin');
         if (debut && fin && fin < debut) { err.style.display = 'block'; err.textContent = 'La date de fin est avant la date de début.'; return; }
-        const montantRaw = val('#cc-montant').replace(/\s/g,'').replace(',','.');
-        const montant = montantRaw === '' ? null : (Number(montantRaw) || 0);
-        const rec = { type, prestataire: prest, numero: val('#cc-num'), dateDebut: debut, dateFin: fin, montant, periode: val('#cc-periode') || 'an', paysEntite: val('#cc-zone'), vehicules: vehChips.slice(), notes: val('#cc-notes'), pdf: pdfs.slice() };
+        const num = (id2) => { const raw = val(id2).replace(/\s/g,'').replace(',','.'); return raw === '' ? null : (Number(raw) || 0); };
+        const montant = num('#cc-montant');
+        const preavis = num('#cc-preavis');
+        const rec = {
+          type, prestataire: prest, intitule: val('#cc-intitule'), numero: val('#cc-num'),
+          dateDebut: debut, dateFin: fin, montant, periode: val('#cc-periode') || 'an',
+          periodiciteFacturation: val('#cc-factu'), reconductionTacite: val('#cc-recond'),
+          preavisMois: preavis, garanties: val('#cc-garanties'), franchise: num('#cc-franchise'), plafond: num('#cc-plafond'),
+          paysEntite: val('#cc-zone'), interlocuteurNom: val('#cc-int-nom'), interlocuteurEmail: val('#cc-int-email'), interlocuteurTel: val('#cc-int-tel'),
+          statut: val('#cc-statut') || 'actif', dateSignature: val('#cc-signe'),
+          vehicules: vehChips.slice(), notes: val('#cc-notes'), pdf: pdfs.slice()
+        };
         const btn = ov.querySelector('#cc-save'); btn.disabled = true;
         try { if (id) FP.contratsCadre.update(id, rec); else FP.contratsCadre.add(rec); } catch (e) { btn.disabled = false; err.style.display = 'block'; err.textContent = 'Erreur d\'enregistrement.'; return; }
         close();
@@ -2661,6 +2781,8 @@
     // ---- Câblage filtres + actions liste ----
     document.addEventListener('DOMContentLoaded', () => {
       const add = document.getElementById('cadre-add'); if (add) add.addEventListener('click', () => openModal());
+      const scanBtn = document.getElementById('cadre-scan'), scanFile = document.getElementById('cadre-scan-file');
+      if (scanBtn && scanFile) { scanBtn.addEventListener('click', () => scanFile.click()); scanFile.addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; e.target.value = ''; if (f) scanContrat(f); }); }
       const search = document.getElementById('cadre-search');
       let _t = 0;
       if (search) search.addEventListener('input', (e) => { state.search = e.target.value; clearTimeout(_t); _t = setTimeout(render, 150); });

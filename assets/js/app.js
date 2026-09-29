@@ -7974,18 +7974,31 @@ FP.contratsCadre = {
 };
 // Coût ANNUEL normalisé d'un contrat cadre (mensuel → ×12). 0 si pas de montant. Source unique des totaux.
 FP.contratCadreCoutAnnuel = (c) => { const m = Number(c && c.montant); if (!Number.isFinite(m) || m <= 0) return 0; return String(c.periode) === 'mois' ? m * 12 : m; };
+// DATE LIMITE DE RÉSILIATION = date de fin − préavis (mois). null si pas de préavis/pas de date de fin.
+// Un contrat-cadre se reconduit souvent tacitement : c'est CETTE date qu'il faut respecter pour résilier.
+FP.contratCadreDateLimite = (c) => {
+  try {
+    const fin = c && String(c.dateFin || '').trim(); if (!fin) return null;
+    const pm = Number(c && c.preavisMois); if (!Number.isFinite(pm) || pm <= 0) return null;
+    const d = new Date(fin); if (isNaN(d)) return null;
+    d.setMonth(d.getMonth() - pm); return d.toISOString().slice(0, 10);
+  } catch (e) { return null; }
+};
 // Échéance d'un contrat cadre : mêmes paliers que l'assurance/CT (anticipation = notifCfg().ctJours).
-// Renvoie { jours, niveau:'danger'|'warn'|'info'|null } (null = pas de date de fin ou trop loin).
+// ⚠️ Se cale sur la DATE LIMITE DE RÉSILIATION si un préavis est saisi (sinon sur la date de fin).
+// Renvoie { jours, niveau, surResiliation, ref } (niveau null = pas de date ou trop loin).
 FP.contratCadreEcheance = (c) => {
   try {
-    const fin = c && String(c.dateFin || '').trim(); if (!fin) return { jours: null, niveau: null };
-    const d = new Date(fin); if (isNaN(d)) return { jours: null, niveau: null };
-    const jours = FP.joursRestants ? FP.joursRestants(fin) : Math.ceil((d - new Date()) / 86400000);
+    const lim = FP.contratCadreDateLimite(c);
+    const ref = lim || (c && String(c.dateFin || '').trim());
+    if (!ref) return { jours: null, niveau: null, surResiliation: false, ref: null };
+    const d = new Date(ref); if (isNaN(d)) return { jours: null, niveau: null, surResiliation: !!lim, ref };
+    const jours = FP.joursRestants ? FP.joursRestants(ref) : Math.ceil((d - new Date()) / 86400000);
     const I = (FP.notifCfg ? FP.notifCfg().ctJours : 90) || 90, W = Math.round(I * 2 / 3), D = Math.round(I / 3);
     let niveau = null;
     if (jours < 0) niveau = 'danger'; else if (jours < D) niveau = 'danger'; else if (jours < W) niveau = 'warn'; else if (jours < I) niveau = 'info';
-    return { jours, niveau };
-  } catch (e) { return { jours: null, niveau: null }; }
+    return { jours, niveau, surResiliation: !!lim, ref };
+  } catch (e) { return { jours: null, niveau: null, surResiliation: false, ref: null }; }
 };
 
 FP.buildAlertes = (data) => {
@@ -8045,8 +8058,10 @@ FP.buildAlertes = (data) => {
       const zone = String(c.paysEntite || '').trim();
       const det = `${FP.contratCadreTypeLabel(c.type)}${zone ? ' · ' + zone : ''}${c.numero ? ' · n° ' + c.numero : ''}`;
       const tgt = 'contrats.html?tab=cadre';
-      const mk = 'contratcadre|' + c.id + '|' + c.dateFin;
-      const msg = diff < 0 ? `Contrat ${nom} expiré depuis ${-diff}j` : `Contrat ${nom} à renouveler dans ${diff}j`;
+      const mk = 'contratcadre|' + c.id + '|' + (ech.ref || c.dateFin);
+      let msg;
+      if (ech.surResiliation) msg = diff < 0 ? `Contrat ${nom} — délai de résiliation dépassé (${-diff}j)` : `Contrat ${nom} — à résilier avant le ${FP.date(ech.ref)} (dans ${diff}j)`;
+      else msg = diff < 0 ? `Contrat ${nom} expiré depuis ${-diff}j` : `Contrat ${nom} à renouveler dans ${diff}j`;
       out.push({ niveau: ech.niveau, categorie: 'Contrats', message: msg, detail: det, sort: diff, target: tgt, muteKey: mk, vehLabel: det });
     });
   } catch (e) {}
