@@ -1234,6 +1234,19 @@
     return `linear-gradient(135deg, ${c} 0%, ${c2} 100%)`;
   }
   function driverGroupLabel(d) { const k = driverGroupKey(d); return k ? FP.groupeLabel(k) : ''; }
+  // ⚡ PERF : index (plaque normalisée → factures sinistre) calculé UNE fois et mémorisé, au lieu de
+  // re-scanner TOUTES les factures pour CHAQUE conducteur (O(conducteurs × factures) × ~3 par rendu).
+  // Invalidé si data.factures change (référence ou nombre). Résultat identique au filtre d'origine.
+  let _sinIdxRef = null, _sinIdxLen = -1, _sinIdxMap = null;
+  function sinIndex() {
+    const arr = data.factures || [];
+    if (_sinIdxMap && _sinIdxRef === arr && _sinIdxLen === arr.length) return _sinIdxMap;
+    const _ni = (x) => FP.normImmat ? FP.normImmat(x) : String(x || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const m = new Map();
+    arr.forEach(f => { if ((f.type || '').toLowerCase() !== 'sinistre' || !f.vehiculeImmat) return; const k = _ni(f.vehiculeImmat); let a = m.get(k); if (!a) { a = []; m.set(k, a); } a.push(f); });
+    _sinIdxRef = arr; _sinIdxLen = arr.length; _sinIdxMap = m; return m;
+  }
+  function sinPourImmats(immSet) { const idx = sinIndex(); const out = []; immSet.forEach(k => { const a = idx.get(k); if (a) for (const f of a) out.push(f); }); return out; }
   // Accidents d'un conducteur = factures "sinistre" de ses véhicules, regroupées par
   // accident (factures du même véhicule espacées de ≤ 30 jours = un seul accident).
   function driverAccidents(immats) {
@@ -1243,7 +1256,7 @@
     // ou un sinistre 100 % pris en charge était compté à plein sur la fiche conducteur (contradiction).
     const _ni = (x) => FP.normImmat ? FP.normImmat(x) : String(x || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
     const immSet = new Set((immats || []).map(_ni));
-    const sins = (data.factures || []).filter(f => (f.type || '').toLowerCase() === 'sinistre' && f.vehiculeImmat && immSet.has(_ni(f.vehiculeImmat)));
+    const sins = sinPourImmats(immSet); // index précalculé (identique au filtre type=sinistre + plaque)
     const cout = (f) => FP.coutSinistre ? FP.coutSinistre(f) : (Number(f.montantTTC) || 0);
     const groups = {};
     sins.forEach(f => { const k = (FP.normImmat ? FP.normImmat(f.vehiculeImmat) : f.vehiculeImmat) || '—'; (groups[k] = groups[k] || []).push(f); }); // clé plaque NORMALISÉE (même véhicule = 1 groupe)
@@ -1265,7 +1278,7 @@
   function driverSinistreCout(immats) {
     const _ni = (x) => FP.normImmat ? FP.normImmat(x) : String(x || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
     const immSet = new Set((immats || []).map(_ni));
-    const sins = (data.factures || []).filter(f => (f.type || '').toLowerCase() === 'sinistre' && f.vehiculeImmat && immSet.has(_ni(f.vehiculeImmat)));
+    const sins = sinPourImmats(immSet); // index précalculé (identique au filtre type=sinistre + plaque)
     return FP.resteChargeSinistre ? FP.resteChargeSinistre(sins) : sins.reduce((a, f) => a + (FP.coutSinistre ? FP.coutSinistre(f) : (Number(f.montantTTC) || 0)), 0);
   }
   // Repli des longues listes → helper GLOBAL unique FP.clampList (app.js), déroulé géré par

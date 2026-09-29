@@ -607,6 +607,12 @@
     let fact = (annee === 'all') ? factures : factures.filter(f => (f.date || '').startsWith(annee));
     // Dédoublonnage par numéro de facture (source unique FP.dedupeFactures) → évite de gonfler les totaux/graphes/TCO.
     fact = FP.dedupeFactures(fact);
+    // ⚡ PERF : index calculés UNE fois → évite les scans O(véhicules × factures) plus bas
+    // (coût par société ~690, TCO ~722). Clé = plaque NORMALISÉE (source unique FP.normImmat).
+    const _factByImmat = new Map();
+    fact.forEach(f => { const k = FP.normImmat(f.vehiculeImmat); let a = _factByImmat.get(k); if (!a) { a = []; _factByImmat.set(k, a); } a.push(f); });
+    const _vehByImmat = new Map();
+    (data.vehicules || []).forEach(v => { if (v.immat) _vehByImmat.set(FP.normImmat(v.immat), v); });
     $('periode-label').textContent = (annee === 'all') ? 'toutes années' : annee;
 
     // KPI : usage vs achat. Coût d'usage = coût RÉEL pour la société → sinistres comptés au
@@ -687,7 +693,7 @@
     });
 
     // Par société
-    const perSociete = {}; fact.forEach(f => { const veh = data.vehicules.find(v => FP.normImmat(v.immat) === FP.normImmat(f.vehiculeImmat)); const soc = veh ? (veh.proprietaire || 'Inconnu') : 'Inconnu'; perSociete[soc] = (perSociete[soc] || 0) + (+f.montantTTC || 0); });
+    const perSociete = {}; fact.forEach(f => { const veh = _vehByImmat.get(FP.normImmat(f.vehiculeImmat)); const soc = veh ? (veh.proprietaire || 'Inconnu') : 'Inconnu'; perSociete[soc] = (perSociete[soc] || 0) + (+f.montantTTC || 0); });
     charts.soc = new Chart($('societeChart'), {
       type: 'doughnut',
       data: { labels: Object.keys(perSociete), datasets: [{ data: Object.values(perSociete), backgroundColor: [(FP.chartInk?FP.chartInk():'#0F1E3D'), '#F97316', '#F59E0B', '#94A3B8'], borderWidth: 0 }] },
@@ -719,7 +725,7 @@
     // Un véhicule sous ce seuil est EXCLU du coût/km (podium ET colonne €/km du tableau) → « — ».
     const MIN_KM_PERKM = 1000;
     tcoData = data.vehicules.map(v => {
-      const fv = fact.filter(f => FP.normImmat(f.vehiculeImmat) === FP.normImmat(v.immat)); // match plaque tolérant (tirets/espaces/OCR)
+      const fv = _factByImmat.get(FP.normImmat(v.immat)) || []; // match plaque tolérant (tirets/espaces/OCR) — index précalculé
       // Leasing : le loyer fait foi via l'OFFRE (Contrats), les factures 'leasing' ne sont qu'une preuve.
       // Si l'offre a un loyer connu → on EXCLUT ses factures 'leasing' (sinon double compte) et on ajoute
       // le coût de l'offre : cumulé (leasingTotalVerse) en « toutes années », loyer courant×12 sur une année.
