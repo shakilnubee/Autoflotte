@@ -1,5 +1,33 @@
 # Parc Pilot — Contexte projet
 
+## 🏛️ CONTRAT DE DÉVELOPPEMENT — PROMPT MAÎTRE (gravé en dur, s'applique à CHAQUE demande)
+
+> ⚠️ **Consigne explicite et permanente de l'utilisateur** : ce contrat vaut pour **toute** demande sur
+> Parc Pilot, **sans qu'il ait à le redonner**. Il s'ajoute (ne remplace pas) aux « ⚖️ RÈGLES PERMANENTES
+> DE DÉVELOPPEMENT » plus bas et à tout le reste de ce fichier. L'utilisateur parle en **phrases simples**
+> (souvent + une capture d'écran) ; à moi de traduire son intention en une modif **complète et sûre**.
+
+**Les 13 principes non négociables** (détaillés plus bas dans ce fichier) :
+1. **NE RIEN CASSER** — jamais supprimer une feature / changer une logique métier / contourner un bug en désactivant une fonctionnalité. Corriger la **cause racine**.
+2. **SOURCE UNIQUE** — chercher un helper `FP.*` existant AVANT d'en créer un ; une règle métier = **une seule** implémentation (centralisée dans `FP.*` si réutilisable).
+3. **INTÉGRITÉ DES DONNÉES = PRIORITÉ N°1** — écriture = même ligne/clé que la lecture ; via `FP.persist` ; jamais d'échec silencieux ; toute map keyée → `COLLECTION_KEYS`.
+4. **TOUT SYNCHRONISÉ (Supabase)** — `localStorage` = cache d'affichage seul, jamais la source.
+5. **MULTI-SOCIÉTÉS** — code commun à toutes les sociétés ; jamais de feature spécifique à une société (les différences viennent des données/réglages). Rôles via `profiles`, jamais les métadonnées client.
+6. **PROPAGATION GLOBALE** — chercher par **fonctionnalité** (pas par mot) et répercuter partout : desktop/mobile, fiches, tableaux, dashboard, stats, filtres, alertes, PDF, e-mails, exports, portail conducteur, QR, scan IA, Edge Functions, tâches auto, paramètres, **manuel**.
+7. **SÉCURITÉ** — toute donnée saisie/scannée/Supabase/portail injectée en HTML → `FP.esc` ; ne jamais faire confiance au navigateur ; contrôles serveur quand nécessaire.
+8. **DOCUMENTS/IA — LIRE, JAMAIS DEVINER** — s'ancrer sur le libellé/repère (jamais `Math.max` aveugle), contrôler la cohérence (HT+TVA=TTC), ne rien inventer, anti-doublons centralisé.
+9. **PERFORMANCE** — pas d'O(n²) inutile (index/Map), mémoriser, débouncer, éviter re-render et rechargements Supabase inutiles.
+10. **INTERFACE FR** — recherche clavier + filtres + bouton « Réinitialiser » sur tout sélecteur ; desktop **et** mobile ; « prévenir un conducteur » = **SMS + WhatsApp + e-mail**.
+11. **SYNCHRO vérifiée** — chemin complet `UI → logique → persistance → Supabase → lecture → affichage`, retrouvable après rechargement / autre appareil / autre utilisateur autorisé.
+12. **MANUEL** — `pages/manuel.html` mis à jour **dans le même lot** que la feature.
+13. **DÉPLOIEMENT** — si `app.js`/`fleet-views.js`/`supabase-client.js`/`data.js` changent : régénérer les `.min.js` + bumper `?v=` partout (+ `sw.js`, `version.json`) ; contrôle `check-bugs` ; RGPD `data.js` (0 donnée perso, dépôt public). HTML seul = pas de bump.
+
+**Méthode pour CHAQUE demande** : (1) comprendre le besoin métier (qui/quoi/où/règles existantes/écrans) → (2) chercher l'existant (helpers `FP.*`, tables, `app_settings`, `COLLECTION_KEYS`, persistance, Edge Functions, affichages/PDF/e-mails, dépendances) → (3) plan (fichiers, helpers à réutiliser/centraliser, données, persistance, permissions, propagation, tests, doc) → (4) implémentation **minimale et ciblée** (pas de gros refactor non demandé) → (5) vérifs (syntaxe, refs, persistance, anti-perte, multi-sociétés, permissions, mobile/desktop, XSS, perf, propagation, PDF/e-mails/portail, manuel) → (6) **compte rendu obligatoire**.
+
+**Compte rendu obligatoire (fin de chaque intervention)** : 1) modifs (fichiers/fonctions/features) · 2) centralisation (helpers réutilisés/créés) · 3) données (tables, `app_settings`, `COLLECTION_KEYS`, persistance) · 4) propagation (écrans, mobile/desktop, PDF, e-mails, portail, Edge Functions) · 5) sécurité/permissions · 6) tests + points restant à vérifier · 7) manuel · 8) déploiement (minif/bump ou non).
+
+**Règle finale** : une feature n'est **terminée** que si sa donnée est **persistée, récupérable après rechargement, synchronisée entre appareils** et **intégrée partout** où elle doit logiquement servir — pas seulement « le bouton marche ». En cas de conflit avec l'architecture : ne pas contourner en silence → l'expliquer, proposer la solution compatible, et ne demander confirmation que si une **décision métier** est réellement nécessaire.
+
 ## C'est quoi ce projet ?
 
 **Parc Pilot** est un SaaS de gestion de flotte automobile, développé pour TJMAX (avec aussi des véhicules BPCE en leasing et PROJECT X PARIS RETAIL).
