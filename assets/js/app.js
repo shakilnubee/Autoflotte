@@ -1726,6 +1726,26 @@ FP.coutExploitAnnee = (v, annee, factures) => {
 // révision (le véhicule ne peut pas rouler moins que son dernier relevé). À utiliser partout où on AFFICHE
 // « km actuel », pour que même des données non réconciliées (data.js figé) montrent la bonne valeur.
 FP.kmActuel = (v) => Math.max(Number(v && v.km) || 0, Number(v && v.kmDernierReleve) || 0);
+// ⚠️ HELPER CANONIQUE — STATUT D'ÉCHÉANCE (libellé + couleur) UNIFIÉ pour CT, permis, assurance, entretien.
+// Le décompte en jours vient de FP.joursRestants (minuit→minuit) ; les SEUILS bientôt/urgent sont
+// CENTRALISÉS ici → tous les écrans colorent pareil (avant : CT 30/60 ici, 90 là ; permis 183 vs 60…).
+FP.ECHEANCE_SEUILS = {
+  ct:        { urgent: 30, bientot: 60 },   // contrôle technique
+  permis:    { urgent: 30, bientot: 90 },   // permis de conduire (3 mois pour anticiper le renouvellement)
+  assurance: { urgent: 15, bientot: 45 },
+  entretien: { urgent: 15, bientot: 45 },
+  defaut:    { urgent: 15, bientot: 60 }
+};
+FP.ECHEANCE_COULEUR = { expire: '#DC2626', urgent: '#EA580C', bientot: '#D97706', valide: '#16A34A', inconnu: '#94A3B8' };
+// Renvoie { jours, statut: 'expire'|'urgent'|'bientot'|'valide'|'inconnu', couleur }. `kind` ∈ clés ci-dessus.
+FP.echeanceStatut = function (dateOrISO, kind) {
+  const j = FP.joursRestants ? FP.joursRestants(dateOrISO) : null;
+  if (j == null) return { jours: null, statut: 'inconnu', couleur: FP.ECHEANCE_COULEUR.inconnu };
+  const S = FP.ECHEANCE_SEUILS[kind] || FP.ECHEANCE_SEUILS.defaut;
+  let statut = 'valide';
+  if (j < 0) statut = 'expire'; else if (j <= S.urgent) statut = 'urgent'; else if (j <= S.bientot) statut = 'bientot';
+  return { jours: j, statut, couleur: FP.ECHEANCE_COULEUR[statut] };
+};
 // ⚠️ HELPER CANONIQUE — KM ANNUEL RÉEL (estimé) d'un véhicule, pour le bilan CO₂ (et tout calcul « /an »).
 // Bien plus juste que le forfait 15 000 km : on prend le VRAI rythme du véhicule, dans cet ordre :
 //   1) RELEVÉS KM (source unique FP.kmCollecte) : ≥2 relevés espacés d'au moins 30 j → (Δkm ÷ Δjours)×365.
@@ -5981,6 +6001,7 @@ FP.DEFAULT_NAV_LABELS = {
   'taches.html':       'Tâches',
   'statistiques.html': 'Statistiques',
   'vehicules.html':    'Véhicules',
+  'a-vendre.html':     'À vendre',
   'emprunts.html':     'Emprunt véhicule',
   'conducteurs.html':  'Conducteurs',
   'amendes.html':      'Amendes',
@@ -5999,7 +6020,6 @@ FP.DEFAULT_NAV_LABELS = {
   'calendrier.html':   'Calendrier',
   'renouvellements.html': 'Renouvellements',
   'entretiens.html':   'Entretiens',
-  'a-vendre.html':     'À vendre',
 };
 // Ordre d'affichage des onglets du menu (clés data-nav), navOrder en tête puis le reste
 FP.navKeysOrdered = () => {
