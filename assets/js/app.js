@@ -65,6 +65,29 @@ document.addEventListener('click', (e) => {
   if (estImport) e.stopPropagation();
 }, true);
 
+// Détecte les modales/overlays « ad-hoc » créés à la volée (position:fixed, plein écran, z-index élevé)
+// SANS la classe .modal-backdrop / id -modal / -backdrop (ex. état des lieux FP.edl, visionneuse photo,
+// aperçus, pickers). Sert aux gardes globaux pour que FERMER cette couche (clic dehors, ×, Échap) ne
+// ferme JAMAIS la fiche/tiroir en dessous → fermeture « une étape en arrière » (règle utilisateur).
+// ⚠️ Retourne les overlays du plus BAS au plus HAUT (ordre DOM = ordre d'empilement pour même z-index).
+function _fpAdHocOverlays() {
+  try {
+    const vis = (el) => el && !el.classList.contains('hidden') && getComputedStyle(el).display !== 'none' && getComputedStyle(el).visibility !== 'hidden';
+    // Exclus : les couches DÉJÀ reconnues par les sélecteurs standards + la fiche elle-même + backdrops connus.
+    const excl = '.modal-backdrop, [id$="-modal"], [id$="-backdrop"], .fp-dlg-backdrop, .fp-menu, .popover, .fp-popover, .drawer, .drawer-backdrop, .fp-sidebar-backdrop';
+    return Array.from(document.body.children).filter((el) => {
+      if (!(el instanceof HTMLElement)) return false;
+      if (el.matches(excl)) return false;
+      if (!vis(el)) return false;
+      const cs = getComputedStyle(el);
+      if (cs.position !== 'fixed') return false;
+      const z = parseInt(cs.zIndex, 10) || 0;
+      const big = el.offsetWidth >= window.innerWidth * 0.5 && el.offsetHeight >= window.innerHeight * 0.5;
+      return z >= 1000 && big;   // couvre l'écran + au-dessus du contenu = c'est une modale
+    });
+  } catch (e) { return []; }
+}
+
 // Garde GLOBAL (toutes les pages + futures) : ÉCHAP ferme TOUTE zone ouverte
 // (tiroir, fenêtre modale, popover, menu déroulant, résultats de recherche).
 document.addEventListener('keydown', (e) => {
@@ -103,6 +126,18 @@ document.addEventListener('keydown', (e) => {
     el.classList.add('hidden'); if (el.style && el.style.display && el.style.display !== 'none') el.style.display = 'none'; el.classList.remove('open'); closed = true;
   });
   if (closed) { try { window.__fpEscLayerClosedAt = Date.now(); } catch (_) {} e.stopPropagation(); return; }
+  // 2bis) Modales ad-hoc plein écran (créées à la volée sans classe .modal-backdrop : état des lieux,
+  // visionneuse photo, aperçus…). On ferme la PLUS HAUTE via son affordance (× / clic sur le fond),
+  // et surtout on NE laisse PAS Échap tomber sur la fiche derrière → « une étape en arrière ».
+  const _adhoc = _fpAdHocOverlays();
+  if (_adhoc.length) {
+    const ov = _adhoc[_adhoc.length - 1];   // la plus haute
+    const x = ov.querySelector('[data-edl-x],[data-close],#fp-lb-x,[aria-label="Fermer"],[aria-label="Close"]');
+    try { if (x) x.click(); else if (ov.click) ov.click(); } catch (_) {}
+    if (document.body.contains(ov)) { try { ov.remove(); } catch (_) {} }   // repli : jamais laisser la fiche se fermer
+    try { window.__fpEscLayerClosedAt = Date.now(); } catch (_) {}
+    e.stopPropagation(); return;
+  }
   // 3) Tiroir / fiche (couche la plus basse) — seulement si RIEN n'était ouvert au-dessus
   document.querySelectorAll('.drawer.open, .drawer-backdrop.open').forEach(el => { el.classList.remove('open'); closed = true; });
   if (closed) e.stopPropagation();
@@ -129,6 +164,10 @@ document.addEventListener('keydown', (e) => {
       if (isVisible(el) && (el.classList.contains('open') || getComputedStyle(el).display === 'flex')) push(el, 'modal');
     });
     document.querySelectorAll(FLOAT_SEL).forEach(el => { if (isVisible(el)) push(el, 'float'); });
+    // Modales ad-hoc plein écran SANS classe .modal-backdrop (état des lieux, visionneuse, pickers) :
+    // on les traite comme des « modal » → fermer CETTE couche (clic dehors / ×) ne ferme plus la fiche
+    // en dessous (la modale gère sa propre fermeture via son handler). Correctif « revenir sur la fiche ».
+    _fpAdHocOverlays().forEach(el => push(el, 'modal'));
     document.querySelectorAll('.fp-search-results').forEach(el => {
       if (el.style.display !== 'none' && (el.innerHTML || '').trim()) push(el, 'search');
     });
@@ -7336,7 +7375,14 @@ FP.edlHisto = {
   _imgRe: /\.(jpe?g|png|gif|webp|heic|bmp|avif)(\?|$)/i,
   isPhoto(d) { return !!(d && (this._imgRe.test(String(d.url || '')) || /^data:image\//i.test(String(d.url || '')))); },
   sensDe(d) { return /sort|resti/i.test(String((d && d.label) || '')) ? 'restitution' : 'remise'; },
-  dateDe(d) { const s = String((d && (d.date || d.createdAt || d.created_at)) || ''); return s ? s.slice(0, 10) : ''; },
+  dateDe(d) {
+    // Une date ISO (AAAA-MM-JJ) encodée dans le libellé fait FOI : c'est la date RÉELLE de l'état des lieux
+    // (saisie à l'import / à la génération), alors que created_at = simple date d'upload. Sans ça, un EDL
+    // signé importé pour un ANCIEN conducteur se rattachait à la période du jour au lieu de la bonne.
+    const lm = String((d && d.label) || '').match(/(\d{4}-\d{2}-\d{2})/);
+    if (lm) return lm[1];
+    const s = String((d && (d.date || d.createdAt || d.created_at)) || ''); return s ? s.slice(0, 10) : '';
+  },
   docsDe(docs, vehId) { return (docs || []).filter(d => d && d.type === 'etat-des-lieux' && (vehId == null || d.vehiculeId === vehId)); },
   // 'YYYY-MM-DD' dans [debut, fin] ? (debut vide = origine ; fin null = en cours)
   dansPeriode(date, a) {
