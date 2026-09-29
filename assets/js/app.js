@@ -5466,7 +5466,10 @@ FP.settings = {
       'revisionOverride',
       // — Checklists entrée/sortie : modèle éditable par catégorie (commun société) + état coché PAR
       //   véhicule (map { vehId → { cat → { label → true } } }). Données de travail → fusion fine.
-      'checklistModeles', 'checklistDone']);
+      'checklistModeles', 'checklistDone',
+      // — Contrats cadre (archivage accords prestataires : carte carburant, péage, maintenance, assurance/entité…) :
+      //   tableau d'objets à id → fusion fine multi-appareils (jamais écrasé en bloc par un cache en retard).
+      'contratsCadre']);
     // Familles DYNAMIQUES keyées par conducteur (n° carte/badge d'un prestataire perso : condNum_<id>).
     const isCollKey = (k) => COLLECTION_KEYS.has(k) || /^condNum_/.test(k);
     const isPlain = x => x && typeof x === 'object' && !Array.isArray(x);
@@ -6161,6 +6164,7 @@ FP.NAV_SUBMENUS = {
   'contrats.html': [
     { label: 'Leasing', tab: 'leasing' },
     { label: 'Assurance', tab: 'assurance' },
+    { label: 'Contrats cadre', tab: 'cadre' },
   ],
   'factures.html': [
     { label: 'Factures', tab: 'factures' },
@@ -7938,6 +7942,52 @@ FP.kmSuiviSet = (v, on) => {
   } catch (e) { console.warn('[kmSuiviSet]', e && (e.message || e)); }
 };
 
+// ============================================================================
+//  CONTRATS CADRE (archivage) — accords-cadres avec un PRESTATAIRE (carte carburant, badge péage,
+//  entretien/maintenance, télématique, assurance par entité/pays, autre). ≠ leasing (bon de commande
+//  par véhicule, géré à part). SOURCE UNIQUE : app_settings.contratsCadre (par société, synchronisé).
+//  Chaque contrat : { id, type, prestataire, numero, dateDebut, dateFin, montant, periode:'an'|'mois',
+//  vehicules:[immat] (vide = toute la flotte), paysEntite, pdf:[{name,url}], notes }.
+// ============================================================================
+FP.CONTRAT_CADRE_TYPES = [
+  { key: 'carte-carburant', label: 'Carte carburant', icon: 'fuel' },
+  { key: 'badge-peage',     label: 'Badge de péage',  icon: 'credit-card' },
+  { key: 'maintenance',     label: 'Entretien / maintenance', icon: 'wrench' },
+  { key: 'telematique',     label: 'Télématique / géoloc', icon: 'satellite' },
+  { key: 'assurance',       label: 'Assurance (par entité)', icon: 'shield' },
+  { key: 'autre',           label: 'Autre', icon: 'file-text' },
+];
+FP.contratCadreTypeLabel = (k) => { const t = (FP.CONTRAT_CADRE_TYPES || []).find(x => x.key === k); return t ? t.label : (k || 'Autre'); };
+FP.contratsCadre = {
+  list() { try { const a = FP.settings.get().contratsCadre; return Array.isArray(a) ? a : []; } catch (e) { return []; } },
+  get(id) { return this.list().find(c => c && c.id === id) || null; },
+  _save(arr) { const s = FP.settings.get(); s.contratsCadre = Array.isArray(arr) ? arr : []; FP.settings.save(s); },
+  add(rec) {
+    const c = Object.assign({ id: 'cc' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5) }, rec || {});
+    const arr = this.list().slice(); arr.push(c); this._save(arr); return c;
+  },
+  update(id, patch) {
+    const arr = this.list().slice(); const i = arr.findIndex(c => c && c.id === id);
+    if (i < 0) return null; arr[i] = Object.assign({}, arr[i], patch || {}); this._save(arr); return arr[i];
+  },
+  remove(id) { this._save(this.list().filter(c => c && c.id !== id)); },
+};
+// Coût ANNUEL normalisé d'un contrat cadre (mensuel → ×12). 0 si pas de montant. Source unique des totaux.
+FP.contratCadreCoutAnnuel = (c) => { const m = Number(c && c.montant); if (!Number.isFinite(m) || m <= 0) return 0; return String(c.periode) === 'mois' ? m * 12 : m; };
+// Échéance d'un contrat cadre : mêmes paliers que l'assurance/CT (anticipation = notifCfg().ctJours).
+// Renvoie { jours, niveau:'danger'|'warn'|'info'|null } (null = pas de date de fin ou trop loin).
+FP.contratCadreEcheance = (c) => {
+  try {
+    const fin = c && String(c.dateFin || '').trim(); if (!fin) return { jours: null, niveau: null };
+    const d = new Date(fin); if (isNaN(d)) return { jours: null, niveau: null };
+    const jours = FP.joursRestants ? FP.joursRestants(fin) : Math.ceil((d - new Date()) / 86400000);
+    const I = (FP.notifCfg ? FP.notifCfg().ctJours : 90) || 90, W = Math.round(I * 2 / 3), D = Math.round(I / 3);
+    let niveau = null;
+    if (jours < 0) niveau = 'danger'; else if (jours < D) niveau = 'danger'; else if (jours < W) niveau = 'warn'; else if (jours < I) niveau = 'info';
+    return { jours, niveau };
+  } catch (e) { return { jours: null, niveau: null }; }
+};
+
 FP.buildAlertes = (data) => {
   const out = [];
   const today = new Date();
@@ -7983,6 +8033,23 @@ FP.buildAlertes = (data) => {
     else if (diff < _aW) out.push({ niveau: 'warn',   categorie: 'Assurance', message: `Assurance à renouveler dans ${diff}j`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
     else if (diff < _aI) out.push({ niveau: 'info',   categorie: 'Assurance', message: `Assurance à renouveler (${diff}j)`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
   });
+
+  // --- Contrats cadre à renouveler (accords prestataires : carte carburant, badge péage, maintenance,
+  //     télématique, assurance par entité…). Échéance = dateFin, mêmes paliers que le CT/l'assurance. ---
+  try {
+    (FP.contratsCadre ? FP.contratsCadre.list() : []).forEach(c => {
+      if (!c || !c.dateFin) return;
+      const ech = FP.contratCadreEcheance(c); if (!ech || !ech.niveau) return;
+      const diff = ech.jours;
+      const nom = String(c.prestataire || FP.contratCadreTypeLabel(c.type) || 'Contrat').trim();
+      const zone = String(c.paysEntite || '').trim();
+      const det = `${FP.contratCadreTypeLabel(c.type)}${zone ? ' · ' + zone : ''}${c.numero ? ' · n° ' + c.numero : ''}`;
+      const tgt = 'contrats.html?tab=cadre';
+      const mk = 'contratcadre|' + c.id + '|' + c.dateFin;
+      const msg = diff < 0 ? `Contrat ${nom} expiré depuis ${-diff}j` : `Contrat ${nom} à renouveler dans ${diff}j`;
+      out.push({ niveau: ech.niveau, categorie: 'Contrats', message: msg, detail: det, sort: diff, target: tgt, muteKey: mk, vehLabel: det });
+    });
+  } catch (e) {}
 
   // --- Contrôle anti-pollution (utilitaires / camions diesel) ---
   (data.vehicules || []).forEach(v => {
