@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260929c">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260929d">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260929c"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260929d"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260929c">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260929d">
 <style>
   .notif { display: flex; gap: .8rem; align-items: flex-start; padding: .85rem 1rem; border-radius: 14px; border: 1px solid var(--fp-border); background: var(--fp-surface, #fff); text-decoration: none; transition: box-shadow .15s ease, transform .15s ease, border-color .15s ease; box-shadow: 0 1px 2px rgba(15,30,61,.04); }
   .notif + .notif { margin-top: .55rem; }
@@ -149,8 +149,8 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260929c"></script>
-<script src="../assets/js/supabase-client.js?v=20260929c"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260929d"></script>
+<script src="../assets/js/supabase-client.js?v=20260929d"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -166,11 +166,11 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260929c"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260929d"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20260929c"></script>
+<script src="../assets/js/app.min.js?v=20260929d"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -266,6 +266,14 @@
   function colCollapsed(title, hasAlerts) { const s = readColState(); return (title in s) ? !!s[title] : !hasAlerts; }
 
   let _lastRenderSig = null;
+  // ⚡ PERF : au chargement, render() est déclenché 6-7× (fp:data-ready + chargements async relevé km /
+  // EDL / QR / conducteurs). buildAlertes est coûteux (parcourt toute la flotte + factures) → on COALESCE
+  // ces appels rapprochés en UN SEUL rendu par frame (rAF). Les vrais changements re-render normalement.
+  let _renderRaf = 0;
+  function scheduleRender() {
+    if (_renderRaf) return;
+    _renderRaf = requestAnimationFrame(() => { _renderRaf = 0; try { render(); } catch (e) {} });
+  }
   function render() {
     const alerts = FP.buildAlertes(data);
     // ⚡ ANTI-FLASH : render() est appelé plusieurs fois au chargement (fp:data-ready + chargements
@@ -1883,7 +1891,7 @@
   })();
   loadCompletDocs(); // documents véhicules → savoir qui a sa carte grise / mémo sur la plateforme
   document.addEventListener('fp:data-ready', () => {
-    render();
+    scheduleRender();
     updateRelBadge();
     if (isDecisionsVisible()) renderDecisions();
     if (!document.getElementById('suivi-echeances').classList.contains('hidden')) renderEcheances();
@@ -1893,12 +1901,12 @@
   });
 
   // Le compteur « demandes conducteur » (déclarations QR) arrive en async → re-render à sa réception.
-  window.addEventListener('fp:decl-count', () => { render(); });
+  window.addEventListener('fp:decl-count', () => { scheduleRender(); });
 
   // Charge les conducteurs (table à part) → alertes "permis qui expire" + onglet « À compléter »
   if (window.FP && FP.db && FP.db.select) {
     FP.db.select('conducteurs').then(r => {
-      if (r && r.data) { data.conducteurs = r.data; render(); if (isDecisionsVisible()) renderDecisions(); if (isCompletVisible()) renderComplet(); }
+      if (r && r.data) { data.conducteurs = r.data; scheduleRender(); if (isDecisionsVisible()) renderDecisions(); if (isCompletVisible()) renderComplet(); }
     }).catch(() => {});
   }
 
@@ -1906,7 +1914,7 @@
   // (demande envoyée par mail sans réponse). Sans ce chargement, l'alerte ne peut pas se calculer.
   if (window.FP && FP.kmCollecte && FP.kmCollecte.load) {
     FP.kmCollecte.load().then(() => {
-      render();
+      scheduleRender();
       // Les alertes/relances relevé km sont gardées tant que km_requests n'est pas chargé (anti-flash) →
       // une fois chargé, on rafraîchit le badge « Relances » et la liste si l'onglet est ouvert.
       try { updateRelBadge(); } catch (e) {}
@@ -1916,7 +1924,7 @@
   // Charge les états des lieux en attente de signature → alerte « à signer » (qui manque encore).
   // Puis marque les signatures reçues comme VUES → éteint la pastille du menu (on est sur la page).
   if (window.FP && FP.edlSign && FP.edlSign.load) {
-    FP.edlSign.load().then(() => { render(); if (FP.edlSign.markSeen) FP.edlSign.markSeen(); }).catch(() => {});
+    FP.edlSign.load().then(() => { scheduleRender(); if (FP.edlSign.markSeen) FP.edlSign.markSeen(); }).catch(() => {});
   }
   // Migration : l'activité QR n'utilise plus un masquage définitif (« qr-activity ») mais le bouton
   // « ✓ Vu ». Si l'ancienne entrée traîne dans les alertes masquées, on la retire (une fois) pour que
@@ -1925,7 +1933,7 @@
   // Charge les scans de QR récents (24 h) → alerte « QR scanné ». On NE marque PLUS « vu » à l'ouverture :
   // l'alerte reste tant que l'utilisateur n'a pas cliqué « ✓ Vu » (sinon elle s'effaçait toute seule).
   if (window.FP && FP.qrScans && FP.qrScans.load) {
-    FP.qrScans.load().then(() => render()).catch(() => {});
+    FP.qrScans.load().then(() => scheduleRender()).catch(() => {});
   }
 </script>
 </body>
