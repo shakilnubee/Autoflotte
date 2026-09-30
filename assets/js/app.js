@@ -8322,10 +8322,26 @@ FP.buildAlertes = (data) => {
       const j0 = new Date(); j0.setHours(0, 0, 0, 0);
       const doneOf = t => (t && (t.statut === 'done' || (t.statut == null && !!t.fait)));
       const typeLbl = { rdv: 'RDV', action: 'Action', achat: 'Achat' };
+      const _normT = s => String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+      const _seenAutoCT = new Set();
       const tRetard = [], tBientot = [];
       taches.forEach(t => {
         if (!t || doneOf(t) || !t.echeance) return;
         const ech = new Date(t.echeance + 'T00:00:00'); if (isNaN(ech)) return;
+        // ⚠️ Anti-fantôme / anti-doublon des tâches AUTO « contrôle technique » : quand le CT d'un véhicule
+        //    est corrigé sur sa fiche, l'ancienne tâche auto (date périmée) ne doit PLUS apparaître ici ; et
+        //    deux tâches identiques créées sur 2 appareils ne comptent qu'une fois. (Le vrai nettoyage des
+        //    données se fait sur la page Tâches via autoTachesCT — ici on ne fait que ne pas les AFFICHER.)
+        if (t.auto === true && _normT(t.titre).includes('controle technique') && t.vehiculeId != null) {
+          const vv = (data.vehicules || []).find(x => String(x.id) === String(t.vehiculeId));
+          if (vv) {
+            const curCT = (vv.prochainCT && vv.prochainCT !== '—') ? String(vv.prochainCT).slice(0, 10) : '';
+            if (!curCT || curCT !== String(t.echeance).slice(0, 10)) return;   // date périmée → on ignore
+            const dk = t.vehiculeId + '|' + curCT;
+            if (_seenAutoCT.has(dk)) return;                                    // doublon → une seule fois
+            _seenAutoCT.add(dk);
+          }
+        }
         const j = Math.round((ech - j0) / 86400000);
         if (j > HORIZON) return;                          // trop loin → pas encore d'alerte
         const titre = String(t.titre || typeLbl[t.type] || 'Tâche').trim();
