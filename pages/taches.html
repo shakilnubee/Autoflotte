@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260929h">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260929i">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260929h"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260929i"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260929h">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260929i">
 <style>
   .field-label { font-size: .78rem; font-weight: 600; color: var(--fp-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .35rem; }
   .field-input { width: 100%; padding: .6rem .8rem; border: 1px solid var(--fp-border); border-radius: .55rem; font-size: .9rem; background: white; }
@@ -368,8 +368,8 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260929h"></script>
-<script src="../assets/js/supabase-client.js?v=20260929h"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260929i"></script>
+<script src="../assets/js/supabase-client.js?v=20260929i"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -385,10 +385,10 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260929h"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260929i"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
-<script src="../assets/js/app.min.js?v=20260929h"></script>
+<script src="../assets/js/app.min.js?v=20260929i"></script>
 <script>
   lucide.createIcons();
   const $ = (id) => document.getElementById(id);
@@ -1170,34 +1170,67 @@
   // à part via prochain_ct — ici c'est juste la TÂCHE de suivi côté gestionnaire.
   function autoTachesCT() {
     try {
-      if (!(data && Array.isArray(data.vehicules))) return;
+      if (!(data && Array.isArray(data.vehicules)) || !data.vehicules.length) return; // pas de données chargées → NE RIEN purger (anti-perte)
       // Même fenêtre qu'Alertes (source unique : notifCfg.ctJours, défaut 90) → un seul réglage pour
       // les deux (Paramètres → Notifications → « anticipation CT »).
       const WIN = (FP.notifCfg ? (FP.notifCfg().ctJours || 90) : 90);
       const s = FP.settings.get();
       const done = (s.tachesAutoFaites && typeof s.tachesAutoFaites === 'object') ? s.tachesAutoFaites : {};
-      const arr = Array.isArray(s.taches) ? s.taches : [];
+      let arr = Array.isArray(s.taches) ? s.taches : [];
       let changed = false, n = 0;
+
+      // ⚠️ SOURCE UNIQUE — CT courant PAR véhicule chargé (véhicules HS/CT ignoré/sans CT → pas d'échéance).
+      // Sert à repérer les tâches auto DEVENUES CADUQUES (la date a changé sur la fiche) et à ne créer/garder
+      // qu'UNE tâche par véhicule, sur la BONNE date.
+      const vehById = {}; const curCT = {};
       data.vehicules.forEach(v => {
-        if (!v || !v.prochainCT || v.prochainCT === '—') return;
-        if (FP.horsFlotte && FP.horsFlotte(v)) return;   // vendu/cédé/HS/archivé/restitué (les « à vendre » restent suivis)
-        if (FP.ctIgnored && FP.ctIgnored(v)) return;      // CT étranger / ignoré (comme Alertes)
-        const ct = String(v.prochainCT).slice(0, 10);
+        if (!v || v.id == null) return; vehById[v.id] = v;
+        if (!v.prochainCT || v.prochainCT === '—') return;
+        if (FP.horsFlotte && FP.horsFlotte(v)) return;
+        if (FP.ctIgnored && FP.ctIgnored(v)) return;
+        curCT[v.id] = String(v.prochainCT).slice(0, 10);
+      });
+      const norm = t => String(t == null ? '' : t).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+      const isAutoCT = t => t && t.auto === true && norm(t.titre).includes('controle technique');
+      const estFait = t => t.fait === true || t.statut === 'fait' || t.statut === 'done';
+
+      // 1) PURGE des tâches auto CT PÉRIMÉES / EN DOUBLE (bug vécu : mêmes tâches créées sur 2 appareils
+      //    avec des ids aléatoires → la fusion par id ne les dédoublonnait pas ; et une date de CT corrigée
+      //    laissait l'ancienne tâche « fantôme »). On ne touche QUE les tâches AUTO non terminées, et
+      //    UNIQUEMENT quand on VOIT le véhicule (sinon on préserve — le véhicule n'est peut-être pas chargé).
+      const keptForVeh = {};
+      arr = arr.filter(t => {
+        if (!isAutoCT(t) || estFait(t)) return true;      // manuelle / terminée → on ne touche pas
+        const v = vehById[t.vehiculeId];
+        if (!v) return true;                               // véhicule non chargé → on préserve (anti-perte)
+        const cur = curCT[t.vehiculeId];
+        const ech = String(t.echeance || '').slice(0, 10);
+        if (!cur || ech !== cur) { changed = true; return false; }  // périmée (CT changé/retiré) → on retire
+        if (keptForVeh[t.vehiculeId]) { changed = true; return false; } // doublon → on ne garde que la 1re
+        keptForVeh[t.vehiculeId] = true; return true;
+      });
+
+      // 2) CRÉATION des tâches auto CT manquantes (id DÉTERMINISTE « act-<veh>-<date> » → la fusion multi-
+      //    appareils dédoublonne toute seule, plus jamais de doublon).
+      Object.keys(curCT).forEach(vehId => {
+        const v = vehById[vehId]; if (!v) return;
+        const ct = curCT[vehId];
         const j = FP.joursRestants ? FP.joursRestants(ct) : null;
         if (j == null || j > WIN) return;                 // dans la fenêtre (INCLUT les dépassés j<0)
-        const key = 'ct:' + v.id + ':' + ct;
-        if (done[key]) return;
+        const key = 'ct:' + vehId + ':' + ct;
+        if (done[key]) return;                            // déjà créée (ou supprimée par l'utilisateur) pour CETTE date
+        if (keptForVeh[vehId]) return;                    // une tâche auto CT existe déjà pour ce véhicule
         arr.push({
-          id: 'T' + Math.random().toString(36).slice(2, 9), titre: 'Contrôle technique', type: 'rdv',
-          statut: 'todo', fait: false, vehiculeId: v.id, echeance: ct, heure: '', lieu: '',
+          id: 'act-' + vehId + '-' + ct, titre: 'Contrôle technique', type: 'rdv',
+          statut: 'todo', fait: false, vehiculeId: vehId, echeance: ct, heure: '', lieu: '',
           conducteur: v.chauffeur || '', responsable: '', fournisseur: '', priorite: (j <= 30 ? 'haute' : 'normale'),
           note: (j < 0 ? 'Créée automatiquement : le contrôle technique est DÉPASSÉ. Prends le rendez-vous au plus vite.' : 'Créée automatiquement : le contrôle technique arrive à échéance. Pense à prendre le rendez-vous.'),
           etiquettes: ['garage'], commentaires: [], sousTaches: [], auto: true,
           createdAt: nowStamp(), historique: [{ txt: 'Créée automatiquement (contrôle technique)', at: nowStamp() }]
         });
-        done[key] = todayIso(); changed = true; n++;
+        done[key] = todayIso(); keptForVeh[vehId] = true; changed = true; n++;
       });
-      if (changed) { s.taches = arr; s.tachesAutoFaites = done; FP.settings.save(s); if (FP.toast) FP.toast('⚡ ' + n + ' tâche(s) contrôle technique créée(s) automatiquement'); }
+      if (changed) { s.taches = arr; s.tachesAutoFaites = done; FP.settings.save(s); if (n && FP.toast) FP.toast('⚡ ' + n + ' tâche(s) contrôle technique créée(s) automatiquement'); }
     } catch (e) {}
   }
 
