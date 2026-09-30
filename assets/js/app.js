@@ -4277,10 +4277,10 @@ FP.PROFIL_CHAMPS = [
   //    {lien} = espace véhicule (accès/carte grise), lien de relevé km, ou annonce de vente selon le message.
   { key: 'mailModelePrevAcces',       label: "Prévenir — Accès véhicule (espace QR)",  type: 'textarea', ph: 'Balises : {prenom}, {immat}, {lien}.', default: FP.MAIL_DEFAUT.prevAcces },
   { key: 'mailModelePrevCarteGrise',  label: "Prévenir — Carte grise",                 type: 'textarea', ph: 'Balises : {prenom}, {immat}, {lien}.', default: FP.MAIL_DEFAUT.prevCarteGrise },
-  { key: 'mailModelePrevRelanceKm',   label: "Prévenir — Relance km",                  type: 'textarea', ph: 'Balises : {prenom}, {immat}, {lien}.', default: FP.MAIL_DEFAUT.prevRelanceKm },
   { key: 'mailModelePrevEdl',         label: "Prévenir — État des lieux (photos + km)", type: 'textarea', ph: 'Balises : {prenom}, {immat}, {lien}.', default: FP.MAIL_DEFAUT.prevEdl },
-  { key: 'mailModelePrevCt',          label: "Prévenir — CT bientôt",                  type: 'textarea', ph: 'Balises : {prenom}, {immat}, {date}.', default: FP.MAIL_DEFAUT.prevCt },
-  { key: 'mailModelePrevRevision',    label: "Prévenir — Révision",                    type: 'textarea', ph: 'Balises : {prenom}, {immat}.', default: FP.MAIL_DEFAUT.prevRevision },
+  // ⚠️ SOURCE UNIQUE : « Prévenir — CT / Révision / Km » SUPPRIMÉS (doublon). La fiche « Prévenir » lit
+  //    désormais les modèles « Relance — contrôle technique / entretien / relevé km » ci-dessus → un seul
+  //    endroit à éditer pour chaque concept (CT, entretien, km), affiché dans la fiche ET dans « Relances ».
   { key: 'mailModelePrevAnnonce',     label: "Prévenir — Annonce de vente",            type: 'textarea', ph: 'Balises : {immat}, {lien}.', default: FP.MAIL_DEFAUT.prevAnnonce },
   // ===== VERSIONS ANGLAISES ÉDITABLES (section « English e-mails » des Paramètres). lang:'en' →
   //   le formulaire les regroupe à part. Chaque champ ALIMENTE l'e-mail réel (mailModeleProfilL /
@@ -4310,10 +4310,9 @@ FP.PROFIL_CHAMPS = [
   { key: 'mailModeleRelanceAmende_en', label: "EN — Reminder: fine to settle", type: 'textarea', ph: 'Tags: {prenom}, {immat}.', default: FP.MAIL_DEFAUT.relanceAmende_en, lang: 'en' },
   { key: 'mailModelePrevAcces_en', label: "EN — Notify: vehicle access", type: 'textarea', ph: 'Tags: {prenom}, {immat}, {lien}.', default: FP.MAIL_DEFAUT.prevAcces_en, lang: 'en' },
   { key: 'mailModelePrevCarteGrise_en', label: "EN — Notify: registration", type: 'textarea', ph: 'Tags: {prenom}, {immat}, {lien}.', default: FP.MAIL_DEFAUT.prevCarteGrise_en, lang: 'en' },
-  { key: 'mailModelePrevRelanceKm_en', label: "EN — Notify: mileage", type: 'textarea', ph: 'Tags: {prenom}, {immat}, {lien}.', default: FP.MAIL_DEFAUT.prevRelanceKm_en, lang: 'en' },
   { key: 'mailModelePrevEdl_en', label: "EN — Notify: condition report", type: 'textarea', ph: 'Tags: {prenom}, {immat}, {lien}.', default: FP.MAIL_DEFAUT.prevEdl_en, lang: 'en' },
-  { key: 'mailModelePrevCt_en', label: "EN — Notify: MOT soon", type: 'textarea', ph: 'Tags: {prenom}, {immat}, {date}.', default: FP.MAIL_DEFAUT.prevCt_en, lang: 'en' },
-  { key: 'mailModelePrevRevision_en', label: "EN — Notify: service", type: 'textarea', ph: 'Tags: {prenom}, {immat}.', default: FP.MAIL_DEFAUT.prevRevision_en, lang: 'en' },
+  // « Notify: mileage / MOT / service » EN SUPPRIMÉS (doublon) → la fiche lit les modèles EN « Reminder:
+  //   roadworthiness test / maintenance due / mileage reading » (source unique par concept).
   { key: 'mailModelePrevAnnonce_en', label: "EN — Notify: for sale", type: 'textarea', ph: 'Tags: {immat}, {lien}.', default: FP.MAIL_DEFAUT.prevAnnonce_en, lang: 'en' },
   // ⚠️ Le champ « Signature (bas des e-mails d'amende) » a été RETIRÉ (2026-09-25) : les e-mails
   //    partent désormais via la plateforme avec un pied de page brandé (société · via Parc Pilot),
