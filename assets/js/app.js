@@ -15665,10 +15665,17 @@ FP.relances = {
   async _liens(v) { const out = { portail: '', kmLink: '' }; try { const qd = await FP.qr.dataFor(v); if (qd && qd.url) { out.portail = qd.url; const tok = decodeURIComponent((qd.url.split('h=')[1] || '')); if (tok) out.kmLink = 'https://parc-pilot.fr/km.html?q=' + encodeURIComponent(tok); } } catch (e) {} return out; },
 
   // --- ENTRETIEN (révision) / CT à venir dans la fenêtre (ou déjà en retard) ---
+  // ⚠️ Un véhicule dont un RENDEZ-VOUS GARAGE est DÉJÀ PROGRAMMÉ (settings.vehRdvGarage, à venir ou tout
+  //    juste passé) n'a PLUS besoin d'être relancé : le rappel AUTOMATIQUE la veille s'en charge. Le
+  //    relancer serait illogique (« la date est déjà prise »). On l'exclut donc des relances CT/révision.
+  _rdvPris(v) {
+    try { const r = (FP.rdvGarage ? FP.rdvGarage._map() : {})[v && v.id]; if (!r || !r.date) return false; const j = this._jours(r.date); return j != null && j >= -1; } catch (e) { return false; }
+  },
   entretiens() {
     const win = this._win(); const out = [];
     (data.vehicules || []).forEach(v => {
       if (FP.horsFlotte && FP.horsFlotte(v)) return;
+      if (this._rdvPris(v)) return;   // RDV garage déjà programmé → rien à relancer (rappel auto la veille)
       if (v.prochaineRevisionDate) { const j = this._jours(v.prochaineRevisionDate); if (j != null && j <= win) out.push(this._vehItem(v, 'entretien', v.prochaineRevisionDate, j)); }
       if (v.prochainCT && v.prochainCT !== '—' && !(FP.ctIgnored && FP.ctIgnored(v))) { const j = this._jours(v.prochainCT); if (j != null && j <= win) out.push(this._vehItem(v, 'ct', v.prochainCT, j)); }
     });
@@ -15739,7 +15746,10 @@ FP.relances = {
   },
   // Toutes les relances RÉELLEMENT en attente aujourd'hui (avant masquage « Ignorer »), avec leur clé.
   _listAll() {
-    const all = [].concat(this.garage(), this.entretiens(), this.km(), this.amendes());
+    // ⚠️ On NE met PLUS les RENDEZ-VOUS GARAGE déjà programmés (this.garage()) dans les relances : un RDV
+    //    pris n'est pas « à relancer » (le rappel AUTOMATIQUE la veille le couvre déjà). Les relances ne
+    //    listent donc que ce qu'il reste À FAIRE : CT/révision SANS RDV, relevés km, amendes à payer.
+    const all = [].concat(this.entretiens(), this.km(), this.amendes());
     all.forEach(it => { it.ignKey = this._ignKey(it); });
     return all;
   },
