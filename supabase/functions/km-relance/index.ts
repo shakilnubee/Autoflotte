@@ -496,6 +496,21 @@ Deno.serve(async (req) => {
         const payload: Record<string, unknown> = { from, to: toList, subject: mail.subject, html: mail.html, text: mail.text };
         if (replyTo) payload.reply_to = replyTo;
         if (mail.ics) payload.attachments = [{ filename: "rendez-vous.ics", content: mail.ics, content_type: "text/calendar" }];
+        // PDF du garage rattaché au véhicule (exception vehGarage OU règle garageParMarque) → joint au
+        // rappel (Resend récupère l'URL via `path`). Même logique que FP.garages côté client (source unique).
+        try {
+          const normM = (m: string) => String(m || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]/g, "");
+          const prest = Array.isArray(data.prestataires) ? data.prestataires : [];
+          const vg = (data.vehGarage && typeof data.vehGarage === "object") ? data.vehGarage : {};
+          const rm = (data.garageParMarque && typeof data.garageParMarque === "object") ? data.garageParMarque : {};
+          const gid = vg[veh.id] || rm[normM(veh.marque)] || "";
+          const g = gid ? prest.find((x: any) => x && x.id === gid) : null;
+          if (g && g.pdfUrl) {
+            const att = { filename: String(g.pdfName || ((g.nom || "garage") + ".pdf")), path: String(g.pdfUrl) };
+            if (Array.isArray(payload.attachments)) (payload.attachments as any[]).push(att);
+            else payload.attachments = [att];
+          }
+        } catch (_) {}
         try {
           const r = await fetch("https://api.resend.com/emails", { method: "POST", headers: { Authorization: `Bearer ${RESEND_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
           if (!r.ok) { ctBump(soc, "failed"); ctDetails.push({ societe: soc, immat: veh.immat || "", motif: tg.motif, status: "resend-echec", error: (await r.text().catch(() => "")).slice(0, 200) }); }

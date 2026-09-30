@@ -5501,7 +5501,10 @@ FP.settings = {
       'checklistModeles', 'checklistDone',
       // — Contrats cadre (archivage accords prestataires : carte carburant, péage, maintenance, assurance/entité…) :
       //   tableau d'objets à id → fusion fine multi-appareils (jamais écrasé en bloc par un cache en retard).
-      'contratsCadre']);
+      'contratsCadre',
+      // — Rattachement GARAGE ↔ véhicule : règle par marque (garageParMarque = { marque → prestId }) et
+      //   exception par véhicule (vehGarage = { vehId → prestId }). Maps de données → fusion fine.
+      'garageParMarque', 'vehGarage']);
     // Familles DYNAMIQUES keyées par conducteur (n° carte/badge d'un prestataire perso : condNum_<id>).
     const isCollKey = (k) => COLLECTION_KEYS.has(k) || /^condNum_/.test(k);
     const isPlain = x => x && typeof x === 'object' && !Array.isArray(x);
