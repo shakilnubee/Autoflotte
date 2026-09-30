@@ -3209,7 +3209,7 @@
       <div class="fp-panel">
       <div class="fiche-title" style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--fp-muted);margin-bottom:.5rem">Entretien &amp; échéances</div>
       <div class="grid grid-cols-2 gap-3">
-        <div class="kpi p-3"><div class="kpi-label">Dernière révision</div><div class="kpi-value" style="font-size:1rem"><span data-df="derniereRevision" data-dt="date">${drRevDate ? FP.dateNum(drRevDate) : (estNeuf ? '<span class="text-emerald-600" style="font-size:.85rem">Véhicule neuf</span>' : '<span class="text-slate-400">—</span>')}</span></div><div class="text-xs text-slate-500" style="margin-top:1px">${estNeuf && !drRevDate ? 'pas encore de révision' : 'à <span data-df="kmDernierReleve" data-dt="number">' + ((drRevKm != null) ? FP.num(drRevKm) + ' km' : '—') + '</span>'}</div></div>
+        <div class="kpi p-3 cursor-pointer" data-rev-edit title="Cliquer pour saisir la date ET le km de la dernière révision"><div class="kpi-label">Dernière révision <span style="color:var(--fp-accent)">✏️</span></div><div class="kpi-value" style="font-size:1rem">${drRevDate ? FP.dateNum(drRevDate) : (estNeuf ? '<span class="text-emerald-600" style="font-size:.85rem">Véhicule neuf</span>' : '<span class="text-slate-400">à saisir</span>')}</div><div class="text-xs text-slate-500" style="margin-top:1px">${estNeuf && !drRevDate ? 'pas encore de révision' : 'à ' + ((drRevKm != null) ? FP.num(drRevKm) + ' km' : '— km')}</div></div>
         <div class="kpi p-3"><div class="kpi-label">Prochaine révision (est.)</div><div class="kpi-value" style="font-size:1rem;${revColor}">${revProchaine}${rev.niveau ? ' ⚠️' : ''}</div></div>
       </div>
       </div>
@@ -3508,11 +3508,20 @@
       }
       return;
     }
+    // ✏️ « Dernière révision » : TOUTE la carte est cliquable → petit éditeur DATE + KM d'un coup
+    //    (avant, seul le minuscule « — » était cliquable → « ça veut pas modifier »). Source unique de
+    //    persistance : commitVehField (mêmes champs derniereRevision + kmDernierReleve que le formulaire).
+    const revCard = e.target.closest('[data-rev-edit]');
+    if (revCard && !revCard.querySelector('input')) {
+      const v = data.vehicules.find(x => x.id === drawerVehId); if (!v) return;
+      openRevEditor(revCard, v);
+      return;
+    }
     // ✏️ Édition inline des champs [data-df] du CORPS de la fiche (Technique, Entretien & échéances :
-    //    dernière révision + son km, valeur d'achat, VIN, couleur, boîte, CO₂, dernier CT…). Après le
-    //    passage « cockpit », ces rubriques restent dans #drawer-body qui n'avait PAS de gestionnaire
-    //    d'édition → les champs semblaient cliquables (soulignés « Cliquer pour modifier ») mais ne
-    //    s'ouvraient pas. On rebranche ici la MÊME édition que l'en-tête (startCellEdit, source unique).
+    //    valeur d'achat, VIN, couleur, boîte, CO₂, dernier CT…). Après le passage « cockpit », ces
+    //    rubriques restent dans #drawer-body qui n'avait PAS de gestionnaire d'édition → les champs
+    //    semblaient cliquables (soulignés « Cliquer pour modifier ») mais ne s'ouvraient pas. On
+    //    rebranche ici la MÊME édition que l'en-tête (startCellEdit, source unique).
     if (e.target.closest('input, select, textarea, button, a')) return;
     if (e.target.closest('[data-antipol-dernier]')) return; // éditeur dédié « dernier anti-pollution réalisé »
     const dfEl = e.target.closest('[data-df]');
@@ -4293,6 +4302,38 @@
     renderKPIs();
     if (drawerVehId === v.id && $('drawer').classList.contains('open')) openDrawer(v.id);
     persistVehFields(v, field);
+  }
+
+  // Éditeur combiné DATE + KM de la « dernière révision » (carte cliquable de « Entretien & échéances »).
+  function openRevEditor(card, v) {
+    const okDate = (s) => (typeof s === 'string' && /^\d{4}-\d{2}-\d{2}/.test(s) && +s.slice(0, 4) >= 1990 && +s.slice(0, 4) <= 2100);
+    const curDate = okDate(v.derniereRevision) ? String(v.derniereRevision).slice(0, 10) : '';
+    const curKm = (Number(v.kmDernierReleve) > 0) ? Number(v.kmDernierReleve) : '';
+    card.innerHTML = `<div class="kpi-label">Dernière révision</div>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-top:5px">
+        <label style="font-size:.68rem;font-weight:700;color:var(--fp-muted)">Date de la révision<input type="date" class="rev-date" min="1990-01-01" max="2100-12-31" value="${curDate}" style="width:100%;margin-top:2px;border:1px solid var(--fp-accent);border-radius:6px;padding:.22rem .35rem;font-size:.85rem"></label>
+        <label style="font-size:.68rem;font-weight:700;color:var(--fp-muted)">Kilométrage à la révision<input type="number" inputmode="numeric" class="rev-km" value="${curKm}" placeholder="ex. 77806" style="width:100%;margin-top:2px;border:1px solid var(--fp-accent);border-radius:6px;padding:.22rem .35rem;font-size:.85rem"></label>
+        <div style="display:flex;gap:6px;margin-top:2px">
+          <button type="button" class="rev-ok" style="flex:1;border:none;background:var(--fp-accent);color:#fff;border-radius:6px;padding:.32rem;font-weight:800;cursor:pointer">✓ Enregistrer</button>
+          <button type="button" class="rev-cancel" style="border:1px solid var(--fp-border);background:#fff;color:#64748b;border-radius:6px;padding:.32rem .6rem;cursor:pointer">✕</button>
+        </div>
+      </div>`;
+    const dEl = card.querySelector('.rev-date'), kEl = card.querySelector('.rev-km');
+    try { dEl.focus(); } catch (e) {}
+    const reopen = () => { if (drawerVehId && $('drawer').classList.contains('open')) openDrawer(drawerVehId); };
+    card.querySelector('.rev-cancel').addEventListener('click', reopen);
+    card.querySelector('.rev-ok').addEventListener('click', () => {
+      const dv = (dEl.value || '').trim();
+      if (dv && !okDate(dv)) { if (FP.toast) FP.toast('Date invalide — année entre 1990 et 2100'); return; }
+      const kraw = (kEl.value || '').trim();
+      const kv = kraw === '' ? null : parseInt(kraw, 10);
+      if (kraw !== '' && (!Number.isFinite(kv) || kv < 0)) { if (FP.toast) FP.toast('Kilométrage invalide'); return; }
+      FP.history.commit();
+      v.derniereRevision = dv || null;
+      v.kmDernierReleve = (kv != null) ? kv : null;
+      commitVehField(v, ['derniereRevision', 'kmDernierReleve']);
+      if (FP.toast) FP.toast('✓ Dernière révision enregistrée');
+    });
   }
 
   function startCellEdit(td, v, field, type) {
