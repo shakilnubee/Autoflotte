@@ -15055,15 +15055,27 @@ FP.ics = {
       if (FP.toast) FP.toast('📅 Événement téléchargé — ouvre-le pour l\'ajouter à ton agenda');
     } catch (e) { if (FP.notifyError) FP.notifyError('Impossible de générer l\'événement'); }
   },
-  // Lien « Ajouter à Google Agenda » (événement journée entière). Cliquable dans un e-mail.
+  // Lien « Ajouter à Google Agenda ». Cliquable dans un e-mail OU ouvert dans un nouvel onglet depuis le
+  // site (bouton « Ajouter à mon agenda » → ouvre Google Agenda pré-rempli, plutôt que télécharger un .ics).
+  // Si `ev.heure` (HH:MM) est fourni → événement daté À L'HEURE (1 h) ; sinon → journée entière.
   googleUrl(ev) {
     ev = ev || {};
     const iso = String(ev.date || '').slice(0, 10);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return '';
-    const start = iso.replace(/-/g, '');
-    const nx = new Date(iso + 'T00:00:00Z'); nx.setUTCDate(nx.getUTCDate() + 1);
-    const end = nx.toISOString().slice(0, 10).replace(/-/g, '');
-    const p = new URLSearchParams({ action: 'TEMPLATE', text: ev.title || 'Rendez-vous', dates: start + '/' + end });
+    let dates;
+    const hm = /^(\d{1,2}):(\d{2})$/.exec(String(ev.heure || '').trim());
+    if (hm) {
+      const pad = n => String(n).padStart(2, '0');
+      const start = iso.replace(/-/g, '') + 'T' + pad(hm[1]) + hm[2] + '00';
+      const endD = new Date(iso + 'T' + pad(hm[1]) + ':' + hm[2] + ':00'); endD.setHours(endD.getHours() + 1);
+      const end = endD.getFullYear() + pad(endD.getMonth() + 1) + pad(endD.getDate()) + 'T' + pad(endD.getHours()) + pad(endD.getMinutes()) + '00';
+      dates = start + '/' + end;    // heure LOCALE (format « flottant », sans Z) → Google la prend telle quelle
+    } else {
+      const start = iso.replace(/-/g, '');
+      const nx = new Date(iso + 'T00:00:00Z'); nx.setUTCDate(nx.getUTCDate() + 1);
+      dates = start + '/' + nx.toISOString().slice(0, 10).replace(/-/g, '');
+    }
+    const p = new URLSearchParams({ action: 'TEMPLATE', text: ev.title || 'Rendez-vous', dates });
     if (ev.description) p.set('details', ev.description);
     if (ev.location) p.set('location', ev.location);
     return 'https://calendar.google.com/calendar/render?' + p.toString();
