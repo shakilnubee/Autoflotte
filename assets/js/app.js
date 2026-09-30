@@ -1672,8 +1672,14 @@ FP.derniereRevision = (v, factures) => {
   try {
     if (!v) return { date: null, facture: null, km: null };
     const info = FP.derniereRevisionInfo(v, factures);
-    const fdate = info.date ? String(info.date).slice(0, 10) : null;
-    const stored = (v.derniereRevision && v.derniereRevision !== '—') ? String(v.derniereRevision).slice(0, 10) : null;
+    // ⚠️ Ignore une date à l'année ABERRANTE (hors 1990–2100, ex. « 0002-07-09 » saisie par erreur) → traitée
+    //    comme « pas de date » : évite l'affichage « en retard 738969 j ». La donnée stockée n'est PAS modifiée
+    //    (l'utilisateur la ressaisit dans la fiche) — c'est juste l'affichage/calcul qui l'écarte.
+    const _okDate = (s) => { const m = /^(\d{4})-\d{2}-\d{2}$/.exec(s || ''); return !!(m && +m[1] >= 1990 && +m[1] <= 2100); };
+    const _fdate = info.date ? String(info.date).slice(0, 10) : null;
+    const fdate = _okDate(_fdate) ? _fdate : null;
+    const _stored = (v.derniereRevision && v.derniereRevision !== '—') ? String(v.derniereRevision).slice(0, 10) : null;
+    const stored = _okDate(_stored) ? _stored : null;
     let date = null;
     if (stored && fdate) date = (stored >= fdate) ? stored : fdate;   // la plus récente des deux
     else date = stored || fdate;
@@ -10096,7 +10102,7 @@ FP.datePicker = (function () {
     document.head.appendChild(st);
   }
 
-  const iso = (y, m, d) => `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  const iso = (y, m, d) => `${String(y).padStart(4, '0')}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
   const parse = (v) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v || ''); return m ? { y: +m[1], m: +m[2] - 1, d: +m[3] } : null; };
   const clampAttr = (input, name) => { const p = parse(input.getAttribute(name)); return p ? new Date(p.y, p.m, p.d) : null; };
 
@@ -10199,7 +10205,11 @@ FP.datePicker = (function () {
     if (pop && curInput === input) { close(); return; }
     close();
     curInput = input; input.classList.add('fp-dp-on');
-    const sel = parse(input.value) || (() => { const t = new Date(); return { y: t.getFullYear(), m: t.getMonth(), d: t.getDate() }; })();
+    // ⚠️ Si la valeur stockée a une ANNÉE aberrante (ex. « 0002-07-09 » entrée par erreur → 738969 j),
+    //    on ouvre le calendrier sur AUJOURD'HUI plutôt que sur l'an 2 (grille d'années absurde qui
+    //    « bloquait » et laissait re-sauver une année fausse). L'utilisateur repart d'une date saine.
+    let sel = parse(input.value);
+    if (!sel || sel.y < 1990 || sel.y > 2100) { const t = new Date(); sel = { y: t.getFullYear(), m: t.getMonth(), d: t.getDate() }; }
     viewY = sel.y; viewM = sel.m; viewMode = 'days';
     pop = document.createElement('div'); pop.className = 'fp-dp'; document.body.appendChild(pop);
     render(); place();
