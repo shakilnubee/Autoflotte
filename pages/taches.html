@@ -175,10 +175,10 @@
       <div id="rappels-list" class="space-y-2"></div>
     </div>
 
-    <!-- 🔧 Contrôles techniques à venir : toute la file (proches + lointains), 1 clic pour créer la tâche. -->
+    <!-- 🛠️ Entretiens à venir (contrôles techniques + révisions) : toute la file, 1 clic pour créer la tâche. -->
     <div class="card p-4 mb-6" id="ct-card" style="display:none">
       <div class="flex items-center justify-between gap-2 mb-3">
-        <div class="font-bold flex items-center gap-2" style="color:var(--fp-primary)">🔧 Contrôles techniques à venir <span id="ct-count" class="text-xs font-normal text-slate-400"></span></div>
+        <div class="font-bold flex items-center gap-2" style="color:var(--fp-primary)">🛠️ Entretiens à venir <span class="text-xs font-normal text-slate-400">CT + révisions</span> <span id="ct-count" class="text-xs font-normal text-slate-400"></span></div>
       </div>
       <div id="ct-list" class="space-y-2"></div>
     </div>
@@ -451,17 +451,30 @@
     const vehs = (window.data && Array.isArray(data.vehicules)) ? data.vehicules : ((window.FP_DATA && FP_DATA.vehicules) || []);
     if (!vehs.length) return list;                 // pas de véhicules chargés → ne rien masquer
     const norm = s => String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-    const curCT = {}, loaded = {};
-    vehs.forEach(v => { if (!v || v.id == null) return; loaded[v.id] = true; if (v.prochainCT && v.prochainCT !== '—' && !(FP.horsFlotte && FP.horsFlotte(v)) && !(FP.ctIgnored && FP.ctIgnored(v))) curCT[v.id] = String(v.prochainCT).slice(0, 10); });
+    const isAutoCT = t => t.auto === true && norm(t.titre).includes('controle technique');
+    const isAutoRev = t => t.auto === true && norm(t.titre).includes('revision');
+    const curCT = {}, loaded = {}, vById = {};
+    vehs.forEach(v => { if (!v || v.id == null) return; loaded[v.id] = true; vById[v.id] = v; if (v.prochainCT && v.prochainCT !== '—' && !(FP.horsFlotte && FP.horsFlotte(v)) && !(FP.ctIgnored && FP.ctIgnored(v))) curCT[v.id] = String(v.prochainCT).slice(0, 10); });
+    // Ancre révision courante par véhicule (= date de la dernière révision) — calculée UNIQUEMENT s'il y a
+    // au moins une tâche auto « révision » (évite un calcul coûteux inutile à chaque lecture).
+    const curRev = {};
+    if (list.some(isAutoRev)) {
+      vehs.forEach(v => { if (!v || v.id == null) return; if (FP.horsFlotte && FP.horsFlotte(v)) return; try { curRev[v.id] = (FP.derniereRevision ? (FP.derniereRevision(v).date || '') : (v.derniereRevision || '')) || 'norev'; } catch (e) { curRev[v.id] = 'norev'; } });
+    }
     const seen = new Set(); const out = [];
     list.forEach(t => {
       if (!t) return;
       const done = t.fait === true || t.statut === 'fait' || t.statut === 'done';
-      const isAutoCT = t.auto === true && norm(t.titre).includes('controle technique');
-      if (isAutoCT && !done && t.vehiculeId != null && loaded[t.vehiculeId]) {
+      if (isAutoCT(t) && !done && t.vehiculeId != null && loaded[t.vehiculeId]) {
         const cur = curCT[t.vehiculeId], ech = String(t.echeance || '').slice(0, 10);
-        if (!cur || ech !== cur) return;           // périmée → masquée
+        if (!cur || ech !== cur) return;           // CT périmé → masqué
         const k = 'autoct|' + t.vehiculeId + '|' + cur;
+        if (seen.has(k)) return;                    // doublon → une seule fois
+        seen.add(k);
+      } else if (isAutoRev(t) && !done && t.vehiculeId != null && loaded[t.vehiculeId]) {
+        const cur = curRev[t.vehiculeId] || 'norev';
+        if (String(t.revAnchor || 'norev') !== cur) return;   // révision déjà faite depuis → périmée, masquée
+        const k = 'autorev|' + t.vehiculeId + '|' + cur;
         if (seen.has(k)) return;                    // doublon → une seule fois
         seen.add(k);
       }
@@ -1260,7 +1273,47 @@
         });
         done[key] = todayIso(); keptForVeh[vehId] = true; changed = true; n++;
       });
-      if (changed) { s.taches = arr; s.tachesAutoFaites = done; FP.settings.save(s); if (n && FP.toast) FP.toast('⚡ ' + n + ' tâche(s) contrôle technique créée(s) automatiquement'); }
+
+      // ===== RÉVISIONS (même logique que le CT, source unique FP.revisionInfo / FP.derniereRevision) =====
+      // Une tâche auto « Révision » est créée quand la révision est DUE (revisionInfo.niveau = warn/danger).
+      // L'ancre = date de la dernière révision : quand une révision est faite (la date change), l'ancienne
+      // tâche devient périmée (purgée) et une nouvelle est créée pour la suivante. Anti-doublon par ancre.
+      const isAutoRev = t => t && t.auto === true && norm(t.titre).includes('revision');
+      const revAnchorDe = v => { try { return (FP.derniereRevision ? (FP.derniereRevision(v).date || '') : (v.derniereRevision || '')) || 'norev'; } catch (e) { return 'norev'; } };
+      const revKept = {};
+      // 1) Purge des tâches auto « révision » périmées (révision faite depuis) ou en double.
+      arr = arr.filter(t => {
+        if (!isAutoRev(t) || estFait(t)) return true;
+        const v = vehById[t.vehiculeId]; if (!v) return true;      // véhicule non chargé → préserver
+        if (String(t.revAnchor || 'norev') !== revAnchorDe(v)) { changed = true; return false; }  // périmée
+        if (revKept[t.vehiculeId]) { changed = true; return false; }                               // doublon
+        revKept[t.vehiculeId] = true; return true;
+      });
+      // 2) Création des tâches auto « révision » manquantes (véhicules dont la révision est due).
+      data.vehicules.forEach(v => {
+        if (!v || v.id == null || !vehById[v.id]) return;
+        if (FP.horsFlotte && FP.horsFlotte(v)) return;
+        if (revKept[v.id]) return;                                  // déjà une tâche révision pour ce véhicule
+        const ri = FP.revisionInfo ? FP.revisionInfo(v) : null;
+        if (!ri || !ri.niveau) return;                             // seulement si DUE (warn/danger)
+        const anchor = revAnchorDe(v);
+        const key = 'rev:' + v.id + ':' + anchor;
+        if (done[key]) return;                                     // déjà créée / supprimée pour cette échéance
+        let ech = todayIso();
+        try { if (ri.prochaineDate) { const d = new Date(ri.prochaineDate); if (!isNaN(d)) ech = d.toISOString().slice(0, 10); } } catch (e) {}
+        const overdue = (ri.kmRestant != null && ri.kmRestant <= 0) || (ri.joursRestant != null && ri.joursRestant <= 0);
+        arr.push({
+          id: 'arev-' + v.id + '-' + String(anchor).replace(/[^0-9a-z]/gi, ''), titre: 'Révision', type: 'rdv',
+          statut: 'todo', fait: false, vehiculeId: v.id, echeance: ech, revAnchor: anchor, heure: '', lieu: '',
+          conducteur: v.chauffeur || '', responsable: '', fournisseur: '', priorite: (overdue ? 'haute' : 'normale'),
+          note: (overdue ? 'Créée automatiquement : la révision est DÉPASSÉE (km/date). Prends le rendez-vous au plus vite.' : 'Créée automatiquement : la révision arrive à échéance. Pense à prendre le rendez-vous.'),
+          etiquettes: ['garage'], commentaires: [], sousTaches: [], auto: true,
+          createdAt: nowStamp(), historique: [{ txt: 'Créée automatiquement (révision)', at: nowStamp() }]
+        });
+        done[key] = todayIso(); revKept[v.id] = true; changed = true; n++;
+      });
+
+      if (changed) { s.taches = arr; s.tachesAutoFaites = done; FP.settings.save(s); if (n && FP.toast) FP.toast('⚡ ' + n + ' tâche(s) d\'entretien créée(s) automatiquement'); }
     } catch (e) {}
   }
 
@@ -1279,48 +1332,88 @@
     });
     return out.sort((a, b) => a.j - b.j);
   }
+  // ---- Révisions à venir (source unique FP.revisionInfo) : véhicules dont la révision est DUE. ----
+  function revAnchorOf(v) { try { return (FP.derniereRevision ? (FP.derniereRevision(v).date || '') : (v.derniereRevision || '')) || 'norev'; } catch (e) { return 'norev'; } }
+  function revList() {
+    if (!(data && Array.isArray(data.vehicules))) return [];
+    const out = [];
+    data.vehicules.forEach(v => {
+      if (!v) return;
+      if (FP.horsFlotte && FP.horsFlotte(v)) return;
+      const ri = FP.revisionInfo ? FP.revisionInfo(v) : null;
+      if (!ri || !ri.niveau) return;                    // seulement si DUE (warn/danger)
+      let date = ''; try { if (ri.prochaineDate) { const d = new Date(ri.prochaineDate); if (!isNaN(d)) date = d.toISOString().slice(0, 10); } } catch (e) {}
+      const j = (ri.joursRestant != null && isFinite(ri.joursRestant)) ? ri.joursRestant : ((ri.kmRestant != null && ri.kmRestant <= 0) ? -1 : 999);
+      out.push({ v, ri, date, j, km: (ri.kmRestant != null ? ri.kmRestant : null) });
+    });
+    return out;
+  }
   function existingCTTask(vehId, ct) {
     return getTaches().find(t => t && t.vehiculeId === vehId && t.type === 'rdv' && String(t.echeance).slice(0, 10) === ct && FP.norm(t.titre || '').includes(FP.norm('controle technique'))) || null;
+  }
+  function existingRevTask(vehId, anchor) {
+    return getTaches().find(t => t && t.vehiculeId === vehId && FP.norm(t.titre || '').includes(FP.norm('revision')) && (t.revAnchor == null || String(t.revAnchor) === String(anchor))) || null;
   }
   function createCTTaskFor(vehId, ct) {
     const v = (data.vehicules || []).find(x => x.id === vehId); if (!v) return;
     if (existingCTTask(vehId, ct)) { render(); return; }
     const j = FP.joursRestants ? FP.joursRestants(ct) : null;
     const arr = getTaches();
-    arr.push({ id: 'T' + Math.random().toString(36).slice(2, 9), titre: 'Contrôle technique', type: 'rdv', statut: 'todo', fait: false, vehiculeId: vehId, echeance: ct, heure: '', lieu: '', conducteur: v.chauffeur || '', responsable: '', fournisseur: '', priorite: (j != null && j <= 30 ? 'haute' : 'normale'), note: (j != null && j < 0 ? 'Contrôle technique DÉPASSÉ — à programmer au plus vite.' : 'Contrôle technique à programmer.'), etiquettes: ['garage'], commentaires: [], sousTaches: [], createdAt: nowStamp(), historique: [{ txt: 'Créée depuis « CT à venir »', at: nowStamp() }] });
+    arr.push({ id: 'T' + Math.random().toString(36).slice(2, 9), titre: 'Contrôle technique', type: 'rdv', statut: 'todo', fait: false, vehiculeId: vehId, echeance: ct, heure: '', lieu: '', conducteur: v.chauffeur || '', responsable: '', fournisseur: '', priorite: (j != null && j <= 30 ? 'haute' : 'normale'), note: (j != null && j < 0 ? 'Contrôle technique DÉPASSÉ — à programmer au plus vite.' : 'Contrôle technique à programmer.'), etiquettes: ['garage'], commentaires: [], sousTaches: [], createdAt: nowStamp(), historique: [{ txt: 'Créée depuis « Entretiens à venir »', at: nowStamp() }] });
     const s = FP.settings.get(); const done = (s.tachesAutoFaites && typeof s.tachesAutoFaites === 'object') ? s.tachesAutoFaites : {}; done['ct:' + vehId + ':' + ct] = todayIso(); s.taches = arr; s.tachesAutoFaites = done; FP.settings.save(s);
     if (FP.toast) FP.toast('✓ Tâche CT créée pour ' + (v.immat || ''));
+    render();
+  }
+  function createRevTaskFor(vehId) {
+    const v = (data.vehicules || []).find(x => x.id === vehId); if (!v) return;
+    const anchor = revAnchorOf(v);
+    if (existingRevTask(vehId, anchor)) { render(); return; }
+    const ri = FP.revisionInfo ? FP.revisionInfo(v) : null;
+    let ech = todayIso(); try { if (ri && ri.prochaineDate) { const d = new Date(ri.prochaineDate); if (!isNaN(d)) ech = d.toISOString().slice(0, 10); } } catch (e) {}
+    const overdue = ri && ((ri.kmRestant != null && ri.kmRestant <= 0) || (ri.joursRestant != null && ri.joursRestant <= 0));
+    const arr = getTaches();
+    arr.push({ id: 'T' + Math.random().toString(36).slice(2, 9), titre: 'Révision', type: 'rdv', statut: 'todo', fait: false, vehiculeId: vehId, echeance: ech, revAnchor: anchor, heure: '', lieu: '', conducteur: v.chauffeur || '', responsable: '', fournisseur: '', priorite: (overdue ? 'haute' : 'normale'), note: (overdue ? 'Révision DÉPASSÉE — à programmer au plus vite.' : 'Révision à programmer.'), etiquettes: ['garage'], commentaires: [], sousTaches: [], createdAt: nowStamp(), historique: [{ txt: 'Créée depuis « Entretiens à venir »', at: nowStamp() }] });
+    const s = FP.settings.get(); const done = (s.tachesAutoFaites && typeof s.tachesAutoFaites === 'object') ? s.tachesAutoFaites : {}; done['rev:' + vehId + ':' + anchor] = todayIso(); s.taches = arr; s.tachesAutoFaites = done; FP.settings.save(s);
+    if (FP.toast) FP.toast('✓ Tâche révision créée pour ' + (v.immat || ''));
     render();
   }
   let ctExpanded = false;
   function renderCTaVenir() {
     const card = $('ct-card'); if (!card) return;
-    const rows = ctList();
+    const rows = ctList().map(r => Object.assign({ kind: 'ct' }, r))
+      .concat(revList().map(r => Object.assign({ kind: 'rev', ct: r.date }, r)))
+      .sort((a, b) => a.j - b.j);
     if (!rows.length) { card.style.display = 'none'; return; }
     card.style.display = '';
-    $('ct-count').textContent = '· ' + rows.length + ' véhicule' + (rows.length > 1 ? 's' : '');
+    $('ct-count').textContent = '· ' + rows.length + ' échéance' + (rows.length > 1 ? 's' : '');
     const show = ctExpanded ? rows : rows.slice(0, 5);
-    $('ct-list').innerHTML = show.map(({ v, ct, j }) => {
+    $('ct-list').innerHTML = show.map(r => {
+      const j = r.j;
       const when = j < 0 ? `dépassé de ${-j} j` : (j === 0 ? "aujourd'hui" : (j === 1 ? 'demain' : `dans ${j} j`));
       const col = j < 0 ? '#B91C1C' : (j <= 30 ? '#B45309' : (j <= 90 ? '#0891b2' : '#64748B'));
-      const ex = existingCTTask(v.id, ct);
-      const lbl = escapeHtml(`${v.immat} · ${v.marque} ${v.modele}`.trim());
+      const lbl = escapeHtml(`${r.v.immat} · ${r.v.marque} ${r.v.modele}`.trim());
+      if (r.kind === 'ct') {
+        const ex = existingCTTask(r.v.id, r.ct);
+        const action = ex
+          ? `<button class="filter-chip" data-ct-open="${escapeHtml(ex.id)}" style="border-color:#16a34a;color:#16a34a">✓ Tâche créée</button>`
+          : `<button class="filter-chip" data-ct-new="${escapeHtml(r.v.id)}" data-ct-date="${escapeHtml(r.ct)}">＋ Créer la tâche</button>`;
+        return `<div class="task-card" style="padding:.55rem .7rem"><div class="flex-1 min-w-0"><div class="task-title" style="font-size:.9rem">🔧 ${lbl}</div><div class="mt-1"><span class="fp-ech" style="background:${col}1a;color:${col};border:1px solid ${col}55">CT ${escapeHtml(when)} · ${escapeHtml(FP.date ? FP.date(r.ct) : r.ct)}</span></div></div><div class="flex-shrink-0">${action}</div></div>`;
+      }
+      const anchor = revAnchorOf(r.v);
+      const ex = existingRevTask(r.v.id, anchor);
       const action = ex
         ? `<button class="filter-chip" data-ct-open="${escapeHtml(ex.id)}" style="border-color:#16a34a;color:#16a34a">✓ Tâche créée</button>`
-        : `<button class="filter-chip" data-ct-new="${escapeHtml(v.id)}" data-ct-date="${escapeHtml(ct)}">＋ Créer la tâche</button>`;
-      return `<div class="task-card" style="padding:.55rem .7rem">
-        <div class="flex-1 min-w-0">
-          <div class="task-title" style="font-size:.9rem">🔧 ${lbl}</div>
-          <div class="mt-1"><span class="fp-ech" style="background:${col}1a;color:${col};border:1px solid ${col}55">CT ${escapeHtml(when)} · ${escapeHtml(FP.date ? FP.date(ct) : ct)}</span></div>
-        </div>
-        <div class="flex-shrink-0">${action}</div>
-      </div>`;
+        : `<button class="filter-chip" data-rev-new="${escapeHtml(r.v.id)}">＋ Créer la tâche</button>`;
+      const km = r.km, kmTxt = (km != null) ? (km <= 0 ? `dépassé de ${FP.num ? FP.num(-km) : -km} km` : `dans ${FP.num ? FP.num(km) : km} km`) : '';
+      const echTxt = r.date ? (' · ' + escapeHtml(FP.date ? FP.date(r.date) : r.date)) : '';
+      return `<div class="task-card" style="padding:.55rem .7rem"><div class="flex-1 min-w-0"><div class="task-title" style="font-size:.9rem">🛠️ ${lbl}</div><div class="mt-1"><span class="fp-ech" style="background:${col}1a;color:${col};border:1px solid ${col}55">Révision ${escapeHtml(kmTxt || when)}${echTxt}</span></div></div><div class="flex-shrink-0">${action}</div></div>`;
     }).join('');
     if (rows.length > 5) $('ct-list').innerHTML += `<button id="ct-toggle" class="text-xs font-semibold mt-1" style="color:var(--fp-accent);background:none;border:none;cursor:pointer">${ctExpanded ? '▲ Voir moins' : ('▼ Voir tout (' + rows.length + ')')}</button>`;
     lucide.createIcons();
   }
   $('ct-list').addEventListener('click', e => {
     const nw = e.target.closest('[data-ct-new]'); if (nw) { createCTTaskFor(nw.getAttribute('data-ct-new'), nw.getAttribute('data-ct-date')); return; }
+    const rn = e.target.closest('[data-rev-new]'); if (rn) { createRevTaskFor(rn.getAttribute('data-rev-new')); return; }
     const op = e.target.closest('[data-ct-open]'); if (op) { openEdit(op.getAttribute('data-ct-open')); return; }
     if (e.target.closest('#ct-toggle')) { ctExpanded = !ctExpanded; renderCTaVenir(); return; }
   });
