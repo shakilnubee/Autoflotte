@@ -7053,6 +7053,51 @@ FP.deletePrestataire = (id) => {
   FP.settings.save(obj);
 };
 
+// ===== RATTACHEMENT GARAGE / CONCESSIONNAIRE ↔ VÉHICULE (SOURCE UNIQUE) =====
+// Objectif : proposer AUTOMATIQUEMENT le bon garage pour chaque véhicule (ex. tous les BYD → BYD Enghien),
+// tout en permettant des EXCEPTIONS (deux BYD peuvent avoir deux garages différents). Deux niveaux :
+//   (1) RÈGLE PAR MARQUE  → settings.garageParMarque = { <marqueNorm>: prestId }  (couvre toute une marque)
+//   (2) EXCEPTION PAR VÉHICULE → settings.vehGarage = { <vehId>: prestId }  (prime sur la règle marque)
+// Le garage lui-même est un `prestataire` (référentiel unique settings.prestataires), enrichi d'un PDF
+// optionnel (pdfUrl/pdfName) joint aux e-mails. FP.garageDe(v) = le prestataire (objet) rattaché, ou null.
+FP.normMarque = (m) => String(m == null ? '' : m).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
+FP.garages = {
+  _regle() { try { const m = FP.settings.get().garageParMarque; return (m && typeof m === 'object') ? m : {}; } catch (e) { return {}; } },
+  _veh() { try { const m = FP.settings.get().vehGarage; return (m && typeof m === 'object') ? m : {}; } catch (e) { return {}; } },
+  byId(id) { if (!id) return null; try { return FP.getPrestataires().find(p => p && p.id === id) || null; } catch (e) { return null; } },
+  // Id du garage rattaché : exception par véhicule d'abord, sinon règle par marque.
+  garageIdDe(v) {
+    if (!v) return '';
+    const vg = this._veh(); if (vg[v.id]) return vg[v.id];
+    const r = this._regle(); const k = FP.normMarque(v.marque); return (k && r[k]) ? r[k] : '';
+  },
+  garageDe(v) { return this.byId(this.garageIdDe(v)); },
+  // Origine du rattachement pour l'UI : 'veh' (exception véhicule), 'marque' (règle), '' (aucun).
+  source(v) {
+    if (!v) return '';
+    const vg = this._veh(); if (vg[v.id]) return 'veh';
+    const r = this._regle(); const k = FP.normMarque(v.marque); return (k && r[k]) ? 'marque' : '';
+  },
+  setVehGarage(vehId, prestId) {
+    if (vehId == null) return;
+    const s = FP.settings.get(); s.vehGarage = (s.vehGarage && typeof s.vehGarage === 'object') ? s.vehGarage : {};
+    if (prestId) s.vehGarage[vehId] = prestId; else delete s.vehGarage[vehId];
+    FP.settings.save(s);
+  },
+  setRegleMarque(marque, prestId) {
+    const k = FP.normMarque(marque); if (!k) return;
+    const s = FP.settings.get(); s.garageParMarque = (s.garageParMarque && typeof s.garageParMarque === 'object') ? s.garageParMarque : {};
+    if (prestId) s.garageParMarque[k] = prestId; else delete s.garageParMarque[k];
+    FP.settings.save(s);
+  },
+  // Pièce jointe e-mail (format Resend : { filename, path }) pour le PDF du garage d'un véhicule, ou null.
+  pdfAttachmentDe(v) {
+    try { const g = this.garageDe(v); if (g && g.pdfUrl) return { filename: (g.pdfName || ((g.nom || 'garage') + '.pdf')), path: g.pdfUrl }; } catch (e) {}
+    return null;
+  }
+};
+FP.garageDe = (v) => FP.garages.garageDe(v);   // raccourci — SOURCE UNIQUE (à réutiliser partout)
+
 // ===== NOTES DE ZONE (globales, réutilisables sur n'importe quelle page/onglet/zone) =====
 // Pose un bouton « 📝 Notes » sur tout élément portant l'attribut data-fp-note="<clé unique>"
 // (+ data-fp-note-label="Titre lisible" optionnel). Clic → modale de lecture/édition. Le texte est
@@ -14746,6 +14791,17 @@ FP.msg = {
           + '<button type="button" id="fp-msg-wa" style="flex:1;min-width:120px;justify-content:center;display:inline-flex;align-items:center;gap:6px;padding:11px;border-radius:10px;border:none;background:#25D366;color:#0b3d1f;font-weight:800;cursor:pointer">🟢 WhatsApp</button>'
           + (opts.email ? '<button type="button" id="fp-msg-email" style="flex:1;min-width:120px;justify-content:center;display:inline-flex;align-items:center;gap:6px;padding:11px;border-radius:10px;border:none;background:#0B1220;color:#fff;font-weight:800;cursor:pointer">📧 Email</button>' : '')
         + '</div>'
+        // Pièces jointes (uniquement pour l'e-mail) : PDF du garage rattaché (auto) + ajout manuel.
+        + (opts.email
+            ? '<div id="fp-msg-att" style="display:flex;flex-direction:column;gap:6px">'
+              + '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
+                + '<button type="button" id="fp-msg-attach" style="font-size:.78rem;font-weight:700;padding:6px 11px;border-radius:9999px;border:1px dashed var(--fp-border,#e5e7eb);background:var(--fp-bg,#fff);color:inherit;cursor:pointer">📎 Joindre un PDF</button>'
+                + '<span style="font-size:.7rem;color:var(--fp-muted,#64748b)">joint à l\'e-mail envoyé</span>'
+              + '</div>'
+              + '<input id="fp-msg-attach-file" type="file" accept="application/pdf,image/*" class="hidden" style="display:none">'
+              + '<div id="fp-msg-att-list" style="display:flex;flex-direction:column;gap:4px"></div>'
+            + '</div>'
+            : '')
         + '<button type="button" id="fp-msg-copy" style="padding:9px;border-radius:10px;border:1px solid var(--fp-border,#e5e7eb);background:var(--fp-bg,#fff);color:inherit;font-weight:700;cursor:pointer">📋 Copier le message</button>'
         + '<p style="font-size:.72rem;color:var(--fp-muted,#64748b);margin:0">Le message s\'ouvre dans ton appli — tu appuies sur Envoyer. Gratuit, ça part de ton numéro.</p>'
       + '</div>'
@@ -14755,6 +14811,35 @@ FP.msg = {
     const ph = () => (q('#fp-msg-phone').value || '').trim();
     const tx = () => q('#fp-msg-text').value || '';
     const close = () => ov.remove();
+    // --- Pièces jointes e-mail (format Resend { filename, path|content }) : pré-attachées (PDF du garage)
+    //     + ajouts manuels. On les envoie telles quelles à FP.sendEmail (le serveur send-email les gère).
+    let atts = Array.isArray(opts.attachments) ? opts.attachments.filter(a => a && a.filename && (a.path || a.content)) : [];
+    const attList = () => q('#fp-msg-att-list');
+    function renderAtts() {
+      const box = attList(); if (!box) return;
+      box.innerHTML = atts.map((a, i) => '<div style="display:flex;align-items:center;gap:6px;font-size:.76rem;background:var(--fp-bg,#f8fafc);border:1px solid var(--fp-border,#e5e7eb);border-radius:8px;padding:5px 8px">'
+        + '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📄 ' + esc(a.filename) + (a._auto ? ' <span style="color:var(--fp-muted,#64748b)">(garage)</span>' : '') + '</span>'
+        + '<button type="button" class="fp-att-del" data-i="' + i + '" title="Retirer" style="background:none;border:none;cursor:pointer;color:#dc2626;font-weight:800;font-size:.9rem;line-height:1">×</button>'
+        + '</div>').join('');
+      box.querySelectorAll('.fp-att-del').forEach(b => b.addEventListener('click', () => { atts.splice(+b.getAttribute('data-i'), 1); renderAtts(); }));
+    }
+    if (opts.email) {
+      renderAtts();
+      const attBtn = q('#fp-msg-attach'), attFile = q('#fp-msg-attach-file');
+      if (attBtn && attFile) {
+        attBtn.addEventListener('click', () => attFile.click());
+        attFile.addEventListener('change', async (e) => {
+          const f = e.target.files && e.target.files[0]; e.target.value = ''; if (!f) return;
+          const old = attBtn.textContent; attBtn.disabled = true; attBtn.textContent = 'Envoi du fichier…';
+          try {
+            const url = await FP.uploadScan(f, 'emails', { name: (f.name || 'piece-jointe').replace(/\.[^.]+$/, '') });
+            if (url) { atts.push({ filename: f.name || 'piece-jointe.pdf', path: url }); renderAtts(); }
+            else throw new Error('upload vide');
+          } catch (err) { if (FP.notifyError) FP.notifyError('Échec de la pièce jointe'); else alert('Échec de la pièce jointe : ' + (err && err.message || err)); }
+          attBtn.disabled = false; attBtn.textContent = old;
+        });
+      }
+    }
     ov.addEventListener('click', e => { if (e.target === ov) close(); });
     q('#fp-msg-x').addEventListener('click', close);
     q('#fp-msg-sms').addEventListener('click', () => { window.location.href = FP.msg.smsHref(ph(), tx()); });
@@ -14779,7 +14864,12 @@ FP.msg = {
         : (opts.emailHtml || (FP.mailBrand ? FP.mailBrand({ title: opts.emailSubject || opts.title || '', prenom: opts.nom || '', nomSoc: opts.emailNomSoc || '', logoUrl: opts.emailLogo || '', lang: _mlang, bodyHtml: '<div style="white-space:pre-wrap;line-height:1.5">' + _linkify(tx()) + '</div>' }) : ('<div style="white-space:pre-wrap">' + _linkify(tx()) + '</div>')));
       const oldTxt = eb.textContent; eb.disabled = true; eb.textContent = 'Envoi…';
       try {
-        await FP.sendEmail(Object.assign({ to: opts.email, subject: opts.emailSubject || opts.title || 'Message', html: html, text: tx() }, opts.emailOpts || {}));
+        const payload = Object.assign({ to: opts.email, subject: opts.emailSubject || opts.title || 'Message', html: html, text: tx() }, opts.emailOpts || {});
+        // Pièces jointes = celles de la modale (PDF garage auto + ajouts) fusionnées avec un éventuel emailOpts.attachments.
+        const extra = Array.isArray(payload.attachments) ? payload.attachments : [];
+        const allAtt = atts.concat(extra.filter(a => a && a.filename && (a.path || a.content)));
+        if (allAtt.length) payload.attachments = allAtt; else delete payload.attachments;
+        await FP.sendEmail(payload);
         if (FP.toast) FP.toast('✓ E-mail envoyé à ' + opts.email); close();
       } catch (err) { eb.disabled = false; eb.textContent = oldTxt; if (FP.notifyError) FP.notifyError('Échec de l\'e-mail'); else alert('Échec de l\'envoi de l\'e-mail : ' + (err && err.message || err)); }
     }); }
@@ -14814,6 +14904,20 @@ document.addEventListener('click', (e) => {
 // les gens. En emballant l'e-mail dans un vrai document HTML avec `color-scheme: only light`, on dit
 // aux clients de NE PAS inverser → l'e-mail s'affiche avec NOS couleurs, IDENTIQUE en clair comme en
 // sombre. Tout e-mail passe par ce wrapper (mailBrand / mailShell le font déjà).
+// ⚠️ SOURCE UNIQUE — « une date / une plaque ne doit JAMAIS se couper en 2 lignes » (consigne
+// explicite). Dans un e-mail, « 07 oct 2026 » ou une plaque « HH-613-KE » pouvaient passer à la ligne
+// (moche). On entoure ces valeurs d'un <span style="white-space:nowrap"> → elles restent d'un seul bloc.
+// On ne touche QUE le TEXTE hors balises (entre « > » et « < ») : jamais un attribut/URL/style.
+FP.mailNoWrap = function (html) {
+  if (html == null) return html;
+  // Date FR avec ESPACES : « 7 oct 2026 », « 07 octobre 2026 » (les dates en 07/10/2026 ne se coupent pas).
+  const RE_DATE = /\b\d{1,2}\s+(?:janv|févr|fevr|mars|avr|mai|juin|juil|août|aout|sept|oct|nov|déc|dec|janvier|février|fevrier|avril|juillet|septembre|octobre|novembre|décembre|decembre)\.?\s+\d{4}\b/gi;
+  // Plaque FR : AA-123-AA / AA 123 AA / AA123AA.
+  const RE_PLATE = /\b[A-Z]{2}[-\s]?\d{3}[-\s]?[A-Z]{2}\b/g;
+  const nowrap = (m) => '<span style="white-space:nowrap">' + m + '</span>';
+  const wrap = (t) => t.replace(RE_DATE, nowrap).replace(RE_PLATE, nowrap);
+  try { return String(html).replace(/>([^<]+)</g, (full, txt) => '>' + wrap(txt) + '<'); } catch (e) { return html; }
+};
 FP.mailDocument = function (inner) {
   return '<!DOCTYPE html><html lang="fr"><head>'
     + '<meta charset="utf-8">'
@@ -14821,7 +14925,7 @@ FP.mailDocument = function (inner) {
     + '<meta name="color-scheme" content="only light">'
     + '<meta name="supported-color-schemes" content="only light">'
     + '</head><body style="margin:0;padding:0;background:#EEF2F7;color:#0F1E3D">'
-    + (inner || '')
+    + FP.mailNoWrap(inner || '')
     + '</body></html>';
 };
 // ===== LOGO PARC PILOT « EN DUR » pour les e-mails (source UNIQUE, identique partout) =====
