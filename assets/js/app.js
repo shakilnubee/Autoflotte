@@ -8857,7 +8857,17 @@ FP.alertes = {
   // n'avait changé (bug vécu). La vraie donnée (date de CT, d'expiration…) est déjà dans le `muteKey` —
   // si elle change, le muteKey change = nouvelle alerte. La signature ne sert qu'à détecter les autres
   // changements (montant, liste de véhicules). On neutralise donc les « <n> j / <n> jours » du texte.
-  _stripVolatile(s) { return String(s == null ? '' : s).replace(/\d+\s*j(?:ours?)?\b/gi, 'Xj').replace(/\s+/g, ' ').trim(); },
+  // ⚠️ On neutralise AUSSI le KILOMÉTRAGE (« 20 765 km », « +13 576 km ») : depuis que le km se met à jour
+  // tout seul (relevés QR/e-mail/saisie), une alerte révision/CT « Vue » revenait dès que le compteur
+  // bougeait de quelques km alors que l'action à faire est IDENTIQUE (révision toujours à faire). Le « Vu »
+  // reste donc valable tant que la vraie situation (date de CT/révision faite) n'a pas changé — cette
+  // identité-là est déjà portée par le muteKey (rev|<id>|<derniereRevision>, CT dans la date).
+  _stripVolatile(s) {
+    return String(s == null ? '' : s)
+      .replace(/[+\-]?\d[\d\s.,  ]*\s*km\b/gi, 'Xkm')   // kilométrages → neutralisés
+      .replace(/\d+\s*j(?:ours?)?\b/gi, 'Xj')                      // compte à rebours en jours → neutralisé
+      .replace(/\s+/g, ' ').trim();
+  },
   sig(a) {
     try {
       const items = (a && (a.vehicules || a.items)) || [];
