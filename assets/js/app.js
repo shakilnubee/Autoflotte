@@ -6215,7 +6215,6 @@ FP.NAV_SUBMENUS = {
     { label: 'Notes de frais', tab: 'notesfrais' },
     { label: 'Documents', tab: 'documents' },
     { label: 'Fournisseurs', tab: 'fournisseurs' },
-    { label: 'Entretiens', page: 'entretiens.html' },
   ],
   'notifications.html': [
     { label: 'Alertes', tab: 'alertes' },
