@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260929g">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260929h">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260929g"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260929h"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260929g">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260929h">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -72,7 +72,9 @@
     #contrats-header-actions #leasing-loueur-filter-outer { display: flex; }
     #contrats-header-actions .fp-filters-trigger,
     #contrats-header-actions #cmp-open,
-    #contrats-header-actions #loueur-add-quick { width: 100%; justify-content: center; }
+    #contrats-header-actions #loueur-add-quick,
+    #contrats-header-actions #assur-add-quick,
+    #contrats-header-actions #cadre-add-quick { width: 100%; justify-content: center; }
   }
 </style>
 <script>
@@ -172,7 +174,11 @@
             </span>
           </span>
           <button id="cmp-open" type="button" class="btn text-sm" style="background:#fff;color:#0B1E3D;border:none;font-weight:700" title="Comparer 2 devis de leasing ou 2 offres d'assurance et savoir lequel choisir"><i data-lucide="scale" class="w-4 h-4"></i> Comparer des devis</button>
+          <!-- Boutons « Ajouter » CONTEXTUELS (même style orange, gros) : switchContratTab n'en affiche
+               qu'UN à la fois selon le sous-onglet actif (Leasing / Assurance / Contrats cadre). -->
           <button id="loueur-add-quick" type="button" class="btn text-sm" style="background:var(--fp-accent);color:#fff;border:none;font-weight:600"><i data-lucide="plus" class="w-4 h-4"></i> Ajouter un loueur</button>
+          <button id="assur-add-quick" type="button" class="btn text-sm" style="background:var(--fp-accent);color:#fff;border:none;font-weight:600;display:none"><i data-lucide="plus" class="w-4 h-4"></i> Ajouter une prime</button>
+          <button id="cadre-add-quick" type="button" class="btn text-sm" style="background:var(--fp-accent);color:#fff;border:none;font-weight:600;display:none"><i data-lucide="plus" class="w-4 h-4"></i> Ajouter un contrat</button>
         </div>
       </div>
     </div>
@@ -685,8 +691,8 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260929g"></script>
-<script src="../assets/js/supabase-client.js?v=20260929g"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260929h"></script>
+<script src="../assets/js/supabase-client.js?v=20260929h"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -702,11 +708,11 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260929g"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260929h"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20260929g"></script>
+<script src="../assets/js/app.min.js?v=20260929h"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -2419,6 +2425,18 @@
     // Filtre « par loueur » + astuce de réorganisation = pertinents seulement sur Leasing.
     const lw = document.getElementById('leasing-loueur-filter-outer') || document.getElementById('leasing-loueur-filter-wrap'); if (lw) lw.style.display = (name === 'leasing') ? '' : 'none';
     const dh = document.getElementById('contrat-drag-hint'); if (dh) dh.style.display = (name === 'leasing') ? '' : 'none';
+    // Boutons « Ajouter » CONTEXTUELS (gros bouton orange de l'en-tête) : un seul visible selon le
+    // sous-onglet. Chaque bouton délègue au bouton d'action déjà présent dans sa section (source unique).
+    const setDisp = (id, on) => { const b = document.getElementById(id); if (b) b.style.display = on ? '' : 'none'; };
+    // « Ajouter un loueur » = config société → réservé CEO/Admin (même gate qu'à l'init, ligne ~3965) :
+    // ne PAS le ré-afficher à un gestionnaire en basculant sur Leasing. Prime & contrat cadre = données →
+    // autorisées au gestionnaire (comme le reste : il ajoute/modifie/supprime les données).
+    const canCfg = !(window.FP && FP.canManageSociete && !FP.canManageSociete());
+    setDisp('loueur-add-quick', name === 'leasing' && canCfg);
+    setDisp('assur-add-quick', name === 'assurance');
+    setDisp('cadre-add-quick', name === 'cadre');
+    // « Comparer des devis » : leasing ou assurance uniquement (n'a pas de sens pour les contrats cadre).
+    setDisp('cmp-open', name !== 'cadre');
     try { if (FP.lastTab) FP.lastTab.set('contrats', name); } catch (e) {}
     if (window.lucide) lucide.createIcons();
   }
@@ -2781,6 +2799,7 @@
     // ---- Câblage filtres + actions liste ----
     document.addEventListener('DOMContentLoaded', () => {
       const add = document.getElementById('cadre-add'); if (add) add.addEventListener('click', () => openModal());
+      const addQuick = document.getElementById('cadre-add-quick'); if (addQuick) addQuick.addEventListener('click', () => openModal());
       const scanBtn = document.getElementById('cadre-scan'), scanFile = document.getElementById('cadre-scan-file');
       if (scanBtn && scanFile) { scanBtn.addEventListener('click', () => scanFile.click()); scanFile.addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; e.target.value = ''; if (f) scanContrat(f); }); }
       const search = document.getElementById('cadre-search');
@@ -4048,6 +4067,7 @@
   if ($('assur-import-file')) $('assur-import-file').addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; if (f) importEtatParc(f); });
   // Ajouter une prime (par véhicule) : ouverture modale + dépôt de document + enregistrement
   if ($('assur-add-prime')) $('assur-add-prime').addEventListener('click', openPrimeModal);
+  if ($('assur-add-quick')) $('assur-add-quick').addEventListener('click', openPrimeModal);
   if ($('assur-export')) $('assur-export').addEventListener('click', exportEtatParc);
   if ($('prime-close')) $('prime-close').addEventListener('click', closePrimeModal);
   if ($('prime-cancel')) $('prime-cancel').addEventListener('click', closePrimeModal);
