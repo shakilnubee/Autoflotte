@@ -4159,11 +4159,15 @@ FP.mailModeleProfil = function (profilKey, defKey) { return FP.mailModeleProfilL
 // tout e-mail passe par ici → éditer le champ EN dans Paramètres change bien le mail envoyé (jamais en dur).
 FP.mailModeleProfilL = function (profilKey, defKey, lang) {
   let prof = {}; try { prof = FP.societeProfil ? FP.societeProfil() : {}; } catch (e) {}
-  if (String(lang) === 'en') {
-    const ve = prof[profilKey + '_en']; if (ve && String(ve).trim()) return String(ve);
-    const de = FP.MAIL_DEFAUT[defKey + '_en']; if (de && String(de).trim()) return String(de);
-  }
-  const v = prof[profilKey]; if (v && String(v).trim()) return String(v);
+  const en = String(lang) === 'en';
+  // ⚠️ PRIORITÉ : le texte CONFIGURÉ par l'utilisateur passe AVANT le défaut « en dur ». Ordre :
+  //   1) EN personnalisé (si conducteur EN)  2) FR personnalisé (les « réglages » de l'utilisateur)
+  //   3) défaut EN  4) défaut FR. Sinon un conducteur marqué EN recevait le DÉFAUT anglais au lieu du
+  //   modèle FR saisi par l'utilisateur → « j'ai pas les mêmes mails que dans mes réglages ». Un vrai
+  //   texte anglais s'obtient en remplissant le champ « English » du modèle (il repasse alors en tête).
+  if (en) { const ve = prof[profilKey + '_en']; if (ve && String(ve).trim()) return String(ve); }
+  const v = prof[profilKey]; if (v && String(v).trim()) return String(v);   // FR personnalisé = les réglages de l'utilisateur
+  if (en) { const de = FP.MAIL_DEFAUT[defKey + '_en']; if (de && String(de).trim()) return String(de); }
   return FP.MAIL_DEFAUT[defKey] || '';
 };
 // ===== OBJET (titre) de chaque e-mail — ÉDITABLE dans Paramètres → E-mails =====
@@ -4207,13 +4211,13 @@ FP.mailObjet = function (defKey, tags) { return FP.mailObjetL(defKey, tags, 'fr'
 FP.mailObjetL = function (defKey, tags, lang) {
   let prof = {}; try { prof = FP.societeProfil ? FP.societeProfil() : {}; } catch (e) {}
   const Cap = String(defKey).charAt(0).toUpperCase() + String(defKey).slice(1);
+  const en = String(lang) === 'en';
   let raw = '';
-  if (String(lang) === 'en') {
-    const pe = prof['mailObjet' + Cap + '_en'];
-    if (pe && String(pe).trim()) raw = String(pe);
-    else if (FP.MAIL_OBJET_DEFAUT[defKey + '_en']) raw = FP.MAIL_OBJET_DEFAUT[defKey + '_en'];
-  }
-  if (!raw) { const p = prof['mailObjet' + Cap]; raw = (p && String(p).trim()) ? String(p) : (FP.MAIL_OBJET_DEFAUT[defKey] || ''); }
+  // Même priorité que le CORPS : objet EN perso → objet FR perso (les réglages) → défaut EN → défaut FR.
+  if (en) { const pe = prof['mailObjet' + Cap + '_en']; if (pe && String(pe).trim()) raw = String(pe); }
+  if (!raw) { const p = prof['mailObjet' + Cap]; if (p && String(p).trim()) raw = String(p); }
+  if (!raw && en && FP.MAIL_OBJET_DEFAUT[defKey + '_en']) raw = FP.MAIL_OBJET_DEFAUT[defKey + '_en'];
+  if (!raw) raw = FP.MAIL_OBJET_DEFAUT[defKey] || '';
   const out = FP.fillTags ? FP.fillTags(raw, tags || {}) : raw;
   return String(out || '').trim();
 };
