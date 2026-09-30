@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260929p">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260929q">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260929p"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260929q"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260929p">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260929q">
 <style>
   .notif { display: flex; gap: .8rem; align-items: flex-start; padding: .85rem 1rem; border-radius: 14px; border: 1px solid var(--fp-border); background: var(--fp-surface, #fff); text-decoration: none; transition: box-shadow .15s ease, transform .15s ease, border-color .15s ease; box-shadow: 0 1px 2px rgba(15,30,61,.04); }
   .notif + .notif { margin-top: .55rem; }
@@ -150,8 +150,8 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260929p"></script>
-<script src="../assets/js/supabase-client.js?v=20260929p"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260929q"></script>
+<script src="../assets/js/supabase-client.js?v=20260929q"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -167,11 +167,11 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260929p"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260929q"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20260929p"></script>
+<script src="../assets/js/app.min.js?v=20260929q"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -811,7 +811,12 @@
       const debut = ov.debut || (lld && lld.debut) || base.debut || v.dateMiseEnCirculation || '';
       const km = ov.kmContrat || (lld && lld.kmTotal) || base.kmContrat || null;
       const duree = ov.dureeMois || (lld && lld.dureeMois) || base.dureeMois || null;
-      const loyer = (ov.loyer > 0 ? ov.loyer : null) || (lld && lld.loyerTTC > 0 ? lld.loyerTTC : null) || (base.loyer > 0 ? base.loyer : null);
+      // ⚠️ SOURCE UNIQUE (rule 0-source) : le loyer se lit via FP.leasingCoutContrat — EXACTEMENT ce que la
+      // fiche affiche (gère la plaque normalisée, l'offre, les AVENANTS via leasingLoyerCourant, et le LLD).
+      // La lecture manuelle ratait ces cas → faux « Loyer mensuel du contrat manquant » alors qu'il est saisi.
+      let loyer = null;
+      try { const _lc = FP.leasingCoutContrat ? FP.leasingCoutContrat(v.immat) : null; if (_lc && _lc.loyerMois != null) loyer = _lc.loyerMois; } catch (e) {}
+      if (loyer == null) loyer = (ov.loyer > 0 ? ov.loyer : null) || (lld && lld.loyerTTC > 0 ? lld.loyerTTC : null) || (base.loyer > 0 ? base.loyer : null);
       const pfx = 'complet:lease:' + v.id + ':';
       const miss = [];
       if (!debut && !ignHas(pfx + 'leaseDebut')) miss.push(CH[0]);
@@ -856,6 +861,9 @@
     const leaseItems = leasingChampsManquants(actifs);
     const dupG = dupDocGroups();
     const total = vehItems.length + condItems.length + amItems.length + cfg.length + dupG.length + pdfItems.length + leaseItems.length;
+    // Pastille sur l'onglet « 📝 À compléter » (comme « 📣 Relances ») → l'utilisateur voit qu'il reste des
+    // infos à saisir sans avoir à ouvrir l'onglet. Mise à jour à chaque rendu (source unique = ce total).
+    try { const _tc = document.getElementById('tab-complet'); if (_tc) _tc.innerHTML = '📝 À compléter' + (total ? ' <span style="background:#EF4444;color:#fff;border-radius:9999px;padding:1px 7px;font-size:11px;font-weight:800">' + total + '</span>' : ''); } catch (e) {}
     const rafN = buildRaf().length;
     const intro = total ? `<div class="mb-5 flex items-center gap-3 flex-wrap">
         <p class="text-sm text-slate-500" style="margin:0">${total} élément(s) à compléter. Clique une ligne pour la remplir, ou enchaîne-les toutes :</p>
