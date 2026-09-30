@@ -118,7 +118,7 @@
     <div class="flex flex-wrap justify-between items-center gap-4 mb-8">
       <div>
         <h1 class="text-2xl font-extrabold" style="color: var(--fp-primary)" data-edit-key="entretiens.title">Entretiens & maintenance</h1>
-        <p class="text-slate-500 text-sm mt-1" data-edit-key="entretiens.subtitle">Échéances CT, historique d'entretien et coûts par véhicule</p>
+        <p class="text-slate-500 text-sm mt-1" data-edit-key="entretiens.subtitle">Révisions & contrôles techniques à venir, historique d'entretien et coûts par véhicule</p>
       </div>
       <div class="flex items-center gap-3">
         <button type="button" class="btn btn-dark text-sm" onclick="document.getElementById('garage-modal').classList.add('open')"><i data-lucide="phone-call" class="w-4 h-4"></i> Contacter le garage</button>
@@ -264,6 +264,16 @@
         <div class="kpi-value" id="kpi-ct-retard" style="color: var(--fp-danger)">—</div>
         <div class="kpi-delta down">à traiter d'urgence</div>
       </div>
+    </div>
+
+    <!-- 🛠️ Révisions à venir (source unique FP.revisionInfo) : véhicules dus au km OU à la date. -->
+    <div class="card p-6 mb-6">
+      <div class="flex justify-between items-center mb-4 flex-wrap gap-2">
+        <h3 class="font-bold text-slate-900">🛠️ Révisions à venir</h3>
+        <span class="text-xs text-slate-500" id="rev-summary"></span>
+      </div>
+      <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-3" id="rev-list"></div>
+      <p class="text-xs text-slate-400 mt-3">Basé sur la <b>dernière révision</b> et l'intervalle préconisé (km ET durée). Quand la révision est faite, clique <b>« ✓ Révision faite »</b> : la date + le km se saisissent d'un coup et la prochaine échéance se recalcule automatiquement partout.</p>
     </div>
 
     <!-- Échéances CT critiques -->
@@ -502,6 +512,85 @@
     lucide.createIcons();
   }
 
+  // ===== 🛠️ RÉVISIONS À VENIR (source unique FP.revisionInfo / FP.derniereRevision) =====
+  // Liste les véhicules dont la révision est DUE (au km OU à la date), triés par urgence, avec deux
+  // automatisations : « ✓ Révision faite » (enregistre date + km d'un coup → recalcul auto de la
+  // prochaine échéance PARTOUT) et « 📣 Prévenir » (SMS / WhatsApp / e-mail au conducteur + PDF garage).
+  function renderRevList() {
+    const box = $('rev-list'); if (!box) return;
+    const items = (data.vehicules || [])
+      .filter(v => v && !horsFlotteCT(v))
+      .map(v => ({ v, ri: (FP.revisionInfo ? FP.revisionInfo(v) : null) }))
+      .filter(x => x.ri && x.ri.niveau)                        // seulement les révisions DUES (warn/danger)
+      .sort((a, b) => {
+        const sk = ri => (ri.joursRestant != null && isFinite(ri.joursRestant)) ? ri.joursRestant : ((ri.kmRestant != null && ri.kmRestant <= 0) ? -1 : 999);
+        return sk(a.ri) - sk(b.ri);
+      });
+    const late = items.filter(x => (x.ri.kmRestant != null && x.ri.kmRestant <= 0) || (x.ri.joursRestant != null && x.ri.joursRestant <= 0)).length;
+    if (!items.length) { box.innerHTML = '<div class="text-sm text-slate-400" style="grid-column:1/-1">Aucune révision à prévoir pour le moment. ✅</div>'; $('rev-summary').textContent = ''; return; }
+    box.innerHTML = items.slice(0, 9).map(({ v, ri }) => {
+      const overdue = (ri.kmRestant != null && ri.kmRestant <= 0) || (ri.joursRestant != null && ri.joursRestant <= 0);
+      const cls = overdue ? 'danger' : 'warn';
+      const km = ri.kmRestant;
+      const kmTxt = (km != null) ? (km <= 0 ? `Dépassé de ${FP.num(-km)} km` : `Dans ${FP.num(km)} km`) : '';
+      let dateTxt = ''; try { if (ri.prochaineDate) { const d = new Date(ri.prochaineDate); if (!isNaN(d)) dateTxt = FP.date(d.toISOString().slice(0, 10)); } } catch (e) {}
+      const dr = (FP.derniereRevision ? FP.derniereRevision(v) : null);
+      const drTxt = (dr && dr.date) ? ('Dernière : ' + FP.date(dr.date) + (dr.km != null ? ' · ' + FP.num(dr.km) + ' km' : '')) : 'Aucune révision enregistrée';
+      const chauffeur = (v.chauffeur && v.chauffeur !== '—') ? (' · ' + FP.esc(FP.prenomAffiche ? FP.prenomAffiche(v.chauffeur) : v.chauffeur)) : '';
+      return `<div class="ct-card ${cls}">
+        <div class="flex items-center justify-between">
+          <div class="font-mono font-semibold text-sm">${FP.esc(v.immat)}</div>
+          <i data-lucide="${overdue ? 'alert-triangle' : 'wrench'}" class="w-4 h-4"></i>
+        </div>
+        <div class="text-xs text-slate-600 mt-1">${FP.esc(v.marque)} ${FP.esc(v.modele)}${chauffeur}</div>
+        <div class="text-xs font-semibold mt-2">${FP.esc(kmTxt)}${dateTxt ? ' · ' + FP.esc(dateTxt) : ''}</div>
+        <div style="font-size:11px;color:#94a3b8;margin-top:2px">${FP.esc(drTxt)}</div>
+        <div class="flex gap-1.5 mt-2 flex-wrap">
+          <button type="button" class="filter-chip" data-rev-done="${FP.esc(v.id)}" style="border-color:#16a34a;color:#16a34a">✓ Révision faite</button>
+          <button type="button" class="filter-chip" data-rev-prev="${FP.esc(v.id)}">📣 Prévenir</button>
+        </div>
+      </div>`;
+    }).join('');
+    $('rev-summary').textContent = `${items.length} à prévoir${late ? ' · ' + late + ' en retard' : ''}`;
+    lucide.createIcons();
+  }
+  // « ✓ Révision faite » : enregistre la date (aujourd'hui) + le km (pré-rempli au km actuel, modifiable)
+  // → source unique derniereRevision + kmDernierReleve → la PROCHAINE révision se recalcule partout.
+  async function markRevisionFaite(vehId) {
+    const v = (data.vehicules || []).find(x => String(x.id) === String(vehId)); if (!v) return;
+    const kmDefault = (FP.kmActuel ? FP.kmActuel(v) : (Number(v.km) || 0)) || '';
+    let kmStr;
+    try { kmStr = FP.prompt ? await FP.prompt('Révision faite pour ' + (v.immat || '') + ' — kilométrage au moment de la révision (date = aujourd\'hui) :', String(kmDefault)) : prompt('Km à la révision :', String(kmDefault)); }
+    catch (e) { kmStr = null; }
+    if (kmStr == null) return;
+    const km = parseInt(String(kmStr).replace(/[^\d]/g, ''), 10);
+    if (!Number.isFinite(km) || km < 0) { if (FP.toast) FP.toast('Kilométrage invalide'); return; }
+    const today = new Date().toISOString().slice(0, 10);
+    try {
+      v.derniereRevision = today; v.kmDernierReleve = km;
+      if (FP.persist && FP.persist.update) FP.persist.update('vehicules', v.id, { derniereRevision: today, kmDernierReleve: km });
+      if (FP.toast) FP.toast('✓ Révision enregistrée pour ' + (v.immat || ''));
+    } catch (e) { if (FP.notifyError) FP.notifyError('Échec de l\'enregistrement de la révision'); }
+    renderKPIs(); renderRevList();
+  }
+  // « 📣 Prévenir » : SMS / WhatsApp / e-mail au conducteur (source unique FP.msg) + PDF du garage rattaché.
+  function prevenirRevision(vehId) {
+    const v = (data.vehicules || []).find(x => String(x.id) === String(vehId)); if (!v || !FP.msg) return;
+    const chauffeur = (v.chauffeur && v.chauffeur !== '—') ? String(v.chauffeur).trim() : '';
+    const c = (FP.conducteurContact ? FP.conducteurContact(chauffeur) : {}) || {};
+    const prenom = chauffeur.split(/\s+/)[0] || '';
+    const plaque = v.immat || '';
+    const msg = `Bonjour ${prenom},\n\nLe véhicule ${plaque} doit bientôt passer en révision. Merci de convenir d'un rendez-vous au garage dès que possible.`;
+    let soc = ''; try { soc = (FP.settings.get().societe && FP.settings.get().societe.nom) || ''; } catch (e) {}
+    let logo = ''; try { const p = FP.societeProfil ? FP.societeProfil() : {}; logo = p.logoUrl || p.logoDataUrl || ''; } catch (e) {}
+    const gAtt = (FP.garages && FP.garages.pdfAttachmentDe) ? FP.garages.pdfAttachmentDe(v) : null;
+    FP.msg.open({ phone: c.tel || '', email: c.email || '', nom: prenom || plaque, title: 'Prévenir — Révision ' + plaque, text: msg, emailSubject: 'Révision à prévoir — ' + plaque, emailNomSoc: soc, emailLogo: logo, attachments: gAtt ? [Object.assign({ _auto: true }, gAtt)] : [] });
+  }
+  { const _rl = $('rev-list'); if (_rl) _rl.addEventListener('click', (e) => {
+      const d = e.target.closest('[data-rev-done]'); if (d) { markRevisionFaite(d.getAttribute('data-rev-done')); return; }
+      const p = e.target.closest('[data-rev-prev]'); if (p) { prevenirRevision(p.getAttribute('data-rev-prev')); return; }
+    }); }
+
   // === Config colonnes éditables ===
   const ENTRETIENS_COLUMNS = [
     { key: 'date',          label: 'Date',         defaultWidth: 110, render: i => FP.date(i.date) },
@@ -723,16 +812,16 @@
       ids.forEach(id => { if (FP.persist && FP.persist.delete) FP.persist.delete('factures', id); });
       if (Array.isArray(data.factures)) data.factures = data.factures.filter(f => !set.has(String(f.id)));
       interventions = (data.factures || []).filter(f => FP.estEntretien(f));
-      renderKPIs(); renderCTList(); renderPodium(); renderTable(); renderCharts();
+      renderKPIs(); renderCTList(); renderRevList(); renderPodium(); renderTable(); renderCharts();
       return () => { // Annuler : ré-insère les interventions supprimées
         removed.forEach(rec => { data.factures.push(rec); if (FP.persist) FP.persist.insert('factures', rec); });
         interventions = (data.factures || []).filter(f => FP.estEntretien(f));
-        renderKPIs(); renderCTList(); renderPodium(); renderTable(); renderCharts();
+        renderKPIs(); renderCTList(); renderRevList(); renderPodium(); renderTable(); renderCharts();
       };
     },
   });
 
-  renderKPIs(); renderCTList(); renderPodium(); renderTable(); renderCharts();
+  renderKPIs(); renderCTList(); renderRevList(); renderPodium(); renderTable(); renderCharts();
   { const sel = $('podium-year'); if (sel) sel.addEventListener('change', renderPodium); }
   // Graphiques (Chart.js en différé) dessinés dès qu'il est prêt, sans bloquer l'affichage
   if (typeof Chart === 'undefined') window.addEventListener('DOMContentLoaded', () => { try { renderCharts(); } catch (e) {} });
@@ -740,7 +829,7 @@
   document.addEventListener('fp:data-ready', () => {
     interventions = (data.factures || []).filter(f => FP.estEntretien(f));
     rebuildVehFilter(); rebuildAnneeFilter();
-    renderKPIs(); renderCTList(); renderPodium(); renderTable(); renderCharts();
+    renderKPIs(); renderCTList(); renderRevList(); renderPodium(); renderTable(); renderCharts();
   });
 </script>
 </body>
