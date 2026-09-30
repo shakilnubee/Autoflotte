@@ -5510,7 +5510,10 @@ FP.settings = {
       'contratsCadre',
       // — Rattachement GARAGE ↔ véhicule : règle par marque (garageParMarque = { marque → prestId }) et
       //   exception par véhicule (vehGarage = { vehId → prestId }). Maps de données → fusion fine.
-      'garageParMarque', 'vehGarage']);
+      'garageParMarque', 'vehGarage',
+      // — Intervalle de révision PERSONNALISÉ par véhicule ({ vehId → { km, mois } }) : donnée de réglage
+      //   keyée → fusion fine multi-appareils (jamais écrasée en bloc).
+      'revisionIntervalleVeh']);
     // Familles DYNAMIQUES keyées par conducteur (n° carte/badge d'un prestataire perso : condNum_<id>).
     const isCollKey = (k) => COLLECTION_KEYS.has(k) || /^condNum_/.test(k);
     const isPlain = x => x && typeof x === 'object' && !Array.isArray(x);
@@ -6826,8 +6829,30 @@ FP.applyFactureToVehicule = function (f, vehicules) {
 };
 
 // Intervalle de révision : par défaut tous les 15 000 km OU tous les 12 mois (au premier atteint),
-// réglable dans Paramètres → Notifications (FP.notifCfg).
-FP.revisionIntervalle = (v) => { const c = FP.notifCfg(); return { km: c.revKm, mois: c.revMois }; };
+// réglable dans Paramètres → Notifications (FP.notifCfg). ⚠️ SURCHARGE PAR VÉHICULE possible
+// (settings.revisionIntervalleVeh = { vehId → { km, mois } }) : un utilitaire peut avoir 20 000 km /
+// 24 mois là où une berline reste à 15 000 / 12. Source unique → toutes les estimations suivent.
+FP.revisionIntervalle = (v) => {
+  const c = FP.notifCfg();
+  let km = c.revKm, mois = c.revMois;
+  try {
+    const o = (v && v.id != null) ? ((FP.settings.get().revisionIntervalleVeh) || {})[v.id] : null;
+    if (o) { if (o.km > 0) km = o.km; if (o.mois > 0) mois = o.mois; }
+  } catch (e) {}
+  return { km, mois };
+};
+// Définit / efface la surcharge d'intervalle de révision d'un véhicule (synchronisé, anti-perte).
+FP.setRevisionIntervalle = (vehId, km, mois) => {
+  if (vehId == null) return;
+  const s = FP.settings.get(); s.revisionIntervalleVeh = (s.revisionIntervalleVeh && typeof s.revisionIntervalleVeh === 'object') ? s.revisionIntervalleVeh : {};
+  const kmN = parseInt(km, 10), moisN = parseInt(mois, 10); const rec = {};
+  if (Number.isFinite(kmN) && kmN > 0) rec.km = kmN;
+  if (Number.isFinite(moisN) && moisN > 0) rec.mois = moisN;
+  if (Object.keys(rec).length) s.revisionIntervalleVeh[vehId] = rec; else delete s.revisionIntervalleVeh[vehId];
+  FP.settings.save(s);
+};
+// Vrai si l'intervalle de révision de ce véhicule est personnalisé (≠ réglage global).
+FP.revisionIntervallePerso = (v) => { try { return !!(v && v.id != null && ((FP.settings.get().revisionIntervalleVeh) || {})[v.id]); } catch (e) { return false; } };
 
 // Échéance de révision : estimation par paliers de km (multiples de l'intervalle)
 // + échéance temporelle si la dernière révision est connue. Renvoie le niveau

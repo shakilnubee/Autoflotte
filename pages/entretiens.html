@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260929m">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260929n">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260929m"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260929n"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260929m">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260929n">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -243,7 +243,7 @@
     </script>
 
     <!-- KPIs -->
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
       <div class="kpi">
         <div class="kpi-label">Total interventions</div>
         <div class="kpi-value" id="kpi-total">—</div>
@@ -253,6 +253,16 @@
         <div class="kpi-label">Coût total</div>
         <div class="kpi-value" id="kpi-cout">—</div>
         <div class="kpi-delta">entretien + réparation</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Révisions à prévoir</div>
+        <div class="kpi-value" id="kpi-rev" style="color: var(--fp-warn)">—</div>
+        <div class="kpi-delta">au km ou à la date</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Révisions en retard</div>
+        <div class="kpi-value" id="kpi-rev-retard" style="color: var(--fp-danger)">—</div>
+        <div class="kpi-delta down">à faire au plus vite</div>
       </div>
       <div class="kpi">
         <div class="kpi-label">CT à renouveler &lt; 90j</div>
@@ -270,7 +280,10 @@
     <div class="card p-6 mb-6">
       <div class="flex justify-between items-center mb-4 flex-wrap gap-2">
         <h3 class="font-bold text-slate-900">🛠️ Révisions à venir</h3>
-        <span class="text-xs text-slate-500" id="rev-summary"></span>
+        <div class="flex items-center gap-2 flex-wrap">
+          <button type="button" id="rev-prevenir-all" class="btn btn-outline text-sm" style="display:none"><i data-lucide="send" class="w-4 h-4"></i> Prévenir les révisions en retard</button>
+          <span class="text-xs text-slate-500" id="rev-summary"></span>
+        </div>
       </div>
       <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-3" id="rev-list"></div>
       <p class="text-xs text-slate-400 mt-3">Basé sur la <b>dernière révision</b> et l'intervalle préconisé (km ET durée). Quand la révision est faite, clique <b>« ✓ Révision faite »</b> : la date + le km se saisissent d'un coup et la prochaine échéance se recalcule automatiquement partout.</p>
@@ -293,6 +306,16 @@
       </div>
       <p class="text-xs text-slate-500 mb-4">Classement par coût d'entretien + réparation</p>
       <div id="podium" class="grid grid-cols-3 gap-3 items-end"></div>
+    </div>
+
+    <!-- 💶 Coût & historique d'entretien PAR VÉHICULE (moyenne, coût/km, historique dépliable) -->
+    <div class="card p-6 mb-6">
+      <div class="flex items-start justify-between gap-3 flex-wrap mb-1">
+        <h3 class="font-bold text-slate-900">💶 Coût d'entretien par véhicule</h3>
+        <span class="text-xs text-slate-500" id="cpv-summary"></span>
+      </div>
+      <p class="text-xs text-slate-500 mb-4">Total, nombre d'interventions et <b>coût au km</b> par véhicule (entretien + réparation, factures dédoublonnées). Clique une ligne pour voir son <b>historique complet</b>.</p>
+      <div id="cpv-list" class="space-y-1"></div>
     </div>
 
     <!-- Charts -->
@@ -367,8 +390,8 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260929m"></script>
-<script src="../assets/js/supabase-client.js?v=20260929m"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260929n"></script>
+<script src="../assets/js/supabase-client.js?v=20260929n"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -384,10 +407,10 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260929m"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260929n"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
-<script src="../assets/js/app.min.js?v=20260929m"></script>
+<script src="../assets/js/app.min.js?v=20260929n"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -527,6 +550,8 @@
         return sk(a.ri) - sk(b.ri);
       });
     const late = items.filter(x => (x.ri.kmRestant != null && x.ri.kmRestant <= 0) || (x.ri.joursRestant != null && x.ri.joursRestant <= 0)).length;
+    { const a = $('kpi-rev'); if (a) a.textContent = Math.max(0, items.length - late); const b = $('kpi-rev-retard'); if (b) b.textContent = late; }
+    { const btn = $('rev-prevenir-all'); if (btn) btn.style.display = late > 0 ? '' : 'none'; }
     if (!items.length) { box.innerHTML = '<div class="text-sm text-slate-400" style="grid-column:1/-1">Aucune révision à prévoir pour le moment. ✅</div>'; $('rev-summary').textContent = ''; return; }
     box.innerHTML = items.slice(0, 9).map(({ v, ri }) => {
       const overdue = (ri.kmRestant != null && ri.kmRestant <= 0) || (ri.joursRestant != null && ri.joursRestant <= 0);
@@ -586,6 +611,80 @@
     const gAtt = (FP.garages && FP.garages.pdfAttachmentDe) ? FP.garages.pdfAttachmentDe(v) : null;
     FP.msg.open({ phone: c.tel || '', email: c.email || '', nom: prenom || plaque, title: 'Prévenir — Révision ' + plaque, text: msg, emailSubject: 'Révision à prévoir — ' + plaque, emailNomSoc: soc, emailLogo: logo, attachments: gAtt ? [Object.assign({ _auto: true }, gAtt)] : [] });
   }
+  // ENVOI GROUPÉ (#5) : un e-mail de rappel de révision à TOUS les conducteurs des véhicules en retard
+  // (ceux qui ont une adresse), avec le PDF du garage. Barre de progression + résumé (envoyés / sans e-mail
+  // / échecs) — jamais un « ✓ » menteur (règle anti-perte silencieuse).
+  async function prevenirRevisionsEnRetard() {
+    if (!(FP.sendEmail)) { alert('Envoi e-mail indisponible.'); return; }
+    const late = (data.vehicules || []).filter(v => v && !horsFlotteCT(v))
+      .map(v => ({ v, ri: (FP.revisionInfo ? FP.revisionInfo(v) : null) }))
+      .filter(x => x.ri && ((x.ri.kmRestant != null && x.ri.kmRestant <= 0) || (x.ri.joursRestant != null && x.ri.joursRestant <= 0)));
+    if (!late.length) { if (FP.toast) FP.toast('Aucune révision en retard.'); return; }
+    const targets = [];
+    late.forEach(({ v }) => {
+      const ch = (v.chauffeur && v.chauffeur !== '—') ? String(v.chauffeur).trim() : '';
+      const c = (FP.conducteurContact ? FP.conducteurContact(ch) : {}) || {};
+      if (c.email) targets.push({ v, email: c.email, prenom: (ch.split(/\s+/)[0] || '') });
+    });
+    const sansMail = late.length - targets.length;
+    if (!targets.length) { alert('Aucun conducteur avec e-mail parmi les ' + late.length + ' révision(s) en retard.'); return; }
+    const okGo = FP.confirm ? await FP.confirm('Envoyer un rappel de révision à ' + targets.length + ' conducteur(s) ?' + (sansMail ? ' (' + sansMail + ' sans e-mail seront ignorés)' : '')) : confirm('Envoyer à ' + targets.length + ' conducteur(s) ?');
+    if (!okGo) return;
+    let soc = ''; try { soc = (FP.settings.get().societe && FP.settings.get().societe.nom) || ''; } catch (e) {}
+    let logo = ''; try { const p = FP.societeProfil ? FP.societeProfil() : {}; logo = p.logoUrl || p.logoDataUrl || ''; } catch (e) {}
+    const busy = FP.busy ? FP.busy('Envoi des rappels de révision…') : null;
+    let ok = 0, ko = 0;
+    for (let i = 0; i < targets.length; i++) {
+      const { v, email, prenom } = targets[i];
+      if (busy && busy.update) busy.update('Envoi ' + (i + 1) + ' / ' + targets.length + '…');
+      const plaque = v.immat || '';
+      const gAtt = (FP.garages && FP.garages.pdfAttachmentDe) ? FP.garages.pdfAttachmentDe(v) : null;
+      const bodyHtml = '<div style="white-space:pre-wrap;line-height:1.5">Bonjour ' + FP.esc(prenom) + ',<br><br>Le véhicule <b>' + FP.esc(plaque) + '</b> doit passer en <b>révision</b> (échéance dépassée). Merci de convenir d\'un rendez-vous au garage dès que possible.</div>';
+      const html = FP.mailBrand ? FP.mailBrand({ title: 'Révision à prévoir', prenom, nomSoc: soc, logoUrl: logo, plaque, bodyHtml }) : bodyHtml;
+      try { await FP.sendEmail(Object.assign({ to: email, subject: 'Révision à prévoir — ' + plaque, html, text: 'Le véhicule ' + plaque + ' doit passer en révision.' }, gAtt ? { attachments: [gAtt] } : {})); ok++; } catch (e) { ko++; }
+    }
+    const resume = '✓ ' + ok + ' envoyé(s)' + (ko ? ' · ' + ko + ' échec(s)' : '') + (sansMail ? ' · ' + sansMail + ' sans e-mail' : '');
+    if (busy && busy.done) busy.done(resume); else if (FP.toast) FP.toast(resume);
+  }
+  { const _pa = $('rev-prevenir-all'); if (_pa) _pa.addEventListener('click', prevenirRevisionsEnRetard); }
+
+  // ===== 💶 COÛT & HISTORIQUE D'ENTRETIEN PAR VÉHICULE (#2 + #3) =====
+  // Agrège les factures d'entretien/réparation par véhicule (dédoublonnées, comme le dashboard) : total,
+  // nombre d'interventions, coût AU KM (total ÷ km actuel). Chaque ligne se déplie sur son historique daté.
+  let cpvExpanded = {};
+  function renderCoutParVeh() {
+    const box = $('cpv-list'); if (!box) return;
+    const norm = x => FP.normImmat ? FP.normImmat(x) : String(x || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const src = (data.factures || []).filter(f => FP.estEntretien && FP.estEntretien(f));
+    const byVeh = {};
+    src.forEach(i => { const k = norm(i.vehiculeImmat); if (!k) return; (byVeh[k] = byVeh[k] || { immat: i.vehiculeImmat, items: [] }).items.push(i); });
+    const rows = Object.keys(byVeh).map(k => {
+      const g = byVeh[k];
+      const v = FP.vehByImmat ? FP.vehByImmat(g.immat) : (data.vehicules || []).find(x => norm(x.immat) === k);
+      const ded = FP.dedupeFactures ? FP.dedupeFactures(g.items) : g.items;
+      const total = ded.reduce((s, i) => s + (Number(i.montantTTC) || 0), 0);
+      const km = v ? (FP.kmActuel ? FP.kmActuel(v) : (Number(v.km) || 0)) : 0;
+      return { key: k, v, immat: g.immat, marque: v ? (v.marque || '') : '', modele: v ? (v.modele || '') : '', n: ded.length, total, coutKm: (km > 0 ? total / km : null), items: g.items.slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))) };
+    }).filter(r => r.total > 0 || r.n > 0).sort((a, b) => b.total - a.total);
+    if (!rows.length) { box.innerHTML = '<div class="text-sm text-slate-400">Aucune intervention enregistrée.</div>'; $('cpv-summary').textContent = ''; return; }
+    $('cpv-summary').textContent = rows.length + ' véhicule' + (rows.length > 1 ? 's' : '');
+    box.innerHTML = rows.map(r => {
+      const open = !!cpvExpanded[r.key];
+      const head = `<div class="flex items-center justify-between gap-2 py-2 px-2 cursor-pointer hover:bg-slate-50 rounded-lg" data-cpv-toggle="${FP.esc(r.key)}">
+        <div class="min-w-0"><span class="font-mono font-semibold text-sm">${FP.esc(r.immat)}</span> <span class="text-xs text-slate-500">${FP.esc((r.marque + ' ' + r.modele).trim())}</span></div>
+        <div class="flex items-center gap-3 text-xs flex-shrink-0">
+          <span class="text-slate-500">${r.n} interv.</span>
+          <span class="text-slate-500" title="Coût d'entretien au km">${r.coutKm != null ? FP.euroPrecis(r.coutKm) + '/km' : '—'}</span>
+          <span class="font-semibold" style="color:var(--fp-primary)">${FP.euro(r.total)}</span>
+          <i data-lucide="chevron-${open ? 'up' : 'down'}" class="w-4 h-4 text-slate-400"></i>
+        </div>
+      </div>`;
+      const body = open ? `<div class="px-2 pb-2">${r.items.map(i => `<div class="flex items-center justify-between gap-2 text-xs py-1 border-t border-slate-100"><span class="text-slate-600 truncate">${FP.date(i.date)} · ${FP.esc(String(i.description || i.fournisseur || '—').slice(0, 55))}</span><span class="font-semibold flex-shrink-0">${i.montantTTC ? FP.euroPrecis(i.montantTTC) : '—'}</span></div>`).join('') || '<div class="text-xs text-slate-400 py-1">Aucun détail.</div>'}</div>` : '';
+      return `<div class="border border-slate-100 rounded-lg">${head}${body}</div>`;
+    }).join('');
+    lucide.createIcons();
+  }
+  { const _c = $('cpv-list'); if (_c) _c.addEventListener('click', e => { const t = e.target.closest('[data-cpv-toggle]'); if (!t) return; const k = t.getAttribute('data-cpv-toggle'); cpvExpanded[k] = !cpvExpanded[k]; renderCoutParVeh(); }); }
   { const _rl = $('rev-list'); if (_rl) _rl.addEventListener('click', (e) => {
       const d = e.target.closest('[data-rev-done]'); if (d) { markRevisionFaite(d.getAttribute('data-rev-done')); return; }
       const p = e.target.closest('[data-rev-prev]'); if (p) { prevenirRevision(p.getAttribute('data-rev-prev')); return; }
@@ -812,16 +911,16 @@
       ids.forEach(id => { if (FP.persist && FP.persist.delete) FP.persist.delete('factures', id); });
       if (Array.isArray(data.factures)) data.factures = data.factures.filter(f => !set.has(String(f.id)));
       interventions = (data.factures || []).filter(f => FP.estEntretien(f));
-      renderKPIs(); renderCTList(); renderRevList(); renderPodium(); renderTable(); renderCharts();
+      renderKPIs(); renderCTList(); renderRevList(); renderPodium(); renderCoutParVeh(); renderTable(); renderCharts();
       return () => { // Annuler : ré-insère les interventions supprimées
         removed.forEach(rec => { data.factures.push(rec); if (FP.persist) FP.persist.insert('factures', rec); });
         interventions = (data.factures || []).filter(f => FP.estEntretien(f));
-        renderKPIs(); renderCTList(); renderRevList(); renderPodium(); renderTable(); renderCharts();
+        renderKPIs(); renderCTList(); renderRevList(); renderPodium(); renderCoutParVeh(); renderTable(); renderCharts();
       };
     },
   });
 
-  renderKPIs(); renderCTList(); renderRevList(); renderPodium(); renderTable(); renderCharts();
+  renderKPIs(); renderCTList(); renderRevList(); renderPodium(); renderCoutParVeh(); renderTable(); renderCharts();
   { const sel = $('podium-year'); if (sel) sel.addEventListener('change', renderPodium); }
   // Graphiques (Chart.js en différé) dessinés dès qu'il est prêt, sans bloquer l'affichage
   if (typeof Chart === 'undefined') window.addEventListener('DOMContentLoaded', () => { try { renderCharts(); } catch (e) {} });
@@ -829,7 +928,7 @@
   document.addEventListener('fp:data-ready', () => {
     interventions = (data.factures || []).filter(f => FP.estEntretien(f));
     rebuildVehFilter(); rebuildAnneeFilter();
-    renderKPIs(); renderCTList(); renderRevList(); renderPodium(); renderTable(); renderCharts();
+    renderKPIs(); renderCTList(); renderRevList(); renderPodium(); renderCoutParVeh(); renderTable(); renderCharts();
   });
 </script>
 </body>
