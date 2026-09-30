@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260929j">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260929k">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260929j"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260929k"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260929j">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260929k">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -1122,8 +1122,8 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260929j"></script>
-<script src="../assets/js/supabase-client.js?v=20260929j"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260929k"></script>
+<script src="../assets/js/supabase-client.js?v=20260929k"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -1139,13 +1139,13 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260929j"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260929k"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
-<script src="../assets/js/fleet-docs.js?v=20260929j"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260929j"></script>
+<script src="../assets/js/fleet-docs.js?v=20260929k"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260929k"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20260929j"></script>
+<script src="../assets/js/app.min.js?v=20260929k"></script>
 <script>
   lucide.createIcons();
 
@@ -1530,6 +1530,46 @@
     }).join('') + `<div style="align-self:center;font-size:12px;color:#64748b;font-weight:700">${edlPending.length} photo${edlPending.length > 1 ? 's' : ''} prête${edlPending.length > 1 ? 's' : ''}</div>`;
   }
   // « Rendez-vous garage » (CT / révision / entretien) : date SAISIE par l'utilisateur (settings.vehRdvGarage
+  // Changement du garage d'un véhicule (exception fiche) : « » = suit la règle marque. Synchronisé.
+  document.addEventListener('change', (e) => {
+    const sel = e.target.closest && e.target.closest('[data-veh-garage]');
+    if (!sel || !(window.FP && FP.garages)) return;
+    const vid = sel.getAttribute('data-veh-garage');
+    FP.garages.setVehGarage(vid, sel.value || '');
+    if (FP.toast) FP.toast('✓ Garage du véhicule enregistré');
+    try { const box = document.getElementById('veh-garage-info-' + vid); if (box) { const v = (data.vehicules || []).find(x => String(x.id) === String(vid)); if (v) box.innerHTML = garageInfoLine(v); } } catch (_) {}
+  });
+  // Garage / concessionnaire RATTACHÉ à ce véhicule (source unique FP.garages) : règle par marque
+  // (auto) OU exception propre au véhicule. Son PDF se joint tout seul aux e-mails « Prévenir » du véhicule.
+  function garageInfoLine(v){
+    const g = (window.FP && FP.garages) ? FP.garages.garageDe(v) : null;
+    const src = (window.FP && FP.garages) ? FP.garages.source(v) : '';
+    if (!g) return '<span class="text-xs text-slate-400">Aucun garage rattaché. <a href="parametres.html?sec=garages" style="color:var(--fp-accent);font-weight:700">Configurer les garages →</a></span>';
+    const bits = [];
+    if (g.tel) bits.push('📞 ' + escapeHtml(g.tel));
+    if (g.email) bits.push('✉️ ' + escapeHtml(g.email));
+    if (g.pdfUrl) bits.push('<a href="' + escapeHtml(g.pdfUrl) + '" target="_blank" style="color:var(--fp-accent);font-weight:700">📄 PDF</a>');
+    const srcLbl = (src === 'veh') ? 'exception ce véhicule' : 'règle marque';
+    return '<div class="text-sm font-semibold text-slate-800">' + escapeHtml(g.nom || '') + ' <span class="text-xs font-normal text-slate-400">(' + srcLbl + ')</span></div>'
+      + (g.adresse ? '<div class="text-xs text-slate-500">' + escapeHtml(g.adresse) + '</div>' : '')
+      + (bits.length ? '<div class="text-xs text-slate-500 mt-1" style="display:flex;gap:12px;flex-wrap:wrap">' + bits.join('') + '</div>' : '');
+  }
+  function garageBlockHTML(v){
+    if (!(window.FP && FP.garages && FP.getPrestataires)) return '';
+    const list = FP.getPrestataires();
+    const override = (FP.garages._veh()[v.id]) || '';
+    const opts = '<option value="">— Selon la marque (' + escapeHtml(v.marque || '—') + ') —</option>'
+      + list.map(g => '<option value="' + escapeHtml(g.id) + '"' + (g.id === override ? ' selected' : '') + '>' + escapeHtml(g.nom || '(sans nom)') + '</option>').join('');
+    return `<div class="mt-5">
+      <div class="font-semibold mb-2 text-slate-900 border-b border-slate-200 pb-1 flex items-center gap-2">🏭 Garage / concessionnaire <span class="text-xs font-normal text-slate-400">son PDF se joint aux e-mails</span></div>
+      <div class="p-3 bg-slate-50 rounded-lg border border-slate-200">
+        <label class="field-label !mb-0">Garage de ce véhicule</label>
+        <select class="field-input mt-1" data-veh-garage="${escapeHtml(v.id)}" style="width:auto;min-width:230px;max-width:100%">${opts}</select>
+        <div id="veh-garage-info-${escapeHtml(v.id)}" class="mt-2">${garageInfoLine(v)}</div>
+        <p class="text-xs text-slate-400 mt-1">« Selon la marque » = le garage par défaut réglé dans <b>Paramètres → Garages</b>. Choisis un garage précis pour une <b>exception</b> propre à ce véhicule (deux véhicules d'une même marque peuvent ainsi avoir un garage différent).</p>
+      </div>
+    </div>`;
+  }
   // via FP.rdvGarage, synchronisé). Déclenche le rappel AUTO la veille (edge) + apparaît dans Alertes → Relances.
   function rdvGarageHTML(v){
     if (!(window.FP && FP.rdvGarage)) return '';
@@ -1892,7 +1932,9 @@
               if (FP.ics) { try { const evI = { uid: 'rdvg-' + veh.id, title: motif + ' · ' + (veh.immat || ''), date: dt, location: '', description: 'Véhicule : ' + (veh.immat || '') + ((veh.marque || veh.modele) ? (' (' + ((veh.marque || '') + ' ' + (veh.modele || '')).trim() + ')') : '') }; const b64 = FP.ics.b64(evI); if (b64) { emailOpts.attachments = [{ filename: 'rendez-vous.ics', content: b64, content_type: 'text/calendar' }]; noteAgenda = FP.calendarBtnHtml ? FP.calendarBtnHtml(evI) : ''; } } catch (_) {} }
               const html = FP.mailShell ? FP.mailShell({ brand: soc, logoUrl: logo, title: motif, bodyHtml: '<div style="white-space:pre-wrap;line-height:1.55">' + FP.esc(msg).replace(/\n/g, '<br>') + '</div>' + noteAgenda }) : '';
               const _subjRdv = (FP.mailObjet ? FP.mailObjet('rdvgarage', { motif: motif, date: dateFr, immat: veh.immat, prenom: prenom }) : '') || (motif + ' le ' + dateFr + ' (' + (veh.immat || '') + ')');
-              FP.msg.open({ phone: c.tel || '', email: c.email || '', nom: prenom, title: 'Prévenir du rendez-vous', text: msg, emailSubject: _subjRdv, emailHtml: html, emailOpts: emailOpts });
+              // PDF du garage rattaché → joint aussi à ce mail de RDV (l'utilisateur peut le retirer).
+              const _gAttRdv = (FP.garages && FP.garages.pdfAttachmentDe) ? FP.garages.pdfAttachmentDe(veh) : null;
+              FP.msg.open({ phone: c.tel || '', email: c.email || '', nom: prenom, title: 'Prévenir du rendez-vous', text: msg, emailSubject: _subjRdv, emailHtml: html, emailOpts: emailOpts, attachments: _gAttRdv ? [Object.assign({ _auto: true }, _gAttRdv)] : [] });
             }
           } catch (_) {}
         }
@@ -3292,6 +3334,7 @@
 
       ${docsSectionHTML(v)}
 
+      ${garageBlockHTML(v)}
       ${rdvGarageHTML(v)}
 
       ${tachesLieesHTML(v)}
@@ -5821,9 +5864,13 @@
       const defText = templates.length ? templates[0].text : (en ? `Hello ${prenom},` : `Bonjour ${prenom},`);
       // ⚠️ RÈGLE : partout SMS + WhatsApp + EMAIL. On passe l'e-mail du conducteur + la marque société →
       //    FP.msg affiche le bouton « 📧 Email » (e-mail brandé ; l'URL du message y devient « cliquez ici »).
+      // PDF du garage rattaché à CE véhicule (règle marque OU exception fiche) → joint auto à l'e-mail
+      // (l'utilisateur peut le retirer dans la fenêtre). Permet à un collègue de prendre le RDV.
+      const _gAtt = (FP.garages && FP.garages.pdfAttachmentDe) ? FP.garages.pdfAttachmentDe(v) : null;
       FP.msg.open({
         phone: tel, nom: prenom || plaque, title: 'Prévenir — ' + plaque, text: defText, templates,
-        email, lang: L, emailSubject: (en ? 'Your vehicle ' : 'Ton véhicule ') + plaque, emailNomSoc: _soc, emailLogo: _logo
+        email, lang: L, emailSubject: (en ? 'Your vehicle ' : 'Ton véhicule ') + plaque, emailNomSoc: _soc, emailLogo: _logo,
+        attachments: _gAtt ? [Object.assign({ _auto: true }, _gAtt)] : []
       });
     }); }
   { const _qh = $('btn-qr-hub'); if (_qh) _qh.addEventListener('click', openQrHub); }
