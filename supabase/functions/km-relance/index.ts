@@ -113,12 +113,21 @@ function kmDue(immat: string, kmDates: Record<string, unknown>, notif: any, nowT
 // Logo Parc Pilot « en dur » (identique au site : FP.ppLogoMail) — HTML pur (jamais bloqué comme une image).
 // Emballe l'e-mail dans un document forçant le SCHÉMA CLAIR → mêmes couleurs en clair ET en sombre
 // (Gmail/Apple Mail n'inversent plus). Identique à FP.mailDocument côté site.
+// Une date FR à espaces (« 07 oct. 2026 ») ou une plaque ne doit JAMAIS se couper en deux lignes (miroir
+// de FP.mailNoWrap côté client). On entoure ces valeurs d'un <span white-space:nowrap>, uniquement dans le
+// TEXTE hors balises (entre « > » et « < ») — jamais un attribut/URL.
+function mailNoWrap(html: string): string {
+  const RE_DATE = /\b\d{1,2}\s+(?:janv|févr|fevr|mars|avr|mai|juin|juil|août|aout|sept|oct|nov|déc|dec|janvier|février|fevrier|avril|juillet|septembre|octobre|novembre|décembre|decembre)\.?\s+\d{4}\b/gi;
+  const RE_PLATE = /\b[A-Z]{2}[-\s]?\d{3}[-\s]?[A-Z]{2}\b/g;
+  const nw = (m: string) => '<span style="white-space:nowrap">' + m + '</span>';
+  try { return String(html).replace(/>([^<]+)</g, (_full, txt) => '>' + String(txt).replace(RE_DATE, nw).replace(RE_PLATE, nw) + '<'); } catch (_) { return html; }
+}
 function mailDoc(inner: string): string {
   return '<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">'
     + '<meta name="viewport" content="width=device-width,initial-scale=1">'
     + '<meta name="color-scheme" content="only light">'
     + '<meta name="supported-color-schemes" content="only light">'
-    + '</head><body style="margin:0;padding:0;background:#EEF2F7;color:#0F1E3D">' + inner + '</body></html>';
+    + '</head><body style="margin:0;padding:0;background:#EEF2F7;color:#0F1E3D">' + mailNoWrap(inner) + '</body></html>';
 }
 function ppLogoMail(): string {
   return '<span style="display:inline-block;vertical-align:middle;line-height:0;margin-right:9px">'
