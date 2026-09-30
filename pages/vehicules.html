@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260929r">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260930a">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260929r"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260930a"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260929r">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260930a">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -1123,8 +1123,8 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260929r"></script>
-<script src="../assets/js/supabase-client.js?v=20260929r"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260930a"></script>
+<script src="../assets/js/supabase-client.js?v=20260930a"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -1140,13 +1140,13 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260929r"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260930a"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
-<script src="../assets/js/fleet-docs.js?v=20260929r"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260929r"></script>
+<script src="../assets/js/fleet-docs.js?v=20260930a"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260930a"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20260929r"></script>
+<script src="../assets/js/app.min.js?v=20260930a"></script>
 <script>
   lucide.createIcons();
 
@@ -5935,22 +5935,29 @@
       const L = en ? 'en' : 'fr';
       const templates = [];
       const nbp = String(plaque || '').replace(/-/g, '‑').replace(/ /g, ' ');
-      // Textes FR ÉDITABLES dans Paramètres → E-mails (« Messages rapides Prévenir ») ; défaut = FP.MAIL_DEFAUT.
+      // Textes ÉDITABLES dans Paramètres → E-mails ; défaut = FP.MAIL_DEFAUT.
       //    Balises {prenom} {immat} {lien} {date} remplacées ici selon le message.
-      const prevFill = (mkey, dkey, extra) => {
+      // ⚠️ SOURCE UNIQUE (règle 0-source-2) : CT / Révision / Km lisent les MÊMES modèles que l'écran
+      //    « 📣 Relances » (mailModeleRelanceCt / relanceEntretien / relanceKm) — plus de doublon
+      //    « Prévenir — CT/Révision/Km » : on modifie une seule fois dans les réglages, ça change partout.
+      const prevFill = (mkey, dkey, extra, dateVal) => {
         let s = (FP.mailModeleProfilL ? FP.mailModeleProfilL(mkey, dkey, L) : ((FP.MAIL_DEFAUT && FP.MAIL_DEFAUT[dkey]) || '')) || '';
-        s = s.split('{prenom}').join(prenom || '').split('{immat}').join(nbp).split('{date}').join(ctTxt || '');
+        s = s.split('{prenom}').join(prenom || '').split('{immat}').join(nbp).split('{date}').join((dateVal != null ? dateVal : ctTxt) || '');
         const ex = extra || {}; Object.keys(ex).forEach(k => { s = s.split('{' + k + '}').join(ex[k] || ''); });
         return s;
       };
+      // Date de la prochaine révision (même source que la fiche / l'écran Relances) pour la balise {date}.
+      let revTxt = '';
+      try { const _ri = FP.revisionInfo ? FP.revisionInfo(v) : null; const _rd = (_ri && _ri.prochaineDate) || v.prochaineRevisionDate || ''; if (_rd) revTxt = FP.date ? FP.date(_rd) : _rd; } catch (e) {}
       const LB = en ? { acces:'🔑 Vehicle access', cg:'🪪 Registration', km:'📸 Mileage', edl:'📋 Condition report', ct:'🔧 MOT due', rev:'🛠️ Service', sale:'🏷️ For sale' }
                     : { acces:'🔑 Accès véhicule', cg:'🪪 Carte grise', km:'📸 Relance km', edl:'📋 État des lieux', ct:'🔧 CT bientôt', rev:'🛠️ Révision', sale:'🏷️ Annonce' };
       if (portail) templates.push({ label: LB.acces, text: prevFill('mailModelePrevAcces', 'prevAcces', { lien: portail }) });
       if (portail) templates.push({ label: LB.cg, text: prevFill('mailModelePrevCarteGrise', 'prevCarteGrise', { lien: portail }) });
-      if (kmLink) templates.push({ label: LB.km, text: prevFill('mailModelePrevRelanceKm', 'prevRelanceKm', { lien: kmLink }) });
+      // Km / CT / Révision → modèles UNIQUES des « 📣 Relances » (plus de doublon « Prévenir — … »).
+      if (kmLink) templates.push({ label: LB.km, text: prevFill('mailModeleRelanceKm', 'relanceKm', {}) + '\n👉 ' + kmLink });
       if (edlLink) templates.push({ label: LB.edl, text: prevFill('mailModelePrevEdl', 'prevEdl', { lien: edlLink }) });
-      if (ctTxt) templates.push({ label: LB.ct, text: prevFill('mailModelePrevCt', 'prevCt', {}) });
-      templates.push({ label: LB.rev, text: prevFill('mailModelePrevRevision', 'prevRevision', {}) });
+      if (ctTxt) templates.push({ label: LB.ct, text: prevFill('mailModeleRelanceCt', 'relanceCt', {}) });
+      templates.push({ label: LB.rev, text: prevFill('mailModeleRelanceEntretien', 'relanceEntretien', {}, revTxt) });
       if (aVendre && venteLink) templates.push({ label: LB.sale, text: prevFill('mailModelePrevAnnonce', 'prevAnnonce', { lien: venteLink }) });
       const defText = templates.length ? templates[0].text : (en ? `Hello ${prenom},` : `Bonjour ${prenom},`);
       // ⚠️ RÈGLE : partout SMS + WhatsApp + EMAIL. On passe l'e-mail du conducteur + la marque société →
