@@ -439,7 +439,37 @@
     { key: 'reparation', emo: '🛠️', titre: 'Réparation au garage', type: 'rdv', eti: ['garage'], sous: ['Demander un devis', 'Valider le devis', 'Prendre le RDV', 'Suivre l\'immobilisation', 'Récupérer le véhicule', 'Contrôler la facture'] }
   ];
 
-  function getTaches() { try { const t = FP.settings.get().taches; return Array.isArray(t) ? t : []; } catch { return []; } }
+  // ⚠️ DÉDOUBLONNAGE À L'AFFICHAGE (source unique) : les tâches AUTO « contrôle technique » pouvaient
+  //    apparaître EN DOUBLE (créées sur 2 appareils avec des ids différents) ou PÉRIMÉES (date de CT
+  //    corrigée sur la fiche). La suppression en base est « résistée » par la synchro anti-perte (une
+  //    collection protégée n'accepte pas facilement un retrait), donc on garantit ici, à la LECTURE, que :
+  //    (1) une seule tâche auto CT par véhicule+date, (2) pas de tâche auto CT dont la date ne correspond
+  //    plus au prochain_ct courant du véhicule. On ne masque QUE des tâches AUTO non terminées et
+  //    UNIQUEMENT quand le véhicule est chargé (sinon on préserve — anti-perte). Le reste passe tel quel.
+  function _dedupeTaches(list) {
+    if (!Array.isArray(list) || !list.length) return Array.isArray(list) ? list : [];
+    const vehs = (window.data && Array.isArray(data.vehicules)) ? data.vehicules : ((window.FP_DATA && FP_DATA.vehicules) || []);
+    if (!vehs.length) return list;                 // pas de véhicules chargés → ne rien masquer
+    const norm = s => String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    const curCT = {}, loaded = {};
+    vehs.forEach(v => { if (!v || v.id == null) return; loaded[v.id] = true; if (v.prochainCT && v.prochainCT !== '—' && !(FP.horsFlotte && FP.horsFlotte(v)) && !(FP.ctIgnored && FP.ctIgnored(v))) curCT[v.id] = String(v.prochainCT).slice(0, 10); });
+    const seen = new Set(); const out = [];
+    list.forEach(t => {
+      if (!t) return;
+      const done = t.fait === true || t.statut === 'fait' || t.statut === 'done';
+      const isAutoCT = t.auto === true && norm(t.titre).includes('controle technique');
+      if (isAutoCT && !done && t.vehiculeId != null && loaded[t.vehiculeId]) {
+        const cur = curCT[t.vehiculeId], ech = String(t.echeance || '').slice(0, 10);
+        if (!cur || ech !== cur) return;           // périmée → masquée
+        const k = 'autoct|' + t.vehiculeId + '|' + cur;
+        if (seen.has(k)) return;                    // doublon → une seule fois
+        seen.add(k);
+      }
+      out.push(t);
+    });
+    return out;
+  }
+  function getTaches() { try { const t = FP.settings.get().taches; return _dedupeTaches(Array.isArray(t) ? t : []); } catch { return []; } }
   function saveTaches(arr) { const s = FP.settings.get(); s.taches = arr; FP.settings.save(s); }
   const todayIso = () => new Date().toISOString().slice(0, 10);
   function escapeHtml(s){ return (s ?? '').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
