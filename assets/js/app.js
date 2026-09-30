@@ -2474,6 +2474,41 @@ FP.kmCollecte = {
     const gate = this._qrGate(v);
     return this.recusDe(v).filter(r => (r.source !== 'qr') || (gate != null && new Date(r.used_at).getTime() >= gate));
   },
+  // ⚠️ SOURCE UNIQUE — DERNIÈRE DATE (ms) OÙ LE KM A ÉTÉ CONNU, TOUS CANAUX CONFONDUS : relevé mail/QR/
+  // saisie manuelle (km_requests) ET mise à jour du km sur la fiche / en lot / par photo (settings.kmMajDates,
+  // qui agrège déjà tout via _reconcileKmDates + les écrits de la fiche). C'est CE repère qui détermine
+  // « à jour », partout (Suivi flotte, Relances, alertes, edge). Avant, le Suivi/les Relances ne regardaient
+  // QUE km_requests (gaté QR) → un km saisi sur la fiche ou un scan QR restait « à relancer » à tort.
+  // Lecture des plaques TOLÉRANTE (FP.normImmat des deux côtés) sans réécrire les clés (règle 0-plaques).
+  dernierKmTs(v) {
+    let ts = 0;
+    try { const reads = this.recusDe ? this.recusDe(v) : []; if (reads[0] && reads[0].used_at) { const t = new Date(reads[0].used_at).getTime(); if (isFinite(t)) ts = Math.max(ts, t); } } catch (e) {}
+    try {
+      const dates = (FP.settings.get().kmMajDates) || {};
+      const nk = FP.normImmat ? FP.normImmat(v && v.immat) : String((v && v.immat) || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+      for (const key in dates) {
+        if ((FP.normImmat ? FP.normImmat(key) : key) !== nk) continue;
+        const t = new Date(String(dates[key]).slice(0, 10) + 'T12:00:00').getTime();
+        if (isFinite(t)) ts = Math.max(ts, t);
+      }
+    } catch (e) {}
+    return ts || null;
+  },
+  // Statut de suivi km d'un véhicule (SOURCE UNIQUE, réutilisée par Suivi flotte, Relances, aJour) :
+  // 'ajour' (km connu récent) · 'attente' (demande envoyée, pas encore de km depuis) · 'relancer'
+  // (km connu mais périmé) · 'jamais' (aucun km jamais connu).
+  statutKm(v) {
+    const kmTs = this.dernierKmTs(v);
+    const cutoff = this._cutoff ? this._cutoff() : (Date.now() - 45 * 86400000);
+    if (kmTs && kmTs >= cutoff) return 'ajour';
+    const stt = this.statusFor ? this.statusFor(v) : null;
+    if (stt && stt.sent_at && !stt.used_at) {
+      // demande envoyée : « en attente » seulement si aucun km connu APRÈS l'envoi.
+      const sentT = new Date(stt.sent_at).getTime();
+      if (!(kmTs && kmTs >= sentT)) return 'attente';
+    }
+    return kmTs ? 'relancer' : 'jamais';
+  },
   // Relance MAIL la plus récente envoyée à N'IMPORTE QUEL véhicule (campagne lancée), ou null.
   _lastSentAny() {
     try { const m = (this._cache || []).reduce((mx, r) => r.sent_at ? Math.max(mx, new Date(r.sent_at).getTime()) : mx, 0); return m || null; } catch (e) { return null; }
@@ -2519,11 +2554,8 @@ FP.kmCollecte = {
     return cut;
   },
   aJour(v) {
-    try {
-      const last = this.recusComptesDe(v)[0];   // relevé qui COMPTE (mail/manuel, ou QR après relance)
-      if (!last || !last.used_at) return false;
-      return new Date(last.used_at).getTime() >= this._cutoff();
-    } catch (e) { return false; }
+    // SOURCE UNIQUE : à jour = km connu (tous canaux : relevé mail/QR/manuel OU maj fiche/lot/photo) et récent.
+    try { return this.statutKm(v) === 'ajour'; } catch (e) { return false; }
   },
   // ⚠️ SOURCE UNIQUE — un relevé reçu par mail/QR met à jour le « dernier relevé » (settings.kmMajDates,
   // clé = immat) pour que l'alerte « relevé km à faire » (buildAlertes) se réinitialise automatiquement,
@@ -15491,16 +15523,14 @@ FP.relances = {
     (data.vehicules || []).forEach(v => {
       if (FP.horsFlotte && FP.horsFlotte(v)) return; if (FP.kmSuivi && !FP.kmSuivi(v)) return;
       const readings = KC.recusDe ? KC.recusDe(v) : [];
-      // ⚠️ RÈGLE (consigne utilisateur) — SOURCE UNIQUE FP.kmCollecte.recusComptesDe : un relevé par SCAN QR
-      // ne « compte comme réponse » (et ne retire le véhicule) QUE s'il suit une relance mail envoyée pour ce
-      // véhicule. Mail (lien) + saisie manuelle comptent toujours. Un scan spontané laisse le véhicule listé.
-      const last = (KC.recusComptesDe ? KC.recusComptesDe(v)[0] : readings[0]) || null;
-      const stt = KC.statusFor ? KC.statusFor(v) : null; const pending = (stt && stt.sent_at && !stt.used_at) ? stt : null;
-      const cutoff = KC._cutoff ? KC._cutoff() : (today.getTime() - seuil * 86400000);   // délai + date de cycle (source unique)
-      let statut; if (last && new Date(last.used_at).getTime() >= cutoff) statut = 'ajour'; else if (pending) statut = 'attente'; else if (readings.length) statut = 'relancer'; else statut = 'jamais';
+      // ⚠️ SOURCE UNIQUE FP.kmCollecte.statutKm : « à jour » = km connu récent, TOUS CANAUX confondus
+      // (relevé mail/QR/manuel OU mise à jour du km sur la fiche / en lot / par photo, via kmMajDates).
+      // Corrige « j'ai saisi le km mais ça me relance encore » : un km donné n'importe comment compte.
+      const statut = KC.statutKm ? KC.statutKm(v) : 'jamais';
       if (statut === 'ajour' || statut === 'attente') return; // à jour = rien ; en attente = demande déjà partie
+      const last = readings[0] || null;
       const chauffeur = (v.chauffeur && v.chauffeur !== '—') ? String(v.chauffeur).trim() : '';
-      out.push({ type: 'km', veh: v, immat: v.immat || '', conducteur: chauffeur, contact: this._contact(chauffeur), statut, lastKm: last ? last.used_at : (readings[0] ? readings[0].used_at : ''), joursRestants: null, urgence: 'retard' });
+      out.push({ type: 'km', veh: v, immat: v.immat || '', conducteur: chauffeur, contact: this._contact(chauffeur), statut, lastKm: last ? last.used_at : '', joursRestants: null, urgence: 'retard' });
     });
     return out;
   },
