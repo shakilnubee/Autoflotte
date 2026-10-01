@@ -7024,8 +7024,23 @@ FP.getLeasingOverrides = () => {
   }
   return shared || {};
 };
+// ⚠️ CLÉ TOLÉRANTE pour les overrides de leasing (settings.leasingContrats, keyé par PLAQUE) : les
+// plaques ont été saisies en formats MIXTES (saisie manuelle « HG-763-VP » ; import de facture de
+// leasing « HG763VP » sans tirets). Lire/écrire en BRUT ratait l'override → faux « loyer manquant »
+// alors qu'il est bien saisi. Règle 0-plaques : on NE réécrit PAS les clés existantes (orphelinage),
+// mais on RÉUTILISE la clé déjà présente qui correspond à la plaque normalisée (sinon forme canonique MAJ).
+FP._leaseKey = (immat) => {
+  const canon = (immat || '').trim().toUpperCase();
+  const k = FP.normImmat ? FP.normImmat(immat) : canon.replace(/[^A-Z0-9]/g, '');
+  if (!k) return canon;
+  try { const all = FP.getLeasingOverrides() || {}; for (const key in all) { if ((FP.normImmat ? FP.normImmat(key) : String(key).toUpperCase().replace(/[^A-Z0-9]/g, '')) === k) return key; } } catch (e) {}
+  return canon;
+};
+// Override de leasing d'une plaque, lu TOLÉRANT au format (tiret / espace / casse). {} si aucun.
+// À utiliser PARTOUT où on lit settings.leasingContrats[immat] (fiche, Contrats, checklist « À compléter »).
+FP.leasingOverride = (immat) => { try { const all = FP.getLeasingOverrides() || {}; const o = all[FP._leaseKey(immat)]; return (o && typeof o === 'object') ? o : {}; } catch (e) { return {}; } };
 FP.saveLeasingOverride = (immat, fields) => {
-  const key = (immat || '').trim().toUpperCase(); if (!key || !FP.settings) return;
+  const key = FP._leaseKey(immat); if (!key || !FP.settings) return;   // réutilise le tiroir existant (plaque normalisée)
   const obj = FP.settings.get();
   const all = (obj.leasingContrats && typeof obj.leasingContrats === 'object') ? obj.leasingContrats : {};
   all[key] = { ...(all[key] || {}), ...fields };
@@ -7033,7 +7048,7 @@ FP.saveLeasingOverride = (immat, fields) => {
   FP.settings.save(obj); // -> localStorage + app_settings (partagé sur tous les PC)
 };
 FP.resetLeasingOverride = (immat) => {
-  const key = (immat || '').trim().toUpperCase(); if (!FP.settings) return;
+  const key = FP._leaseKey(immat); if (!FP.settings) return;
   const obj = FP.settings.get();
   if (obj.leasingContrats && obj.leasingContrats[key]) { delete obj.leasingContrats[key]; FP.settings.save(obj); }
 };
@@ -7234,7 +7249,10 @@ FP.leasingContrat = (immat) => {
   const key = (immat || '').trim().toUpperCase(); if (!key) return null;
   // Base PXP en dur → uniquement pour PXP. Les autres sociétés n'utilisent que leurs overrides.
   const base = (((FP.activeSociete && FP.activeSociete()) || 'PXP') === 'PXP') ? (FP.LEASING_CONTRATS[key] || null) : null;
-  const ov = FP.getLeasingOverrides()[key] || null;
+  // Override lu TOLÉRANT au format de plaque (tiret/espace/casse) → un loyer saisi « HG763VP » est bien
+  // retrouvé pour « HG-763-VP » (sinon faux « loyer manquant » alors qu'il est saisi).
+  const _ovObj = FP.leasingOverride ? FP.leasingOverride(immat) : (FP.getLeasingOverrides()[key] || {});
+  const ov = (_ovObj && Object.keys(_ovObj).length) ? _ovObj : null;
   if (!base && !ov) return null;
   const merged = { dureeMois: 36, kmSupp: null, kmTolerance: null, ...(base || {}), ...(ov || {}) };
   // ⚠️ REPLI DÉBUT = date de mise en circulation du véhicule (comportement prévu à l'origine) quand
