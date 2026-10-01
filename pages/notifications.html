@@ -811,11 +811,14 @@
       const debut = ov.debut || (lld && lld.debut) || base.debut || v.dateMiseEnCirculation || '';
       const km = ov.kmContrat || (lld && lld.kmTotal) || base.kmContrat || null;
       const duree = ov.dureeMois || (lld && lld.dureeMois) || base.dureeMois || null;
-      // ⚠️ SOURCE UNIQUE (rule 0-source) : le loyer se lit via FP.leasingCoutContrat — EXACTEMENT ce que la
-      // fiche affiche (gère la plaque normalisée, l'offre, les AVENANTS via leasingLoyerCourant, et le LLD).
-      // La lecture manuelle ratait ces cas → faux « Loyer mensuel du contrat manquant » alors qu'il est saisi.
+      // ⚠️ SOURCE UNIQUE (rule 0-source) : le loyer se lit EXACTEMENT comme la FICHE véhicule
+      // (vehicules.html) → d'abord FP.leasingCoutContrat (forfait/offre/avenants/LLD), PUIS repli
+      // FP.leasingInfo(v).loyer. ⚠️ leasingCoutContrat renvoie null pour un contrat TERMINÉ (échéance
+      // passée) alors que la fiche affiche encore le loyer via leasingInfo → sans ce repli on flaguait
+      // à tort « Loyer manquant » sur un contrat dont le loyer est bien saisi (cas HG-763-VP / BYD ATTO 3).
       let loyer = null;
       try { const _lc = FP.leasingCoutContrat ? FP.leasingCoutContrat(v.immat) : null; if (_lc && _lc.loyerMois != null) loyer = _lc.loyerMois; } catch (e) {}
+      if (loyer == null) { try { const _lz = FP.leasingInfo ? FP.leasingInfo(v) : null; if (_lz && _lz.loyer != null) loyer = _lz.loyer; } catch (e) {} }
       if (loyer == null) loyer = (ov.loyer > 0 ? ov.loyer : null) || (lld && lld.loyerTTC > 0 ? lld.loyerTTC : null) || (base.loyer > 0 ? base.loyer : null);
       const pfx = 'complet:lease:' + v.id + ':';
       const miss = [];
