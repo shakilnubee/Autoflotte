@@ -15001,6 +15001,65 @@ FP.share = function (opts) {
   });
 };
 
+// ===== FLÈCHES de défilement HORIZONTAL (rails de cartes) — SOURCE UNIQUE, surtout PC =====
+// Sur un conteneur qui défile horizontalement (overflow-x), ajoute deux flèches « 3D » ‹ › qui
+// apparaissent SEULEMENT du côté où il reste du contenu caché. Indispensable sur PC (pas de scroll au
+// doigt) ; masquées sur écran tactile. Idempotent (1 seule install par rail). À réutiliser partout où
+// une rangée de cartes dépasse (conducteurs, galeries…). Appel : FP.railArrows(el) ou railArrowsAll(sel,root).
+(function () {
+  function injectCss() {
+    if (document.getElementById('fp-rail-arrow-css')) return;
+    const st = document.createElement('style'); st.id = 'fp-rail-arrow-css';
+    st.textContent =
+      '.fp-rail-wrap{position:relative}'
+      + '.fp-rail-arrow{position:absolute;top:50%;transform:translateY(-50%) scale(.9);width:48px;height:48px;border-radius:50%;border:none;cursor:pointer;display:none;align-items:center;justify-content:center;color:#fff;z-index:30;opacity:0;padding:0;'
+      + 'background:radial-gradient(130% 130% at 30% 22%, rgba(255,255,255,.55), rgba(255,255,255,0) 42%), linear-gradient(150deg, var(--fp-accent,#F97316), #c2560b);'
+      + 'box-shadow:0 8px 20px -5px rgba(249,115,22,.6), 0 2px 5px rgba(8,15,30,.25), inset 0 1px 1px rgba(255,255,255,.55), inset 0 -3px 6px rgba(0,0,0,.22);'
+      + 'transition:opacity .2s ease, transform .18s cubic-bezier(.34,1.56,.64,1), box-shadow .2s}'
+      + '.fp-rail-arrow svg{width:24px;height:24px;filter:drop-shadow(0 1px 1px rgba(0,0,0,.25))}'
+      + '.fp-rail-arrow.on{display:flex;opacity:1}'
+      + '.fp-rail-arrow:hover{transform:translateY(-50%) scale(1.06);box-shadow:0 12px 26px -5px rgba(249,115,22,.75), 0 3px 7px rgba(8,15,30,.3), inset 0 1px 1px rgba(255,255,255,.6), inset 0 -3px 6px rgba(0,0,0,.25)}'
+      + '.fp-rail-arrow:active{transform:translateY(-50%) scale(.92)}'
+      + '.fp-rail-prev{left:4px}.fp-rail-next{right:4px}'
+      + '@media (hover:none) and (pointer:coarse){.fp-rail-arrow{display:none!important}}';
+    (document.head || document.documentElement).appendChild(st);
+  }
+  const CHEV_NEXT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>';
+  const CHEV_PREV = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>';
+  FP.railArrows = function (rail) {
+    if (!rail || rail._fpArrows) return;
+    injectCss();
+    let wrap = rail.parentElement;
+    if (!wrap || !wrap.classList.contains('fp-rail-wrap')) {
+      wrap = document.createElement('div'); wrap.className = 'fp-rail-wrap';
+      rail.parentNode.insertBefore(wrap, rail); wrap.appendChild(rail);
+    }
+    rail._fpArrows = true;
+    const mk = (dir) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'fp-rail-arrow fp-rail-' + dir;
+      b.setAttribute('aria-label', dir === 'next' ? 'Voir les suivants' : 'Voir les précédents');
+      b.innerHTML = dir === 'next' ? CHEV_NEXT : CHEV_PREV;
+      b.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); rail.scrollBy({ left: (dir === 'next' ? 1 : -1) * Math.max(240, rail.clientWidth * 0.82), behavior: 'smooth' }); });
+      wrap.appendChild(b); return b;
+    };
+    const prev = mk('prev'), next = mk('next');
+    const update = () => {
+      const over = rail.scrollWidth - rail.clientWidth;
+      if (over <= 6) { prev.classList.remove('on'); next.classList.remove('on'); return; }
+      const x = rail.scrollLeft;
+      prev.classList.toggle('on', x > 6);
+      next.classList.toggle('on', x < over - 6);
+    };
+    rail.addEventListener('scroll', () => window.requestAnimationFrame(update), { passive: true });
+    window.addEventListener('resize', () => window.requestAnimationFrame(update));
+    setTimeout(update, 60); setTimeout(update, 320); update();
+  };
+  FP.railArrowsAll = function (selector, root) {
+    try { (root || document).querySelectorAll(selector).forEach(el => FP.railArrows(el)); } catch (e) {}
+  };
+})();
+
 // ===== Gabarit d'e-mail BRANDÉ (source unique) — même design que le relevé km =====
 // En-tête sombre (logo société ou « Parc Pilot », titre, prénom, plaque) + corps blanc contenant le
 // message. Robuste au MODE SOMBRE de Gmail (background-color solide → le texte blanc reste blanc).
