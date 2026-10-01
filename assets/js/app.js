@@ -14950,6 +14950,57 @@ document.addEventListener('click', (e) => {
   });
 });
 
+// ===== PARTAGE d'un LIEN PUBLIC à N'IMPORTE QUI (acheteur, collègue…) — SOURCE UNIQUE =====
+// Différent de FP.msg (qui écrit à un conducteur CONNU, avec son numéro) : ici le destinataire n'est
+// PAS connu. On propose TOUJOURS des boutons explicites WhatsApp + E-mail + Copier (demande utilisateur
+// « par mail ou WhatsApp »), et EN PLUS le partage natif du téléphone (📲 autres applis) quand il existe
+// (WhatsApp / Mail / SMS / AirDrop… en une feuille). WhatsApp = wa.me sans numéro (on choisit le contact) ;
+// E-mail = mailto: (on choisit le destinataire). ⚠️ Tout « partager un lien » de la plateforme passe par ici.
+FP.share = function (opts) {
+  opts = opts || {};
+  const esc = FP.esc || (x => String(x == null ? '' : x));
+  const text = String(opts.text || '').trim();
+  const url = String(opts.url || '').trim();
+  const title = String(opts.title || '').trim();
+  const subject = String(opts.subject || title || '').trim();
+  const body = text || url;                       // le texte contient déjà le lien
+  let canNative = false; try { canNative = typeof navigator !== 'undefined' && !!navigator.share; } catch (e) {}
+  const old = document.getElementById('fp-share-ov'); if (old) old.remove();
+  const ov = document.createElement('div');
+  ov.id = 'fp-share-ov';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:100001;background:rgba(8,15,30,.55);display:flex;align-items:center;justify-content:center;padding:16px';
+  ov.innerHTML =
+    '<div style="background:var(--fp-surface,#fff);color:var(--fp-text,#0b1220);border-radius:16px;max-width:410px;width:100%;box-shadow:0 24px 60px -20px rgba(0,0,0,.5);overflow:hidden">'
+    + '<div style="padding:15px 18px;border-bottom:1px solid var(--fp-border,#e5e7eb);display:flex;align-items:center;justify-content:space-between;gap:10px">'
+      + '<b style="font-size:1.02rem">📤 ' + esc(title || 'Partager le lien') + '</b>'
+      + '<button type="button" id="fp-share-x" style="background:none;border:none;font-size:1.5rem;line-height:1;cursor:pointer;color:var(--fp-muted,#64748b)">×</button>'
+    + '</div>'
+    + '<div style="padding:16px 18px;display:flex;flex-direction:column;gap:10px">'
+      + '<label style="font-size:.72rem;font-weight:700;color:var(--fp-muted,#64748b)">Message (modifiable)'
+        + '<textarea id="fp-share-text" rows="4" style="width:100%;margin-top:3px;padding:9px 11px;border:1px solid var(--fp-border,#e5e7eb);border-radius:10px;background:var(--fp-bg,#fff);color:inherit;font-size:.9rem;resize:vertical">' + esc(body) + '</textarea></label>'
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap">'
+        + '<button type="button" id="fp-share-wa" style="flex:1;min-width:120px;justify-content:center;display:inline-flex;align-items:center;gap:6px;padding:11px;border-radius:10px;border:none;background:#25D366;color:#0b3d1f;font-weight:800;cursor:pointer">🟢 WhatsApp</button>'
+        + '<button type="button" id="fp-share-mail" style="flex:1;min-width:120px;justify-content:center;display:inline-flex;align-items:center;gap:6px;padding:11px;border-radius:10px;border:none;background:#0B1220;color:#fff;font-weight:800;cursor:pointer">📧 E-mail</button>'
+      + '</div>'
+      + (canNative ? '<button type="button" id="fp-share-native" style="padding:9px;border-radius:10px;border:1px solid var(--fp-border,#e5e7eb);background:var(--fp-bg,#fff);color:inherit;font-weight:700;cursor:pointer">📲 Autres applis…</button>' : '')
+      + '<button type="button" id="fp-share-copy" style="padding:9px;border-radius:10px;border:1px solid var(--fp-border,#e5e7eb);background:var(--fp-bg,#fff);color:inherit;font-weight:700;cursor:pointer">📋 Copier le lien</button>'
+      + '<p style="font-size:.72rem;color:var(--fp-muted,#64748b);margin:0">Choisis WhatsApp ou l\'e-mail, puis le destinataire dans ton appli.</p>'
+    + '</div>'
+  + '</div>';
+  document.body.appendChild(ov);
+  const q = s => ov.querySelector(s);
+  const curText = () => (q('#fp-share-text').value || body);
+  const close = () => ov.remove();
+  ov.addEventListener('click', e => { if (e.target === ov) close(); });
+  q('#fp-share-x').addEventListener('click', close);
+  q('#fp-share-wa').addEventListener('click', () => { window.open('https://wa.me/?text=' + encodeURIComponent(curText()), '_blank', 'noopener'); });
+  q('#fp-share-mail').addEventListener('click', () => { window.location.href = 'mailto:?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(curText()); });
+  q('#fp-share-copy').addEventListener('click', () => { try { if (FP.copy) FP.copy(curText()); else if (navigator.clipboard) navigator.clipboard.writeText(curText()); } catch (_) {} if (FP.toast) FP.toast('✓ Copié'); });
+  const nb = q('#fp-share-native'); if (nb) nb.addEventListener('click', () => {
+    try { const payload = { text: curText() }; if (title) payload.title = title; navigator.share(payload).then(close).catch(() => {}); } catch (e) {}
+  });
+};
+
 // ===== Gabarit d'e-mail BRANDÉ (source unique) — même design que le relevé km =====
 // En-tête sombre (logo société ou « Parc Pilot », titre, prénom, plaque) + corps blanc contenant le
 // message. Robuste au MODE SOMBRE de Gmail (background-color solide → le texte blanc reste blanc).
