@@ -7036,21 +7036,53 @@ FP._leaseKey = (immat) => {
   try { const all = FP.getLeasingOverrides() || {}; for (const key in all) { if ((FP.normImmat ? FP.normImmat(key) : String(key).toUpperCase().replace(/[^A-Z0-9]/g, '')) === k) return key; } } catch (e) {}
   return canon;
 };
+// Toutes les clés (formats de plaque mixtes) qui désignent la MÊME plaque dans les overrides.
+FP._leaseMatchKeys = (all, immat) => {
+  const k = FP.normImmat ? FP.normImmat(immat) : String(immat || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (!k) return [];
+  return Object.keys(all || {}).filter(key => (FP.normImmat ? FP.normImmat(key) : String(key).toUpperCase().replace(/[^A-Z0-9]/g, '')) === k);
+};
 // Override de leasing d'une plaque, lu TOLÉRANT au format (tiret / espace / casse). {} si aucun.
+// ⚠️ Anti-« deux montants » : si plusieurs clés (formats mixtes) existent pour la plaque, on les FUSIONNE
+// (aucun champ perdu), la clé CANONIQUE (MAJ avec tirets, là où atterrissent les éditions fiche/Contrats)
+// l'emportant sur les autres en cas de conflit. Évite qu'un ancien doublon masque la valeur corrigée.
 // À utiliser PARTOUT où on lit settings.leasingContrats[immat] (fiche, Contrats, checklist « À compléter »).
-FP.leasingOverride = (immat) => { try { const all = FP.getLeasingOverrides() || {}; const o = all[FP._leaseKey(immat)]; return (o && typeof o === 'object') ? o : {}; } catch (e) { return {}; } };
+FP.leasingOverride = (immat) => {
+  try {
+    const all = FP.getLeasingOverrides() || {};
+    const canon = (immat || '').trim().toUpperCase();
+    const keys = FP._leaseMatchKeys(all, immat); if (!keys.length) return {};
+    let out = {}, canonVal = null;
+    keys.forEach(key => { if (key === canon) canonVal = all[key]; else out = { ...out, ...(all[key] || {}) }; });
+    if (canonVal) out = { ...out, ...canonVal };   // la clé canonique (édition fiche/Contrats) PRIME
+    return out;
+  } catch (e) { return {}; }
+};
+FP._leaseKey = (immat) => { const all = (() => { try { return FP.getLeasingOverrides() || {}; } catch (e) { return {}; } })(); const m = FP._leaseMatchKeys(all, immat); const canon = (immat || '').trim().toUpperCase(); return m.includes(canon) ? canon : (m[0] || canon); };
+// Écriture CONSOLIDÉE : fusionne tous les doublons de la plaque en UNE seule entrée (les champs saisis
+// maintenant PRIMENT, rien n'est perdu), puis supprime les autres clés. Auto-réparation du « deux tiroirs ».
 FP.saveLeasingOverride = (immat, fields) => {
-  const key = FP._leaseKey(immat); if (!key || !FP.settings) return;   // réutilise le tiroir existant (plaque normalisée)
+  if (!FP.settings) return;
+  const canon = (immat || '').trim().toUpperCase();
+  const k = FP.normImmat ? FP.normImmat(immat) : canon.replace(/[^A-Z0-9]/g, ''); if (!k) return;
   const obj = FP.settings.get();
   const all = (obj.leasingContrats && typeof obj.leasingContrats === 'object') ? obj.leasingContrats : {};
-  all[key] = { ...(all[key] || {}), ...fields };
+  const mk = FP._leaseMatchKeys(all, immat);
+  const merged = {}; mk.forEach(key => Object.assign(merged, all[key] || {}));   // fusion (aucun champ perdu)
+  const target = mk.includes(canon) ? canon : (mk[0] || canon);                   // une seule entrée conservée
+  mk.forEach(key => { if (key !== target) delete all[key]; });                     // supprime les doublons
+  all[target] = { ...merged, ...fields };                                          // les champs saisis priment
   obj.leasingContrats = all;
   FP.settings.save(obj); // -> localStorage + app_settings (partagé sur tous les PC)
 };
 FP.resetLeasingOverride = (immat) => {
-  const key = FP._leaseKey(immat); if (!FP.settings) return;
+  if (!FP.settings) return;
   const obj = FP.settings.get();
-  if (obj.leasingContrats && obj.leasingContrats[key]) { delete obj.leasingContrats[key]; FP.settings.save(obj); }
+  const all = (obj.leasingContrats && typeof obj.leasingContrats === 'object') ? obj.leasingContrats : null;
+  if (!all) return;
+  const mk = FP._leaseMatchKeys(all, immat); if (!mk.length) return;
+  mk.forEach(key => delete all[key]);   // supprime TOUTES les clés de la plaque (tous formats)
+  FP.settings.save(obj);
 };
 
 // ===== GARAGES / PRESTATAIRES (par société, partagés entre postes via app_settings) =====
