@@ -1202,7 +1202,10 @@
     // assurés et comptés dans le total des primes → la somme des lignes = le total affiché (plus d'écart).
     tbody.innerHTML = assurVisibleVehicles().map(v => {
       const pr = vehPrime(v);
-      if (!pr && !FP.horsFlotte(v)) missing.push(v);
+      // Une prime est « complète » quand elle a un MONTANT. Un enregistrement qui ne contient qu'un DOCUMENT
+      // (montant pas encore lu/saisi) compte comme « à compléter » (mais son 📄 PDF reste consultable).
+      const prComplete = !!(pr && Number.isFinite(pr.ttc));
+      if (!prComplete && !FP.horsFlotte(v)) missing.push(v);
       { const c = (pr && Number.isFinite(pr.ttc)) ? pr.ttc : (hasPerVeh ? 0 : parVeh); sumTtc += (Number.isFinite(c) ? c : 0); cntVeh++; }
       const cout = pr && Number.isFinite(pr.ttc) ? FP.euro(pr.ttc)
         : (hasPerVeh ? '<span class="text-amber-600 font-semibold">à compléter</span>' : (parVeh ? FP.euro(parVeh) : '—'));
@@ -1217,7 +1220,7 @@
         <td>${FP.lienConducteur(v.chauffeur)}</td>
         <td>${assCell}</td>
         <td><div class="flex flex-wrap gap-1">${FP.vehGroupes(v).map(k => `<span class="groupe-pill gp-${k}"><span class="dot"></span>${FP.groupeLabel(k)}</span>`).join('')}</div></td>
-        <td><span class="badge ${pr ? 'badge-ok' : (hasPerVeh ? 'badge-warn' : 'badge-ok')}">${pr ? 'Couvert' : (hasPerVeh ? 'Prime manquante' : 'Couvert')}</span></td>
+        <td><span class="badge ${prComplete ? 'badge-ok' : (hasPerVeh ? 'badge-warn' : 'badge-ok')}">${prComplete ? 'Couvert' : (hasPerVeh ? 'Prime manquante' : 'Couvert')}</span></td>
         <td style="text-align:right;cursor:pointer" data-assur-edit="${FP.esc(v.immat||'')}" title="Cliquer pour saisir / modifier la prime (et déposer le document — montant lu par l'IA)">${cout} <i data-lucide="pencil" class="w-3 h-3 inline text-slate-300" style="vertical-align:-1px"></i>${(pr && pr.docUrl) ? ` <button type="button" data-assur-doc="${escC(pr.docUrl)}" onclick="event.stopPropagation()" title="Voir le document de la prime (${escC(pr.docName || 'PDF')})" style="background:none;border:none;cursor:pointer;color:var(--fp-accent);font-size:11.5px;font-weight:600">📄 PDF</button>` : ''}</td>
       </tr>`;
     }).join('');
@@ -1555,7 +1558,7 @@
     const btn = $('prime-remove'); if (!btn) return;
     const immat = ($('prime-veh') && $('prime-veh').value || '').trim();
     let has = false;
-    if (immat) { const p = assurPrimes(); const k = normPlaque(immat); for (const key in p) { if (normPlaque(key) === k && p[key] && Number.isFinite(p[key].ttc)) { has = true; break; } } }
+    if (immat) { const p = assurPrimes(); const k = normPlaque(immat); for (const key in p) { if (normPlaque(key) === k && p[key] && (Number.isFinite(p[key].ttc) || p[key].docUrl)) { has = true; break; } } }
     btn.classList.toggle('hidden', !has);
   }
   function removePrime(){
@@ -1594,12 +1597,25 @@
       show('☁️ Envoi du document…', 'color:#475569');
       const url = (window.FP && FP.uploadScan) ? await FP.uploadScan(file, 'assurance') : '';
       const lu = (ttcLu != null);
-      const msg = url
-        ? ('✓ Document déposé' + (lu ? (' · montant lu automatiquement' + (calcule ? ' (reconstitué sur l\'année — vérifie)' : ' (vérifie)') + '.') : ' · montant non trouvé, saisis-le.'))
-        : (lu ? '✓ Montant lu (document non enregistré, réessaie le dépôt).' : 'Document non enregistré (tu peux saisir le montant).');
-      if (url) _primeDoc = { url, name: file.name || 'prime-assurance.pdf' };
-      show(msg, url ? 'color:#047857' : 'color:#B45309');
-    } catch (e) { console.warn('[prime file]', e); show('Échec du dépôt : ' + (e.message || e), 'color:#B91C1C'); }
+      if (url) {
+        _primeDoc = { url, name: file.name || 'prime-assurance.pdf' };
+        // Lien « Voir » IMMÉDIAT dans la fenêtre (on doit pouvoir le rouvrir tout de suite, pas seulement après Enregistrer).
+        const voir = ' — <a href="#" id="prime-view-doc" style="color:#047857;font-weight:800;text-decoration:underline">📄 Voir le document</a>';
+        show('✓ Document déposé' + (lu ? (' · montant lu' + (calcule ? ' (reconstitué sur l\'année — vérifie)' : ' (vérifie)')) : ' · montant non trouvé, saisis-le') + '.' + voir, 'color:#047857');
+        const vd = $('prime-view-doc'); if (vd) vd.onclick = (ev) => { ev.preventDefault(); if (window.FP && FP.openScan) FP.openScan(_primeDoc.url); else window.open(_primeDoc.url, '_blank', 'noopener'); };
+        if (window.lucide) try { lucide.createIcons(); } catch (e) {}
+      } else {
+        // ❌ ÉCHEC D'ENVOI = JAMAIS SILENCIEUX (consigne anti-perte) : on le dit clairement, le document N'EST PAS joint.
+        _primeDoc = null;
+        show('❌ Le document n\'a PAS pu être envoyé — réessaie (vérifie ta connexion). ' + (lu ? 'Le montant lu a quand même été rempli.' : ''), 'color:#B91C1C');
+        if (window.FP && FP.notifyError) try { FP.notifyError('Dépôt du document de prime impossible — réessaie une fois en ligne.'); } catch (e) {}
+      }
+    } catch (e) {
+      console.warn('[prime file]', e);
+      _primeDoc = null;
+      show('❌ Échec du dépôt : ' + (e && (e.message || e)) + ' — réessaie.', 'color:#B91C1C');
+      if (window.FP && FP.notifyError) try { FP.notifyError('Dépôt du document de prime impossible — réessaie.'); } catch (e2) {}
+    }
   }
 
   function savePrime(){
@@ -1607,18 +1623,22 @@
     const ttc = primeNum($('prime-ttc').value);
     const ht = primeNum($('prime-ht').value);
     if (!immat) { alert('Choisis un véhicule.'); return; }
-    if (!(ttc > 0)) { alert('Saisis la prime TTC (€/an).'); return; }
+    const hasDoc = !!(_primeDoc && _primeDoc.url);
+    // On peut enregistrer avec un MONTANT, ou avec seulement le DOCUMENT (anti-perte : ne jamais jeter un
+    // document déposé parce que le montant n'a pas encore été lu/saisi). Au moins l'un des deux est requis.
+    if (!(ttc > 0) && !hasDoc) { alert('Saisis la prime TTC (€/an) ou dépose le document de la prime.'); return; }
     const s = FP.settings.get(); s.assurancePrimes = s.assurancePrimes || {};
     const k = normPlaque(immat);
     // Retrouve une éventuelle clé existante (même plaque) pour ne pas créer de doublon.
     let existKey = null; for (const key in s.assurancePrimes) { if (normPlaque(key) === k) { existKey = key; break; } }
-    const rec = Object.assign({}, existKey ? s.assurancePrimes[existKey] : {}, { ht: ht != null ? ht : null, ttc });
-    if (_primeDoc && _primeDoc.url) { rec.docUrl = _primeDoc.url; rec.docName = _primeDoc.name; }
+    const rec = Object.assign({}, existKey ? s.assurancePrimes[existKey] : {});
+    if (ttc > 0) { rec.ttc = ttc; rec.ht = (ht != null ? ht : (rec.ht != null ? rec.ht : null)); }
+    if (hasDoc) { rec.docUrl = _primeDoc.url; rec.docName = _primeDoc.name; }
     s.assurancePrimes[existKey || immat] = rec;
     FP.settings.save(s);
     closePrimeModal();
     renderKPIs(); renderAssurance();
-    if (FP.toast) FP.toast('✓ Prime ajoutée — total mis à jour');
+    if (FP.toast) FP.toast(ttc > 0 ? '✓ Prime enregistrée — total mis à jour' : '✓ Document de la prime enregistré');
   }
 
   function renderLeasing() {
@@ -2106,7 +2126,7 @@
     const bUp = e.target.closest('[data-bpce-up]');
     if (bUp) { bpceUpload(bUp.dataset.bpceUp); return; }
     const bDoc = e.target.closest('[data-bpce-doc]');
-    if (bDoc) { const u = bDoc.getAttribute('data-bpce-doc'); const url = (FP.signedScanUrl) ? await FP.signedScanUrl(u, 3600) : u; window.open(url, '_blank', 'noopener'); return; }
+    if (bDoc) { const u = bDoc.getAttribute('data-bpce-doc'); if (u) { if (window.FP && FP.openScan) FP.openScan(u); else window.open(u, '_blank', 'noopener'); } return; }
     const bDel = e.target.closest('[data-bpce-doc-del]');
     if (bDel) {
       const [immat, di] = bDel.dataset.bpceDocDel.split('::'); const idx = +di;
@@ -3816,8 +3836,7 @@
     const op = e.target.closest('[data-rec-open]');
     if (op) {
       const f = files[+op.dataset.recOpen]; if (!f) return;
-      try { const url = (FP.signedScanUrl) ? await FP.signedScanUrl(f.url, 3600) : f.url; window.open(url, '_blank', 'noopener'); }
-      catch (err) { console.warn('[rec open]', err); window.open(f.url, '_blank', 'noopener'); }
+      if (f.url) { if (window.FP && FP.openScan) FP.openScan(f.url); else window.open(f.url, '_blank', 'noopener'); }
       return;
     }
     // === Supprimer DÉFINITIVEMENT le PDF du stockage (vider les fichiers inutiles) ===
