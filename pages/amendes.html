@@ -2588,6 +2588,32 @@
     return null;
   }
 
+  // 🔁 RELECTURE CIBLÉE du N° DE TÉLÉPAIEMENT (le plus long nombre de l'avis → l'IA peut sauter un chiffre).
+  // On redemande à l'IA de ne lire QUE ce numéro, aux DEUX endroits où il figure sur l'avis, chiffre par
+  // chiffre, et on ne garde que si on obtient bien 14 chiffres. On NE DEVINE RIEN : si illisible, on laisse.
+  const TEL_PROMPT = [
+    "Regarde cet AVIS DE CONTRAVENTION / PV (ANTAI). Lis UNIQUEMENT le « N° de telepaiement » (celui pour payer par carte bancaire).",
+    "Ce numero fait EXACTEMENT 14 chiffres, presentes en groupes 4-4-4-2 (ex 3336 6005 2814 91), et commence tres souvent par 333.",
+    "Il apparait DEUX FOIS a l'IDENTIQUE sur l'avis : (1) dans le bloc 'Paiement par carte bancaire avec le n° de telepaiement suivant' (chiffres case par case) ; (2) sur le coupon 'CARTE DE PAIEMENT' en bas, sous 'N° de Telepaiement'.",
+    "LIS LES DEUX occurrences separement, chiffre par chiffre. COMPTE bien 14 chiffres, n'en saute AUCUN (surtout au milieu / a la fin). Lis aussi la 'Cle' (2 chiffres) presente a cote.",
+    "Ne confonds PAS avec le numero d'avis (en haut a gauche, ~10 chiffres) ni avec la longue reference code-barres.",
+    "Renvoie UNIQUEMENT ce JSON (chiffres seulement, null si vraiment illisible) : {\"tel1\":\"...\",\"tel2\":\"...\",\"cle\":\"..\"}. N'invente aucun chiffre.",
+  ].join("\n");
+  async function relireTelepaiement(file){
+    try {
+      // docType 'telepaiement' → lecture ciblée simple (pas de double-contrôle lourd : on lit deja 2x sur le doc).
+      const r = await FP.scanIA(file, 'telepaiement', TEL_PROMPT, { maxTokens: 300 });
+      if (!r) return null;
+      const d = s => String(s == null ? '' : s).replace(/\D/g, '');
+      const t1 = d(r.tel1), t2 = d(r.tel2), cle = d(r.cle);
+      let tel = '';
+      if (t1 && t1 === t2) tel = t1;                 // les 2 lectures du document concordent → fiable
+      else if (t1.length === 14) tel = t1;
+      else if (t2.length === 14) tel = t2;
+      else tel = (t1.length >= t2.length) ? t1 : t2; // au pire la plus longue (gardera l'avertissement si ≠14)
+      return { tel, cle: (cle.length === 2 ? cle : '') };
+    } catch (e) { return null; }
+  }
   async function handleAvis(file){
     if (!file) return;
     try {
@@ -2694,6 +2720,19 @@
       if (parsed.numeroAvis && !$('am-avis').value)    { $('am-avis').value    = parsed.numeroAvis; filled.push('n° d\'avis'); }
       if (parsed.numeroTelepaiement && !$('am-telepaiement').value) { $('am-telepaiement').value = fmtTel(parsed.numeroTelepaiement); filled.push('n° télépaiement'); }
       if (parsed.cle && !$('am-cle').value) { $('am-cle').value = parsed.cle; filled.push('clé'); }
+      // Si le n° de télépaiement n'a PAS 14 chiffres (un chiffre sauté) → relecture CIBLÉE de ce seul numéro.
+      try {
+        const _tpCur = String($('am-telepaiement').value || '').replace(/\D/g, '');
+        if (window.FP && FP.scanIA && _avisFile && _tpCur.length !== 14 && !parsed.isMajoration) {
+          avWorking && avWorking('🔁 Relecture du n° de télépaiement…');
+          const better = await relireTelepaiement(_avisFile);
+          if (better && better.tel && better.tel.length === 14) {
+            $('am-telepaiement').value = fmtTel(better.tel);
+            if (!filled.includes('n° télépaiement')) filled.push('n° télépaiement');
+            if (better.cle && !$('am-cle').value) $('am-cle').value = better.cle;
+          }
+        }
+      } catch (e) {}
 
       // Avis de MAJORATION : on force le montant majoré (le champ a pu être pré-rempli avec le
       // minoré ci-dessus) et on propose de rattacher à l'amende d'origine.
