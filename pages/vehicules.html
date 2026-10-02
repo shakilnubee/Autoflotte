@@ -4537,7 +4537,20 @@
       if (ev.key === 'Enter') { ev.preventDefault(); commit(true); }
       else if (ev.key === 'Escape') { ev.preventDefault(); commit(false); }
     });
-    el.addEventListener('blur', () => commit(true));
+    el.addEventListener('blur', (ev) => {
+      // ⚠️ BUG « impossible de taper l'année, ça sort de la page » : les champs DATE sont édités via le
+      // calendrier FP.datePicker (pop-up séparé). Quand on clique dans ce calendrier (ou dans son champ
+      // « écrire à la main »), le focus QUITTE cet input → blur → commit → re-render de la fiche → le
+      // calendrier qu'on utilisait est détruit. On IGNORE donc le blur tant que le calendrier est ouvert
+      // (ou si le focus part dedans) : c'est le 'change' émis par FP.datePicker (choix/Entrée/clic dehors)
+      // qui enregistre la date. Pour les autres types (texte/nombre), le blur commit normalement.
+      try {
+        const rt = ev && ev.relatedTarget;
+        if (rt && rt.closest && rt.closest('.fp-dp')) return;        // focus parti dans le calendrier
+        if (document.querySelector('.fp-dp')) return;                 // calendrier ouvert → on laisse 'change' gérer
+      } catch (e) {}
+      commit(true);
+    });
     // 'change' couvre AUSSI le choix d'une date dans le calendrier FP.datePicker (qui émet 'change') →
     // la date sélectionnée s'enregistre TOUT DE SUITE, sans avoir à cliquer ailleurs ni valider.
     el.addEventListener('change', () => commit(true));
