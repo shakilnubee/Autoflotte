@@ -227,7 +227,7 @@
             <div id="sd-decl-photos" class="mb-2"></div>
             <input id="sd-files" type="file" accept="image/*,application/pdf,.pdf" multiple class="text-sm w-full">
             <div id="sd-file-list" class="mt-2 flex flex-col gap-1"></div>
-            <p class="text-xs text-slate-400 mt-1">Dépose le constat amiable et des photos des dommages — rangés dans le dossier du véhicule. L'IA pourra ensuite lire le constat pour la responsabilité. Tu peux retirer un fichier ajouté par erreur avec le ✕.</p>
+            <p class="text-xs text-slate-400 mt-1">Dépose le constat amiable et des photos des dommages — rangés dans le dossier du véhicule. <b>Dès que tu déposes le constat, l'IA le lit et pré-remplit tout seul</b> les champs vides (date, lieu, circonstances, tiers). Vérifie puis crée le dossier. Tu peux retirer un fichier ajouté par erreur avec le ✕.</p>
           </div>
           <div id="sd-status" class="text-xs"></div>
         </div>
@@ -1339,12 +1339,69 @@
       </div>`).join('');
       if (window.lucide) lucide.createIcons();
     };
+    // === Lecture IA du CONSTAT (constat amiable) → pré-remplit un MAXIMUM de champs ===========
+    // Au dépôt d'un fichier (photo/PDF du constat), l'IA le lit et remplit les champs VIDES (date, lieu,
+    // circonstances, et le TIERS adverse : plaque / assureur / conducteur). ⚠️ LIRE, JAMAIS DEVINER
+    // (consigne projet) : null si absent, on n'invente rien, et on n'écrase JAMAIS ce que l'utilisateur a saisi.
+    const CONSTAT_PROMPT = [
+      "Lis attentivement ce document : c'est un CONSTAT AMIABLE d'accident automobile (ou une photo d'un constat). Redresse mentalement l'image si elle est inclinee ou de travers.",
+      "Un constat amiable oppose deux vehicules : le vehicule A et le vehicule B. Chacun a sa case 'Societe d'assurance', 'N° de contrat', et le 'Conducteur' (nom du conducteur).",
+      "Renvoie UNIQUEMENT un objet JSON valide, sans aucun texte autour, avec ces cles (mets null si l'info est absente ou illisible) :",
+      "date : la date de l'accident, format AAAA-MM-JJ (case 1 du constat, 'Date de l'accident').",
+      "lieu : le lieu de l'accident (case 2, 'Lieu' : pays, ville, rue/route). Texte court.",
+      "circonstances : un resume FACTUEL et COURT (max 200 caracteres), en francais, de ce qui s'est passe (d'apres les cases 'Circonstances' cochees et le croquis/observations). N'invente RIEN : si ce n'est pas lisible, mets null.",
+      "vehiculeA : objet { plaque, assureur, conducteur } du vehicule A (plaque au format AB-123-CD si francaise ; assureur = la societe d'assurance ; conducteur = nom complet du conducteur). null pour un champ absent.",
+      "vehiculeB : objet { plaque, assureur, conducteur } du vehicule B, memes regles.",
+      "Si ce fichier N'EST PAS un constat (ex. simple photo de degats, facture), mets tous les champs a null.",
+      "REGLES DATES : format europeen jour/mois/annee (11/03/2026 = 2026-03-11, n'inverse jamais jour et mois).",
+      "Ne recopie QUE ce qui est ecrit. Ne mets JAMAIS la date du jour, n'invente aucune plaque, aucun nom, aucun assureur."
+    ].join("\n");
+    const sdScanned = new Set();   // fichiers déjà lus (nom+taille) → pas de re-scan inutile
+    let sdScanBusy = false;
+    async function sdAutoRead(file) {
+      if (!file || sdScanBusy || !(window.FP && FP.scanIA)) return;
+      const okImg = /^image\//i.test(file.type || '');
+      const okPdf = /pdf$/i.test(file.type || '') || /\.pdf$/i.test(file.name || '');
+      if (!okImg && !okPdf) return;
+      const sig = file.name + ':' + file.size; if (sdScanned.has(sig)) return; sdScanned.add(sig);
+      sdScanBusy = true;
+      setSt('🔎 Lecture du constat par l\'IA…', 'var(--fp-accent)');
+      let fields = null;
+      try { fields = await FP.scanIA(file, 'constat', CONSTAT_PROMPT, { maxTokens: 1200 }); } catch (e) {}
+      sdScanBusy = false;
+      if (!fields) {
+        const why = FP._scanLastErr ? (' (' + String(FP._scanLastErr).replace(/\s+/g, ' ').slice(0, 120) + ')') : '';
+        setSt('ℹ️ L\'IA n\'a pas pu lire ce fichier' + why + ' — tu peux remplir à la main.', '#B45309');
+        return;
+      }
+      // Tiers = la partie dont la plaque n'est PAS celle du véhicule sélectionné (sinon vehicule B par défaut).
+      const myPlaque = $('sd-veh') ? ($('sd-veh').value || '').trim() : '';
+      const A = fields.vehiculeA || {}, B = fields.vehiculeB || {};
+      const eq = (a, b) => { try { return FP.immatEq ? FP.immatEq(a, b) : String(a || '').toUpperCase().replace(/[^A-Z0-9]/g, '') === String(b || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); } catch (e) { return false; } };
+      let tiers = B;
+      if (myPlaque) { if (eq(A.plaque, myPlaque)) tiers = B; else if (eq(B.plaque, myPlaque)) tiers = A; }
+      tiers = tiers || {};
+      const fillIf = (id, val) => { const el = $(id); if (el && val != null && String(val).trim() && !String(el.value || '').trim()) { el.value = String(val).trim(); return true; } return false; };
+      let n = 0;
+      if (fillIf('sd-date', fields.date)) n++;
+      if (fillIf('sd-lieu', fields.lieu)) n++;
+      if (fillIf('sd-desc', fields.circonstances)) n++;
+      if (fillIf('sd-tiers-plaque', tiers.plaque)) n++;
+      if (fillIf('sd-tiers-assureur', tiers.assureur)) n++;
+      if (fillIf('sd-tiers-nom', tiers.conducteur)) n++;
+      setSt(n ? ('✓ Constat lu par l\'IA — ' + n + ' champ(s) pré-rempli(s). Vérifie avant de créer le dossier.')
+              : 'ℹ️ Fichier lu, mais aucune info de constat trouvée (ce n\'est peut-être pas un constat) — remplis à la main.',
+            n ? '#15803D' : '#B45309');
+    }
     if ($('sd-files')) $('sd-files').addEventListener('change', (e) => {
       const incoming = [...(e.target.files || [])];
       // évite les doublons (même nom + taille) si on re-sélectionne
       incoming.forEach(f => { if (!sdPicked.some(g => g.name === f.name && g.size === f.size)) sdPicked.push(f); });
       e.target.value = ''; // permet de re-choisir le même fichier après un retrait
       renderPicked();
+      // Lecture IA automatique du 1er fichier lisible déposé (constat) → pré-remplissage des champs vides.
+      const toScan = incoming.find(f => /^image\//i.test(f.type || '') || /pdf$/i.test(f.type || '') || /\.pdf$/i.test(f.name || ''));
+      if (toScan) sdAutoRead(toScan);
     });
     if ($('sd-file-list')) $('sd-file-list').addEventListener('click', (e) => {
       const b = e.target.closest('[data-sd-rm]'); if (!b) return;
@@ -1368,7 +1425,7 @@
       if (prefill.tiersAssureur && $('sd-tiers-assureur')) $('sd-tiers-assureur').value = prefill.tiersAssureur;
       if (prefill.tiersNom && $('sd-tiers-nom')) $('sd-tiers-nom').value = prefill.tiersNom;
       if ($('sd-files')) $('sd-files').value = '';
-      sdPicked = []; renderPicked();
+      sdPicked = []; try { sdScanned.clear(); } catch (e) {} renderPicked();
       // Photos DÉJÀ envoyées par le conducteur (déclaration QR) → aperçu dans le formulaire (elles seront
       // rattachées automatiquement au dossier à la création ; pas besoin de les re-joindre).
       const dp = $('sd-decl-photos');
