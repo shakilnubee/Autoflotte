@@ -1543,14 +1543,36 @@
     const typeOptions = DOC_TYPES.filter(t => t.key !== 'assurance').map(t => `<option value="${t.key}">${t.label}</option>`).join('');
     const builtinRows = builtin.map(d => builtinDocRowHTML(d, v.id)).join('');
     const linkRows = docs.length ? docs.map(docRowHTML).join('') : '';
-    // Contrats de leasing téléversés depuis l'onglet Contrats (settings.leasingDocs[immat]) : on les
-    // AFFICHE ICI aussi, sous « Contrat leasing/location » (source unique : gérés dans Contrats). Dédup par URL.
+    // Contrats de leasing / bons de commande téléversés depuis l'onglet Contrats : on les AFFICHE ICI aussi,
+    // sous « Contrat leasing/location » (SOURCE UNIQUE : gérés dans Contrats). Deux stockages possibles :
+    //  (a) BPCE          → settings.leasingDocs[immat]           (clé par plaque, suppression ici autorisée)
+    //  (b) Ayvens / LLD  → settings.localeaseContrats[].docs     (par contrat, géré dans Contrats → lecture seule ici)
+    // Rapprochement par plaque TOLÉRANT (FP.normImmat : avec/sans tirets, casse). Dédup par URL.
     let leaseDocs = [];
     try {
-      const m = (FP.settings.get().leasingDocs) || {};
-      const k = String(v.immat || '').toUpperCase();
+      const s = FP.settings.get();
+      const vK = normImmat(v.immat || '');
       const seenUrls = new Set(docs.map(d => d.url).filter(Boolean));
-      (Array.isArray(m[k]) ? m[k] : []).forEach((d, i) => { if (d && d.url && !seenUrls.has(d.url)) leaseDocs.push({ url: d.url, label: d.name || 'Contrat de leasing', _k: k + '::' + i }); });
+      // (a) BPCE : on itère les clés et on compare en normalisé, mais la clé RÉELLE reste celle passée à la suppression.
+      const m = (s.leasingDocs && typeof s.leasingDocs === 'object') ? s.leasingDocs : {};
+      Object.keys(m).forEach(key => {
+        if (normImmat(key) !== vK) return;
+        (Array.isArray(m[key]) ? m[key] : []).forEach((d, i) => {
+          if (d && d.url && !seenUrls.has(d.url)) { seenUrls.add(d.url); leaseDocs.push({ url: d.url, label: d.name || 'Contrat de leasing', _k: key + '::' + i }); }
+        });
+      });
+      // (b) Ayvens / LLD / autres loueurs (ex. Xpeng) : contrats saisis dans Contrats, docs rattachés au contrat.
+      (Array.isArray(s.localeaseContrats) ? s.localeaseContrats : []).forEach(c => {
+        if (!c) return;
+        const cK = normImmat(c.immat || '');
+        if (!cK || cK !== vK) return;
+        const lab = 'Contrat de leasing' + (c.loueur ? ' — ' + c.loueur : '');
+        const cdocs = Array.isArray(c.docs) ? c.docs.slice() : [];
+        if (!cdocs.length && c.pdfUrl) cdocs.push({ url: c.pdfUrl, name: lab });
+        cdocs.forEach(d => {
+          if (d && d.url && !seenUrls.has(d.url)) { seenUrls.add(d.url); leaseDocs.push({ url: d.url, label: d.name || lab, _ro: true }); }
+        });
+      });
     } catch (e) {}
     const tContrat = DOC_TYPES.find(x => x.key === 'contrat') || { label: 'Contrat leasing/location', icon: 'file-text' };
     const leaseRows = leaseDocs.map(d => `<div class="flex items-center gap-2 py-2 border-b border-slate-100 text-sm">
@@ -1560,7 +1582,9 @@
         <div class="text-xs text-slate-500">${tContrat.label} · géré dans Contrats</div>
       </div>
       <button type="button" class="btn btn-outline !py-1 !px-2.5 text-xs" data-doc-open="${escapeHtml(sanitizeUrl(d.url))}"><i data-lucide="eye" class="w-3.5 h-3.5"></i> Voir</button>
-      <button type="button" class="p-1.5 hover:bg-red-50 rounded text-slate-300 hover:text-red-600" data-lease-doc-del="${escapeHtml(d._k)}" title="Retirer ce contrat (aussi de l'onglet Contrats)"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+      ${d._k
+        ? `<button type="button" class="p-1.5 hover:bg-red-50 rounded text-slate-300 hover:text-red-600" data-lease-doc-del="${escapeHtml(d._k)}" title="Retirer ce contrat (aussi de l'onglet Contrats)"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>`
+        : `<a class="p-1.5 rounded text-slate-300 hover:text-slate-500" href="contrats.html" title="Gérer dans l'onglet Contrats"><i data-lucide="external-link" class="w-3.5 h-3.5"></i></a>`}
     </div>`).join('');
     const rows = (builtinRows + linkRows + leaseRows) || '<p class="text-sm text-slate-500">Aucun document pour le moment.</p>';
     const count = builtin.length + docs.length + leaseDocs.length;
