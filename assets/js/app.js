@@ -11856,6 +11856,32 @@ FP.edl = {
   EXT: ['Carrosserie', 'Pare-chocs', 'Vitres / pare-brise', 'Rétroviseurs', 'Jantes / pneus', 'Portières', 'Toit / capot / coffre'],
   INT: ['Sièges', 'Tableau de bord / commandes', 'Tapis / moquettes', 'Éléments électroniques (GPS, écran, chargeurs…)', 'Odeurs / propreté générale'],
   ACC: ['Photocopie carte grise', 'Assurance', 'Chargeur / câble (si électrique)', 'Roue de secours / kit crevaison'],
+  // ===== i18n du DOCUMENT signé (PDF) : FR par défaut, EN si le conducteur est anglophone (FP.condLangue).
+  // Le formulaire (outil du gestionnaire) reste en FR ; seul le PDF que le CONDUCTEUR signe est traduit.
+  TXT: {
+    fr: { title: 'ÉTAT DES LIEUX', subRem: 'Remise du véhicule', subRes: 'Restitution du véhicule',
+      nom: 'Nom et prénom', modele: 'Modèle', immat: 'Immatriculation', km: 'Kilométrage', dateRem: 'Date de remise', dateRes: 'Date de restitution',
+      secExt: 'ÉTAT EXTÉRIEUR', secInt: 'ÉTAT INTÉRIEUR', secAcc: 'ACCESSOIRES FOURNIS', secPhotos: 'PHOTOS', secSign: 'SIGNATURES',
+      ras: 'RAS', comm: 'Commentaires : ', autres: 'Autres : ',
+      ackRem: "Je reconnais avoir reçu le véhicule dans l'état décrit ci-dessus.", ackRes: "Le véhicule est restitué dans l'état décrit ci-dessus.",
+      sigEmp: "Signature de l'employé", sigSoc: 'Signature ', date: 'Date :', footer: 'Parc Pilot — gestion de flotte' },
+    en: { title: 'VEHICLE CONDITION REPORT', subRem: 'Vehicle handover', subRes: 'Vehicle return',
+      nom: 'Full name', modele: 'Model', immat: 'Registration', km: 'Mileage', dateRem: 'Handover date', dateRes: 'Return date',
+      secExt: 'EXTERIOR CONDITION', secInt: 'INTERIOR CONDITION', secAcc: 'ACCESSORIES PROVIDED', secPhotos: 'PHOTOS', secSign: 'SIGNATURES',
+      ras: 'OK', comm: 'Comments: ', autres: 'Other: ',
+      ackRem: 'I acknowledge receiving the vehicle in the condition described above.', ackRes: 'The vehicle is returned in the condition described above.',
+      sigEmp: 'Employee signature', sigSoc: 'Signature ', date: 'Date:', footer: 'Parc Pilot — fleet management' },
+  },
+  // Traduction EN des libellés de lignes (EXT/INT/ACC). Clé = libellé FR exact du formulaire.
+  LBL_EN: {
+    'Carrosserie': 'Bodywork', 'Pare-chocs': 'Bumpers', 'Vitres / pare-brise': 'Windows / windshield', 'Rétroviseurs': 'Mirrors',
+    'Jantes / pneus': 'Wheels / tyres', 'Portières': 'Doors', 'Toit / capot / coffre': 'Roof / bonnet / boot',
+    'Sièges': 'Seats', 'Tableau de bord / commandes': 'Dashboard / controls', 'Tapis / moquettes': 'Mats / carpets',
+    'Éléments électroniques (GPS, écran, chargeurs…)': 'Electronics (GPS, screen, chargers…)', 'Odeurs / propreté générale': 'Smell / overall cleanliness',
+    'Photocopie carte grise': 'Registration document copy', 'Assurance': 'Insurance',
+    'Chargeur / câble (si électrique)': 'Charger / cable (if electric)', 'Roue de secours / kit crevaison': 'Spare wheel / puncture kit',
+  },
+  _lbl(label, lang) { return (lang === 'en' && this.LBL_EN[label]) ? this.LBL_EN[label] : label; },
   open(veh, opts) {
     opts = opts || {};
     if (!veh) return;
@@ -12044,6 +12070,8 @@ FP.edl = {
         acc, autres: val('edl-autres'), comAcc: val('edl-com-acc'), to: val('edl-to'), photos: edlPhotos.slice(), photosSrc: edlPhotoSrc.slice(),
         signMode: (ov.querySelector('[data-edl-signmode]') && ov.querySelector('[data-edl-signmode]').value) || 'integree',
         socSignNom: val('edl-soc-nom'), socSignEmail: val('edl-soc-email'),
+        // Langue du DOCUMENT = celle du conducteur (anglophone → PDF en anglais). Le formulaire reste FR.
+        lang: ((FP.condLangue && FP.condLangue(val('edl-employe') || cond) === 'en') ? 'en' : 'fr'),
       };
     };
     const showErr = (msg) => { const b = ov.querySelector('[data-edl-err]'); if (b) { b.style.display = ''; b.textContent = msg || ''; try { b.scrollIntoView({ block: 'nearest' }); } catch (e) {} } };
@@ -12364,15 +12392,18 @@ FP.edl = {
     // Palette « à la sauce Parc Pilot »
     const NAVY = [15, 30, 61], ACC = [249, 115, 22], INK = [20, 28, 40], MUT = [100, 112, 128], SOFT = [248, 250, 252], LINE = [226, 232, 240];
     const isRestit = data.sens === 'restitution';
+    const lang = (data.lang === 'en') ? 'en' : 'fr';          // langue du DOCUMENT (FR/EN selon le conducteur)
+    const L = (FP.edl.TXT[lang] || FP.edl.TXT.fr);
+    const trLbl = (s) => FP.edl._lbl(s, lang);                // traduit un libellé de ligne (EXT/INT/ACC)
     const ensure = need => { if (y + need > H - 16) { doc.addPage(); y = 16; } };
     // ---- En-tête : logo société (ou nom) à gauche + titre + pastille sous-titre à droite ----
     if (data.logo && /^data:image\//i.test(data.logo)) {
       try { const fmt = /png/i.test(data.logo) ? 'PNG' : 'JPEG'; doc.addImage(data.logo, fmt, M, y, 30, 14, undefined, 'FAST'); } catch (e) {}
     } else if (data.socNom) { doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor.apply(doc, NAVY); doc.text(data.socNom, M, y + 9); }
     doc.setFont('helvetica', 'bold'); doc.setFontSize(18); doc.setTextColor.apply(doc, NAVY);
-    doc.text('ÉTAT DES LIEUX', W - M, y + 6, { align: 'right' });
+    doc.text(L.title, W - M, y + 6, { align: 'right' });
     // Sous-titre dans une PASTILLE arrondie (fond bleu très clair, texte navy) — plus soigné qu'un texte/trait orange.
-    { const sub = isRestit ? 'Restitution du véhicule' : 'Remise du véhicule';
+    { const sub = isRestit ? L.subRes : L.subRem;
       doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5);
       const pw = doc.getTextWidth(sub) + 8, ph = 6, px = W - M - pw, py = y + 9.5;
       doc.setFillColor(236, 241, 248); doc.roundedRect(px, py, pw, ph, 3, 3, 'F');
@@ -12383,7 +12414,7 @@ FP.edl = {
     doc.setLineWidth(0.2);
     y += 6.5;
     // ---- Carte infos (fond doux arrondi) ----
-    const info = [['Nom et prénom', data.employe], ['Modèle', data.modele], ['Immatriculation', data.immat], ['Kilométrage', data.km ? (data.km + ' km') : '—'], [isRestit ? 'Date de restitution' : 'Date de remise', data.date ? FP.date(data.date) : '—']];
+    const info = [[L.nom, data.employe], [L.modele, data.modele], [L.immat, data.immat], [L.km, data.km ? (data.km + ' km') : '—'], [isRestit ? L.dateRes : L.dateRem, data.date ? FP.date(data.date) : '—']];
     const cardH = 4.5 + info.length * 5.9;
     ensure(cardH + 4);
     doc.setFillColor.apply(doc, SOFT); doc.setDrawColor.apply(doc, LINE); doc.setLineWidth(0.3);
@@ -12410,8 +12441,9 @@ FP.edl = {
       // ⚠️ Libellé ET valeur renvoyés à la ligne chacun dans SA colonne (libellé long / valeur longue).
       const LBL_W = 56, VAL_X = M + 62, VAL_W = W - M - VAL_X;
       rows.forEach((r, idx) => {
-        const labelLines = doc.splitTextToSize(r.label, LBL_W);
-        const valLines = doc.splitTextToSize(String(r.val || 'RAS'), VAL_W);
+        const labelLines = doc.splitTextToSize(trLbl(r.label), LBL_W);
+        const _rv = (r.val && r.val !== 'RAS') ? r.val : L.ras;   // « RAS » traduit (OK) en anglais
+        const valLines = doc.splitTextToSize(String(_rv), VAL_W);
         const nL = Math.max(labelLines.length, valLines.length);
         const rowH = nL * 4.2 + 1.5;
         ensure(rowH);
@@ -12420,13 +12452,13 @@ FP.edl = {
         doc.setTextColor.apply(doc, INK); doc.setFont('helvetica', 'normal'); doc.text(valLines, VAL_X, y);
         y += rowH;
       });
-      if (com) { ensure(10); doc.setFont('helvetica', 'italic'); doc.setTextColor(90, 100, 115); const lines = doc.splitTextToSize('Commentaires : ' + com, W - 2 * M - 6); doc.text(lines, M + 3, y + 1); y += 3.5 + lines.length * 4.4; doc.setFont('helvetica', 'normal'); }
+      if (com) { ensure(10); doc.setFont('helvetica', 'italic'); doc.setTextColor(90, 100, 115); const lines = doc.splitTextToSize(L.comm + com, W - 2 * M - 6); doc.text(lines, M + 3, y + 1); y += 3.5 + lines.length * 4.4; doc.setFont('helvetica', 'normal'); }
       y += 1.5;
     };
-    section('ÉTAT EXTÉRIEUR', data.ext, data.comExt);
-    section('ÉTAT INTÉRIEUR', data.int, data.comInt);
+    section(L.secExt, data.ext, data.comExt);
+    section(L.secInt, data.int, data.comInt);
     // ---- Accessoires (cases à cocher dessinées) ----
-    sectionBar('ACCESSOIRES FOURNIS');
+    sectionBar(L.secAcc);
     doc.setFontSize(10);
     (data.acc || []).forEach(a => {
       ensure(5.9);
@@ -12435,15 +12467,15 @@ FP.edl = {
         doc.setFillColor.apply(doc, NAVY); doc.setDrawColor.apply(doc, NAVY); doc.roundedRect(bx, by, bs, bs, 0.7, 0.7, 'FD');
         doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.text('X', bx + bs / 2, by + bs - 0.9, { align: 'center' }); doc.setFontSize(10);
       } else { doc.setDrawColor.apply(doc, MUT); doc.setLineWidth(0.3); doc.roundedRect(bx, by, bs, bs, 0.7, 0.7, 'D'); }
-      doc.setTextColor.apply(doc, INK); doc.setFont('helvetica', 'normal'); doc.text(a.label, bx + bs + 3, y);
+      doc.setTextColor.apply(doc, INK); doc.setFont('helvetica', 'normal'); doc.text(trLbl(a.label), bx + bs + 3, y);
       y += 5.9;
     });
-    if (data.autres) { ensure(6); doc.setTextColor.apply(doc, INK); doc.setFont('helvetica', 'normal'); doc.text('Autres : ' + data.autres, M + 3, y); y += 5.9; }
-    if (data.comAcc) { ensure(8); doc.setFont('helvetica', 'italic'); doc.setTextColor(90, 100, 115); const l = doc.splitTextToSize('Commentaires : ' + data.comAcc, W - 2 * M - 6); doc.text(l, M + 3, y + 1); y += 3.5 + l.length * 4.4; doc.setFont('helvetica', 'normal'); }
+    if (data.autres) { ensure(6); doc.setTextColor.apply(doc, INK); doc.setFont('helvetica', 'normal'); doc.text(L.autres + data.autres, M + 3, y); y += 5.9; }
+    if (data.comAcc) { ensure(8); doc.setFont('helvetica', 'italic'); doc.setTextColor(90, 100, 115); const l = doc.splitTextToSize(L.comm + data.comAcc, W - 2 * M - 6); doc.text(l, M + 3, y + 1); y += 3.5 + l.length * 4.4; doc.setFont('helvetica', 'normal'); }
     y += 2;
     // ---- Photos jointes (2 par ligne, aspect préservé) ----
     if (Array.isArray(data.photos) && data.photos.length) {
-      sectionBar('PHOTOS');
+      sectionBar(L.secPhotos);
       const gap = 6, colW2 = (W - 2 * M - gap) / 2; let col = 0, rowH = 0, rowY = y;
       data.photos.forEach(p => {
         let aw = colW2, ah = colW2 * 0.72;
@@ -12458,15 +12490,15 @@ FP.edl = {
     }
     // ---- Signatures ----
     y += 3; ensure(44);
-    sectionBar('SIGNATURES');
+    sectionBar(L.secSign);
     doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(70, 80, 95);
-    doc.text(isRestit ? 'Le véhicule est restitué dans l\'état décrit ci-dessus.' : 'Je reconnais avoir reçu le véhicule dans l\'état décrit ci-dessus.', M, y); y += 8;
+    doc.text(isRestit ? L.ackRes : L.ackRem, M, y); y += 8;
     const colW = (W - 2 * M) / 2;
     const labelY = y;
     doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.setTextColor.apply(doc, NAVY);
-    doc.text('Signature de l\'employé', M, y); doc.text('Signature ' + (data.socNom || 'société'), M + colW, y);
+    doc.text(L.sigEmp, M, y); doc.text(L.sigSoc + (data.socNom || (lang === 'en' ? 'company' : 'société')), M + colW, y);
     const lineY = labelY + 16, dateY = lineY + 5, emailY = dateY + 5;
-    const dateLblW = doc.getTextWidth('Date : ') + 1;   // largeur du libellé « Date : » (mm) → valeur juste après
+    const dateLblW = doc.getTextWidth(L.date + ' ') + 1;   // largeur du libellé « Date : » (mm) → valeur juste après
     // Champs signature (employé à gauche, société à droite) — position en POINTS, origine HAUT-gauche
     // (1 mm = 2.83465 pt). L'app envoie chaque signataire sur SON champ ; l'edge y appose l'image de la
     // signature + la DATE (alignée sur « Date : ») + l'E-MAIL du signataire (sous la date). SOURCE UNIQUE
@@ -12487,12 +12519,12 @@ FP.edl = {
       };
     } catch (e) {}
     y = lineY; doc.setFont('helvetica', 'normal'); doc.setDrawColor(150, 160, 175); doc.setLineWidth(0.3); doc.line(M, y, M + colW - 12, y); doc.line(M + colW, y, W - M, y); y = dateY;
-    doc.setTextColor.apply(doc, MUT); doc.text('Date :', M, y); doc.text('Date :', M + colW, y); y = emailY + 2;
+    doc.setTextColor.apply(doc, MUT); doc.text(L.date, M, y); doc.text(L.date, M + colW, y); y = emailY + 2;
     // ---- Pied de page Parc Pilot (filet + pastille orange) ----
     doc.setDrawColor.apply(doc, LINE); doc.setLineWidth(0.2); doc.line(M, H - 12, W - M, H - 12);
     doc.setFillColor.apply(doc, ACC); doc.circle(M + 1.2, H - 8.7, 1, 'F');
     doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor.apply(doc, MUT);
-    doc.text('Parc Pilot — gestion de flotte', M + 4, H - 8);
+    doc.text(L.footer, M + 4, H - 8);
     return doc;
   },
 };
