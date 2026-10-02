@@ -11147,13 +11147,39 @@ FP.EDL_KM_PROMPT = [
   "sens : 'remise' si c'est une PRISE EN MAIN / entree / mise a disposition du vehicule ; 'restitution' si c'est un RETOUR / sortie / reprise ; sinon null.",
   "Ne recopie QUE ce qui est ecrit. N'invente aucun kilometrage, aucune date."
 ].join("\n");
+// Normalise un km lu (texte) → entier > 0, sinon null (0 = « non renseigné » pour un véhicule).
+FP._parseKm = (raw) => { const s = String(raw == null ? '' : raw).replace(/[^\d.]/g, ''); if (!s) return null; const n = Math.round(Number(s)); return (Number.isFinite(n) && n > 0) ? n : null; };
+// Normalise une date lue → 'AAAA-MM-JJ'. Accepte déjà-ISO ou JJ/MM/AAAA (séparateurs / - .).
+FP._parseDateLue = (raw) => {
+  const s = String(raw == null ? '' : raw).trim(); if (!s) return null;
+  let m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s); if (m) { const d = m[1] + '-' + m[2] + '-' + m[3]; return isNaN(new Date(d).getTime()) ? null : d; }
+  m = /(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})/.exec(s); if (m) { const d = m[3] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2); return isNaN(new Date(d).getTime()) ? null : d; }
+  return null;
+};
 FP.scanEdlKm = async function (file) {
+  const isPdf = (file && (file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '')));
+  // 1) PDF À CHAMPS (AcroForm) : on LIT directement les valeurs saisies (km, date) — déterministe, fiable,
+  //    là où l'IA « voit » souvent un formulaire vide (champs non rendus). On s'ancre sur le LIBELLÉ.
+  if (isPdf) {
+    try {
+      const pairs = (FP.ocr && FP.ocr.pdfFormPairs) ? await FP.ocr.pdfFormPairs(file) : [];
+      if (pairs && pairs.length) {
+        const findVal = (re) => { const p = pairs.find(x => re.test(x.label || '')); return p ? p.value : ''; };
+        const km = FP._parseKm(findVal(/kilom|compteur|\bkm\b/i));
+        const date = FP._parseDateLue(findVal(/date\s+de\s+(remise|restitution)/i) || findVal(/date/i));
+        const labelsJoined = pairs.map(x => x.label || '').join(' ').toLowerCase();
+        const sens = /restitution|retour|sortie/.test(labelsJoined) ? 'restitution' : 'remise';
+        // Si on a AU MOINS la date OU le km depuis les champs, on s'en sert (pas besoin de l'IA).
+        if (km != null || date) return { km, date, sens };
+      }
+    } catch (e) { /* repli IA ci-dessous */ }
+  }
+  // 2) Repli IA (vrai scan/photo, ou PDF sans champ) — s'ancre sur les libellés via le prompt.
   try {
     const f = await FP.scanIA(file, 'etat-des-lieux', FP.EDL_KM_PROMPT, { maxTokens: 600 });
     if (!f) return null;
-    let km = null;
-    if (f.km != null && String(f.km).replace(/[^\d]/g, '') !== '') { const n = Math.round(Number(String(f.km).replace(/[^\d.]/g, ''))); km = (Number.isFinite(n) && n > 0) ? n : null; }
-    const date = (f.date && /^\d{4}-\d{2}-\d{2}$/.test(String(f.date).slice(0, 10))) ? String(f.date).slice(0, 10) : null;
+    const km = FP._parseKm(f.km);
+    const date = FP._parseDateLue(f.date);
     const sv = String(f.sens || '').toLowerCase();
     const sens = (sv.indexOf('resti') >= 0 || sv.indexOf('sort') >= 0) ? 'restitution' : (f.sens ? 'remise' : null);
     return { km, date, sens };
@@ -11820,6 +11846,36 @@ FP.ocr = {
     const n = Math.min(pdf.numPages, maxPages);
     for (let p = 1; p <= n; p++) { const page = await pdf.getPage(p); const tc = await page.getTextContent(); out += tc.items.map(i => i.str).join(' ') + '\n'; }
     return out;
+  },
+  // Valeurs des CHAMPS DE FORMULAIRE (PDF remplissable / AcroForm) appariées à leur libellé par POSITION.
+  // Beaucoup d'états des lieux sont des PDF à champs : la valeur (km, date…) n'est NI dans la couche texte
+  // (= libellés seuls) NI toujours rendue par l'IA → on la lit ici, de façon déterministe. Renvoie
+  // [{label, value}] (le libellé = texte le plus proche à GAUCHE, sur la même ligne). [] si pas de champs.
+  async pdfFormPairs(file, maxPages = 3) {
+    await this.loadScript(this.PDFJS_CDN);
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = this.PDFJS_WORKER;
+    const buf = await file.arrayBuffer();
+    const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
+    const pairs = [];
+    const n = Math.min(pdf.numPages, maxPages);
+    for (let p = 1; p <= n; p++) {
+      const page = await pdf.getPage(p);
+      let anns = []; try { anns = await page.getAnnotations(); } catch (e) { anns = []; }
+      const widgets = (anns || []).filter(a => a && a.subtype === 'Widget' && (a.fieldType === 'Tx' || a.fieldType === 'Ch'));
+      if (!widgets.length) continue;
+      let items = [];
+      try { const tc = await page.getTextContent(); items = (tc.items || []).map(i => ({ str: String(i.str || ''), x: (i.transform || [])[4] || 0, y: (i.transform || [])[5] || 0 })).filter(i => i.str.trim()); } catch (e) { items = []; }
+      widgets.forEach(w => {
+        let v = w.fieldValue; if (Array.isArray(v)) v = v[0]; v = (v == null ? '' : String(v)).trim();
+        if (!v) return;
+        const r = w.rect || [0, 0, 0, 0];
+        const fx = Math.min(r[0], r[2]); const fy = (Math.min(r[1], r[3]) + Math.max(r[1], r[3])) / 2;
+        let best = null;
+        items.forEach(it => { if (Math.abs(it.y - fy) < 11 && it.x < fx + 2) { if (!best || it.x > best.x) best = it; } });
+        pairs.push({ label: best ? best.str.trim() : '', value: v });
+      });
+    }
+    return pairs;
   },
   async fileToText(file, maxPages) {
     const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '');
