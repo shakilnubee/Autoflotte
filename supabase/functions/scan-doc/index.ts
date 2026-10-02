@@ -1,23 +1,36 @@
 // ============================================================
 //  Edge Function : scan-doc
-//  Relais sécurisé entre Parc Pilot et l'API Claude (Haiku).
-//  - garde la clé ANTHROPIC_API_KEY côté serveur (jamais dans le site)
-//  - n'accepte que les utilisateurs connectés (JWT vérifié par Supabase)
-//  - lit une facture/document et renvoie les champs en JSON
+//  Relais sécurisé d'analyse documentaire de Parc Pilot.
 //
-//  Déploiement : Supabase → Edge Functions → New function "scan-doc"
-//  → coller ce code → Deploy.  Secret requis : ANTHROPIC_API_KEY.
+//  ARCHITECTURE (additive, sûre) :
+//   - OPENAI_API_KEY ABSENTE  → Claude seul (comportement HISTORIQUE, inchangé → rien ne casse).
+//   - OPENAI_API_KEY PRÉSENTE → OpenAI = lecteur PRINCIPAL (vision PDF/image, JSON strict).
+//        + pour les DOCS IMPORTANTS (facture, amende, carte grise, assurance, leasing),
+//          Claude = 2ᵉ lecteur INDÉPENDANT (validation champ par champ) :
+//            · CONFIRME    → on garde la valeur ;
+//            · DIVERGENCE  → on met le champ à null (jamais rempli en silence) + on le signale ;
+//            · INTROUVABLE → on garde la valeur OpenAI mais on la signale « à vérifier ».
+//        → une donnée douteuse n'est JAMAIS livrée comme sûre (consigne : une donnée fausse est
+//          plus dangereuse qu'une donnée vide).
+//
+//  - Garde les clés côté serveur (jamais dans le site).
+//  - N'accepte que les utilisateurs connectés (JWT vérifié par Supabase).
+//
+//  Secrets Supabase : ANTHROPIC_API_KEY (requis), OPENAI_API_KEY (optionnel → active OpenAI),
+//  ANTHROPIC_MODEL / OPENAI_MODEL (optionnels, surcharge des modèles).
 // ============================================================
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
-// Modèle Claude utilisé pour lire les documents / répondre à l'assistant.
-// ⚠️ Doit être un identifiant de modèle VALIDE (un ID invalide fait échouer TOUS les appels → « IA à 0 »).
-// Surchargeable sans redéployer via le secret Supabase ANTHROPIC_MODEL (Edge Functions → Secrets).
-// Liste de modèles essayés dans l'ORDRE : on garde le PREMIER accepté par le compte (les autres sont
-// des replis si l'un est retiré/indisponible). Surchargeable via le secret ANTHROPIC_MODEL (un seul
-// nom, ou plusieurs séparés par des virgules).
+const OPENAI_URL = "https://api.openai.com/v1/responses";
+// Modèles Claude essayés dans l'ordre (1er accepté gardé). Surcharge : secret ANTHROPIC_MODEL.
 const MODELS = (Deno.env.get("ANTHROPIC_MODEL") || "claude-sonnet-5,claude-haiku-4-5-20251001,claude-3-5-sonnet-20241022,claude-3-5-sonnet-latest")
   .split(",").map((s) => s.trim()).filter(Boolean);
+// Modèles OpenAI essayés dans l'ordre. Surcharge : secret OPENAI_MODEL.
+const OPENAI_MODELS = (Deno.env.get("OPENAI_MODEL") || "gpt-4o,gpt-4o-mini")
+  .split(",").map((s) => s.trim()).filter(Boolean);
+// Types de documents « importants » → double lecture (OpenAI + validation Claude).
+const RE_IMPORTANT = /facture|amende|avis|contravention|carte.?grise|assur|leasing|lld|loa|contrat|sinistre|devis|controle|contrôle/i;
+
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -70,16 +83,128 @@ function extractJson(text) {
   if (a === -1 || b === -1 || b < a) return null;
   try { return JSON.parse(cleaned.slice(a, b + 1)); } catch (_) { return null; }
 }
+
+// ---- Appel CLAUDE (Anthropic) : contenu = [bloc document, {type:text,...}]. Essaie les modèles dans l'ordre.
+async function callClaude(apiKey, content, maxTok) {
+  let lastErr = "aucun modele disponible", lastStatus = 502;
+  for (const m of MODELS) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 55000);
+    let apiRes;
+    try {
+      apiRes = await fetch(ANTHROPIC_URL, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
+        body: JSON.stringify({ model: m, max_tokens: maxTok, messages: [{ role: "user", content }] }),
+        signal: ctrl.signal,
+      });
+    } catch (e) {
+      clearTimeout(timer);
+      lastErr = (e && e.name === "AbortError") ? "timeout Claude" : ("appel Claude echoue: " + (e && e.message ? e.message : String(e)));
+      continue;
+    }
+    clearTimeout(timer);
+    const rawText = await apiRes.text();
+    let parsed = null; try { parsed = JSON.parse(rawText); } catch (_) {}
+    if (apiRes.ok && parsed) {
+      const text = (parsed.content || []).filter((x) => x.type === "text").map((x) => x.text || "").join("");
+      return { ok: true, text, model: m };
+    }
+    lastErr = (parsed && parsed.error && parsed.error.message) || ("HTTP " + apiRes.status + " : " + rawText.slice(0, 200));
+    lastStatus = apiRes.status;
+    if (apiRes.status === 404 && /model/i.test(lastErr)) continue;  // modèle absent → suivant
+    return { ok: false, error: lastErr, status: lastStatus };        // autre erreur → inutile d'insister
+  }
+  return { ok: false, error: lastErr, status: lastStatus };
+}
+
+// ---- Appel OPENAI (Responses API) : PDF via input_file, image via input_image. Essaie les modèles dans l'ordre.
+async function callOpenAI(apiKey, fileBase64, mediaType, promptText, maxTok) {
+  const isPdf = (mediaType || "").includes("pdf");
+  const fileItem = isPdf
+    ? { type: "input_file", filename: "document.pdf", file_data: `data:application/pdf;base64,${fileBase64}` }
+    : { type: "input_image", image_url: `data:${mediaType || "image/jpeg"};base64,${fileBase64}` };
+  const input = [{ role: "user", content: [fileItem, { type: "input_text", text: promptText }] }];
+  let lastErr = "aucun modele OpenAI disponible", lastStatus = 502;
+  for (const m of OPENAI_MODELS) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 55000);
+    let apiRes;
+    try {
+      apiRes = await fetch(OPENAI_URL, {
+        method: "POST",
+        headers: { "content-type": "application/json", "authorization": `Bearer ${apiKey}` },
+        body: JSON.stringify({ model: m, input, max_output_tokens: maxTok }),
+        signal: ctrl.signal,
+      });
+    } catch (e) {
+      clearTimeout(timer);
+      lastErr = (e && e.name === "AbortError") ? "timeout OpenAI" : ("appel OpenAI echoue: " + (e && e.message ? e.message : String(e)));
+      continue;
+    }
+    clearTimeout(timer);
+    const rawText = await apiRes.text();
+    let parsed = null; try { parsed = JSON.parse(rawText); } catch (_) {}
+    if (apiRes.ok && parsed) {
+      // Texte de sortie : convenance output_text, sinon on parcourt output[].content[].text.
+      let text = typeof parsed.output_text === "string" ? parsed.output_text : "";
+      if (!text && Array.isArray(parsed.output)) {
+        for (const it of parsed.output) {
+          if (it && Array.isArray(it.content)) for (const c of it.content) { if (c && (c.type === "output_text") && typeof c.text === "string") text += c.text; }
+        }
+      }
+      return { ok: true, text, model: m };
+    }
+    lastErr = (parsed && parsed.error && parsed.error.message) || ("HTTP " + apiRes.status + " : " + rawText.slice(0, 200));
+    lastStatus = apiRes.status;
+    const modelNotFound = (apiRes.status === 404 || apiRes.status === 400) && /model/i.test(lastErr);
+    if (modelNotFound) continue;
+    return { ok: false, error: lastErr, status: lastStatus };
+  }
+  return { ok: false, error: lastErr, status: lastStatus };
+}
+
+// ---- Validation Claude (2e lecteur) : vérifie CHAQUE champ du JSON OpenAI sur le document d'origine.
+function buildValidationPrompt(openaiFields) {
+  return [
+    "Tu es un CONTROLEUR INDEPENDANT. Voici un document, et des donnees extraites par un PREMIER outil (JSON ci-dessous).",
+    "Pour CHAQUE cle du JSON (sauf docType), VERIFIE toi-meme la valeur directement sur le document, SANS faire confiance au premier outil.",
+    "Renvoie UNIQUEMENT un objet JSON (aucun texte autour) : pour chaque cle, un objet { \"claude\": <la valeur que TU lis sur le document, ou null>, \"status\": \"CONFIRME\" | \"DIVERGENCE\" | \"INTROUVABLE\" }.",
+    "- CONFIRME : ta lecture correspond a la valeur du premier outil.",
+    "- DIVERGENCE : tu lis une valeur DIFFERENTE (donne-la dans \"claude\").",
+    "- INTROUVABLE : cette information n'est pas lisible/presente sur le document.",
+    "Ne CONFIRME jamais sans avoir reellement verifie. Ne devine pas. Memes regles de dates (JJ/MM/AAAA -> AAAA-MM-JJ, ne pas inverser jour/mois).",
+    "JSON a verifier :",
+    JSON.stringify(openaiFields || {}),
+  ].join("\n");
+}
+// Fusion sûre : garde la valeur si CONFIRME ; met null si DIVERGENCE (jamais une donnee douteuse en silence) ;
+// garde la valeur OpenAI mais signale si INTROUVABLE. Renvoie { fields, controle } (controle = détail par champ).
+function fusionner(openaiFields, validation) {
+  const fields = { ...openaiFields };
+  const controle = {};
+  const aVerifier = [];
+  if (!validation || typeof validation !== "object") return { fields, controle, aVerifier };
+  for (const k of Object.keys(openaiFields || {})) {
+    if (k === "docType") continue;
+    const ov = openaiFields[k];
+    if (ov == null || ov === "") continue;               // rien à valider si vide
+    const v = validation[k];
+    if (!v || typeof v !== "object") { continue; }       // champ non évalué → on garde tel quel
+    const status = String(v.status || "").toUpperCase();
+    controle[k] = { openai: ov, claude: (v.claude != null ? v.claude : null), status };
+    if (status === "DIVERGENCE") { fields[k] = null; aVerifier.push(k); }      // douteux → vide + à vérifier
+    else if (status === "INTROUVABLE") { aVerifier.push(k); }                   // gardé mais signalé
+    // CONFIRME → on garde la valeur telle quelle
+  }
+  return { fields, controle, aVerifier };
+}
+
 Deno.serve(async (req) => {
-  // ⚠️ CORS d'abord (le préflight OPTIONS doit toujours réussir). On RENVOIE EXACTEMENT les en-têtes
-  // que le navigateur demande (Access-Control-Request-Headers) → le preflight passe TOUJOURS, même si
-  // le client ajoute un en-tête inattendu (sinon le navigateur bloque le POST → « Failed to send a request »).
   if (req.method === "OPTIONS") {
     const reqH = req.headers.get("Access-Control-Request-Headers") || CORS["Access-Control-Allow-Headers"];
     return new Response("ok", { headers: { ...CORS, "Access-Control-Allow-Headers": reqH } });
   }
-  // Filet de sécurité GLOBAL : quoi qu'il arrive, on renvoie une erreur JSON AVEC en-têtes CORS —
-  // jamais un plantage « brut » (sinon le navigateur affiche « Failed to send a request » sans la cause).
   try {
     return await handle(req);
   } catch (e) {
@@ -91,84 +216,74 @@ async function handle(req) {
   if (req.method !== "POST") return json({ error: "method not allowed" }, 405);
   const auth = req.headers.get("Authorization") || "";
   if (!auth.startsWith("Bearer ")) return json({ error: "unauthorized" }, 401);
-  // ⚠️ SÉCURITÉ : on VALIDE réellement le jeton auprès de Supabase (pas juste la présence de
-  // « Bearer »), pour éviter qu'un tiers avec la clé publique appelle l'IA à tes frais.
-  // SUPABASE_URL / SUPABASE_ANON_KEY sont injectés automatiquement dans toute Edge Function.
+  // SÉCURITÉ : on VALIDE le jeton auprès de Supabase (fail-closed si variables absentes).
   {
     const token = auth.replace(/^Bearer\s+/i, "").trim();
     const SUPA = Deno.env.get("SUPABASE_URL"); const ANON = Deno.env.get("SUPABASE_ANON_KEY");
-    // FAIL-CLOSED : sans moyen de vérifier le jeton (variables absentes/mal configurées), on REFUSE
-    // au lieu d'ouvrir l'accès — sinon un déploiement sans ces variables transforme la fonction en
-    // proxy IA ouvert facturé sur la clé Anthropic.
     if (!SUPA || !ANON) return json({ error: "unauthorized" }, 401);
     try {
       const u = await fetch(`${SUPA}/auth/v1/user`, { headers: { Authorization: `Bearer ${token}`, apikey: ANON } });
       if (!u.ok) return json({ error: "unauthorized" }, 401);
     } catch (_) { return json({ error: "unauthorized" }, 401); }
   }
-  const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
-  if (!apiKey) return json({ error: "ANTHROPIC_API_KEY manquante" }, 500);
+
+  const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
+  const openaiKey = Deno.env.get("OPENAI_API_KEY");
+  if (!anthropicKey && !openaiKey) return json({ error: "Aucune clé IA configurée (ANTHROPIC_API_KEY / OPENAI_API_KEY)" }, 500);
+
   let payload;
   try { payload = await req.json(); } catch (_) { return json({ error: "corps invalide" }, 400); }
   const fileBase64 = payload.fileBase64;
   const mediaType = payload.mediaType || "";
   if (!fileBase64) return json({ error: "aucun fichier" }, 400);
   const isPdf = mediaType.includes("pdf");
-  const fileBlock = isPdf
-    ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: fileBase64 } }
-    : { type: "image", source: { type: "base64", media_type: mediaType || "image/jpeg", data: fileBase64 } };
-  // Le prompt peut venir du SITE (payload.prompt) : ainsi on ajuste la lecture par un simple
-  // deploiement GitHub, SANS jamais avoir a redeployer cette fonction. Repli : le prompt interne.
-  const promptText = (typeof payload.prompt === "string" && payload.prompt.trim().length > 30)
-    ? payload.prompt
-    : buildPrompt();
-  // max_tokens : 1024 par défaut ; le site peut en demander plus (payload.maxTokens) pour les
-  // grandes extractions type tableau (état de parc → une prime par véhicule), plafonné à 8192.
+  const docType = String(payload.docType || "");
+  const promptText = (typeof payload.prompt === "string" && payload.prompt.trim().length > 30) ? payload.prompt : buildPrompt();
   let maxTok = 1024;
   const reqTok = Number(payload.maxTokens);
   if (Number.isFinite(reqTok) && reqTok > 1024) maxTok = Math.min(Math.floor(reqTok), 8192);
-  const baseBody = {
-    max_tokens: maxTok,
-    messages: [{ role: "user", content: [fileBlock, { type: "text", text: promptText }] }],
-  };
-  console.log("[scan-doc] cle=" + (apiKey ? ("presente(" + apiKey.length + ")") : "ABSENTE") + " · modeles=" + MODELS.join(","));
-  // On essaie chaque modèle dans l'ordre ; on garde le 1er accepté. Un « modèle introuvable » (404)
-  // fait passer au suivant ; toute AUTRE erreur (clé, quota) est renvoyée telle quelle (inutile d'insister).
-  let data = null, usedModel = null, lastErr = "aucun modele disponible", lastStatus = 502;
-  for (const m of MODELS) {
-    let apiRes;
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 55000);
-    try {
-      apiRes = await fetch(ANTHROPIC_URL, {
-        method: "POST",
-        headers: { "content-type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
-        body: JSON.stringify({ ...baseBody, model: m }),
-        signal: ctrl.signal,
-      });
-    } catch (e) {
-      clearTimeout(timer);
-      const aborted = e && (e.name === "AbortError");
-      lastErr = aborted ? "L'API Claude n'a pas repondu a temps (timeout)." : ("appel API echoue: " + (e && e.message ? e.message : String(e)));
-      console.error("[scan-doc] " + m + " → " + lastErr);
-      continue; // réseau/timeout : on tente le modèle suivant
+
+  // Bloc document pour Claude (format Anthropic).
+  const claudeFileBlock = isPdf
+    ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: fileBase64 } }
+    : { type: "image", source: { type: "base64", media_type: mediaType || "image/jpeg", data: fileBase64 } };
+
+  // ========== CHEMIN 1 : OpenAI présent → lecteur principal (+ validation Claude sur docs importants) ==========
+  if (openaiKey) {
+    const oa = await callOpenAI(openaiKey, fileBase64, mediaType, promptText, maxTok);
+    if (oa.ok) {
+      const fields = extractJson(oa.text);
+      if (fields) {
+        const important = RE_IMPORTANT.test(docType) || RE_IMPORTANT.test(String(fields.docType || ""));
+        // Validation Claude (2e lecteur) — uniquement docs importants + clé Claude dispo.
+        if (important && anthropicKey) {
+          const vp = buildValidationPrompt(fields);
+          const cv = await callClaude(anthropicKey, [claudeFileBlock, { type: "text", text: vp }], Math.max(maxTok, 1500));
+          if (cv.ok) {
+            const validation = extractJson(cv.text);
+            const { fields: merged, controle, aVerifier } = fusionner(fields, validation);
+            return json({ ok: true, fields: merged, model: oa.model, validateur: cv.model, controle, aVerifier, lecteur: "openai+claude" }, 200);
+          }
+          // Validation indisponible → on renvoie quand même l'extraction OpenAI (ne bloque pas la lecture).
+          return json({ ok: true, fields, model: oa.model, lecteur: "openai", validationErreur: cv.error }, 200);
+        }
+        return json({ ok: true, fields, model: oa.model, lecteur: "openai" }, 200);
+      }
+      // OpenAI a répondu mais JSON illisible → on tente Claude en repli (si dispo).
     }
-    clearTimeout(timer);
-    const rawText = await apiRes.text();
-    let parsed = null; try { parsed = JSON.parse(rawText); } catch (_) {}
-    console.log("[scan-doc] " + m + " → status=" + apiRes.status);
-    if (apiRes.ok && parsed) { data = parsed; usedModel = m; break; }
-    lastErr = (parsed && parsed.error && parsed.error.message) || ("HTTP " + apiRes.status + " : " + rawText.slice(0, 200));
-    lastStatus = apiRes.status;
-    console.error("[scan-doc] " + m + " KO: " + lastErr);
-    const modelNotFound = apiRes.status === 404 && /model/i.test(lastErr);
-    if (modelNotFound) continue; // ce modèle n'existe pas pour ce compte → suivant
-    // Autre erreur (clé invalide, quota, surcharge…) : inutile d'essayer d'autres modèles.
-    return json({ error: lastErr, status: lastStatus }, 502);
+    // OpenAI indisponible/illisible → REPLI sur Claude seul (si clé dispo) pour ne pas bloquer la lecture.
+    if (anthropicKey) {
+      const cc = await callClaude(anthropicKey, [claudeFileBlock, { type: "text", text: promptText }], maxTok);
+      if (cc.ok) { const fields = extractJson(cc.text); if (fields) return json({ ok: true, fields, model: cc.model, lecteur: "claude (repli)" }, 200); return json({ ok: false, error: "lecture impossible", raw: cc.text }, 200); }
+      return json({ error: (oa.error || cc.error || "lecture impossible"), status: cc.status || oa.status || 502 }, 502);
+    }
+    return json({ error: oa.error || "lecture impossible (OpenAI)", status: oa.status || 502 }, 502);
   }
-  if (!data) return json({ error: "Aucun modele Claude disponible pour ce compte. Derniere erreur : " + lastErr, status: lastStatus }, 502);
-  const text = (data.content || []).filter((x) => x.type === "text").map((x) => x.text || "").join("");
-  const fields = extractJson(text);
-  if (!fields) return json({ ok: false, error: "lecture impossible", raw: text }, 200);
-  return json({ ok: true, fields, model: usedModel }, 200);
+
+  // ========== CHEMIN 2 : pas d'OpenAI → Claude seul (COMPORTEMENT HISTORIQUE, inchangé) ==========
+  const cc = await callClaude(anthropicKey, [claudeFileBlock, { type: "text", text: promptText }], maxTok);
+  if (!cc.ok) return json({ error: cc.error, status: cc.status }, 502);
+  const fields = extractJson(cc.text);
+  if (!fields) return json({ ok: false, error: "lecture impossible", raw: cc.text }, 200);
+  return json({ ok: true, fields, model: cc.model }, 200);
 }

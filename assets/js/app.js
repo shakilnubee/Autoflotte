@@ -11118,7 +11118,19 @@ FP.scanIA = async function (file, docType, promptOverride, opts) {
     for (const name of names) {
       try {
         const { data, error } = await FP.supabase.functions.invoke(name, { body: payload });
-        if (!error && data && data.ok && data.fields) { FP._scanFn = name; FP._scanLastErr = ''; return data.fields; }
+        if (!error && data && data.ok && data.fields) {
+          FP._scanFn = name; FP._scanLastErr = '';
+          // Lecture croisée OpenAI + Claude (docs importants) : on expose le détail + on prévient si des
+          // champs sont « à vérifier » (divergence entre les 2 lecteurs, ou valeur introuvable par le 2e).
+          // Les champs en DIVERGENCE sont déjà VIDÉS côté serveur (jamais une donnée douteuse en silence).
+          try {
+            FP._scanLecteur = data.lecteur || 'claude';
+            FP._scanControle = data.controle || null;
+            FP._scanAVerifier = Array.isArray(data.aVerifier) ? data.aVerifier : [];
+            if (FP._scanAVerifier.length && FP.toast) FP.toast('⚠️ Lecture croisée : ' + FP._scanAVerifier.length + ' champ(s) à vérifier (les 2 IA ne concordent pas) — ils sont laissés vides, contrôle le document.');
+          } catch (e) {}
+          return data.fields;
+        }
         // Capture la VRAIE raison (au lieu d'un « null » muet) pour l'afficher à l'utilisateur.
         if (error) { try { FP._scanLastErr = (FP._aiErrText ? await FP._aiErrText(error) : (error.message || '')); } catch (_) { FP._scanLastErr = error.message || ''; } }
         else if (data && data.error) {
