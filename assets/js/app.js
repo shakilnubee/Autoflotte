@@ -6108,8 +6108,11 @@ FP.cellEditor = (el, value, type, opts) => {
     }
     finish(true);
   });
-  // 'change' : pour un select, et pour une date (le calendrier FP.datePicker émet 'change' au choix → commit).
-  if (type === 'select' || type === 'date') inp.addEventListener('change', () => finish(true));
+  // 'change' : select = commit direct. DATE = on ne commit QUE si la date est déjà complète ET dans la plage
+  // (sinon, en tapant l'année directement, « 0202 » avant « 2027 » déclencherait un commit + re-render en
+  // pleine saisie → éjection). Le calendrier FP.datePicker, lui, n'émet 'change' qu'avec une date complète.
+  if (type === 'select') inp.addEventListener('change', () => finish(true));
+  else if (type === 'date') inp.addEventListener('change', () => { if (FP.dateIsoValide((inp.value || '').trim())) finish(true); });
 };
 
 FP.groupeLabel = (key) => {
