@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261002f">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261002g">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20261002f"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20261002g"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20261002f">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20261002g">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -520,6 +520,10 @@
     // pas éjecter de la fiche. (Même garde que le volet latéral.) Sinon, taper une date « sortait de la page ».
     var ae=document.activeElement;
     if(ae && (/^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName) || ae.isContentEditable)) return;
+    // ⚠️ Fermeture « une couche à la fois » (même garde que le volet latéral) : si le garde Échap central
+    // vient de fermer une couche AU-DESSUS (calendrier, aperçu, visionneuse…) sur ce même Échap, on ne
+    // ferme PAS la fiche.
+    try{ if(window.__fpEscLayerClosedAt && Date.now()-window.__fpEscLayerClosedAt < 200) return; }catch(_){}
     try{parent.postMessage('fp-fiche-close','*');}catch(_){}
   });
 }catch(e){}})();</script>
@@ -1133,8 +1137,8 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20261002f"></script>
-<script src="../assets/js/supabase-client.js?v=20261002f"></script>
+<script src="../assets/js/vendor/supabase.js?v=20261002g"></script>
+<script src="../assets/js/supabase-client.js?v=20261002g"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -1150,13 +1154,13 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261002f"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261002g"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
-<script src="../assets/js/fleet-docs.js?v=20261002f"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20261002f"></script>
+<script src="../assets/js/fleet-docs.js?v=20261002g"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20261002g"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20261002f"></script>
+<script src="../assets/js/app.min.js?v=20261002g"></script>
 <script>
   lucide.createIcons();
 
@@ -2483,6 +2487,9 @@
       if (state.groupe !== 'all' && !FP.vehGroupes(v).includes(state.groupe)) return false;
       // Véhicules VENDUS masqués par défaut (archivés) ; visibles seulement via le filtre "Vendus"
       if (state.statut === 'all') { if (FP.estVendu(v)) return false; }
+      // Filtre « Vendus » : passer par FP.estVendu (tolère « vendue »/accents/casse) — sinon un véhicule
+      // saisi « vendue » est masqué par défaut ET absent du filtre « Vendus » → invisible partout.
+      else if (state.statut === 'vendu') { if (!FP.estVendu(v)) return false; }
       else if (v.statut !== state.statut) return false;
       if (state.categorie !== 'all' && v.categorie !== state.categorie) return false;
       if (q && !(FP.norm(`${v.immat} ${v.marque} ${v.modele} ${v.chauffeur}`).includes(q))) return false;
@@ -2768,10 +2775,15 @@
     const selected = data.vehicules.filter(v => state.selectedIds.has(v.id));
     if (selected.length === 0) return;
     const headers = ['Immat','Marque','Modèle','Groupes','Catégorie','Km','Chauffeur','Statut','Prochain CT','Mise en circulation'];
-    const rows = selected.map(v => [
-      v.immat, v.marque, v.modele, FP.vehGroupes(v).map(FP.groupeLabel).join(' | '),
-      v.categorie, (isFinite(Number(v.km)) && v.km!=null && v.km!=='' ? Number(v.km) : ''), v.chauffeur, v.statut, v.prochainCT, v.dateMiseEnCirculation
-    ]);
+    const rows = selected.map(v => {
+      // Km EXACT = FP.kmActuel (relevé le + récent), comme l'écran/la fiche — jamais v.km brut (sinon
+      // l'export sort un km inférieur à ce qui est affiché partout). Règle « exports = mêmes données ».
+      const kmA = FP.kmActuel ? FP.kmActuel(v) : v.km;
+      return [
+        v.immat, v.marque, v.modele, FP.vehGroupes(v).map(FP.groupeLabel).join(' | '),
+        v.categorie, (isFinite(Number(kmA)) && kmA != null && kmA !== '' ? Number(kmA) : ''), v.chauffeur, v.statut, v.prochainCT, v.dateMiseEnCirculation
+      ];
+    });
     const stamp = new Date().toISOString().slice(0,10);
     // Vrai Excel (.xlsx) : Km numérique, colonnes propres, encodage correct.
     if (FP.downloadXlsx) { FP.downloadXlsx('parc-pilot-selection-'+stamp, headers, rows, { sheet:'Véhicules' }); return; }
@@ -5033,6 +5045,9 @@
     if (!$('drawer').classList.contains('open')) return;
     const ae = document.activeElement; // pas pendant une saisie
     if (ae && (/^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName) || ae.isContentEditable)) return;
+    // ⚠️ Si une couche est ouverte PAR-DESSUS la fiche (visionneuse photo FP.lightbox, calendrier,
+    // aperçu PDF…), les flèches doivent piloter CETTE couche, pas changer de véhicule derrière.
+    try { if (document.getElementById('fp-lb') || document.querySelector('.fp-dp') || (FP._fpAdHocOverlays && FP._fpAdHocOverlays().length)) return; } catch (_) {}
     if (e.key === 'ArrowLeft')  { const t = $('drawer-prev').dataset.targetId; if (t) { e.preventDefault(); openDrawer(t); } }
     if (e.key === 'ArrowRight') { const t = $('drawer-next').dataset.targetId; if (t) { e.preventDefault(); openDrawer(t); } }
     if (e.key === 'Escape')     {

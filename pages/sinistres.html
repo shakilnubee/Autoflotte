@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261002f">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261002g">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20261002f"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20261002g"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20261002f">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20261002g">
 <style>
   /* Dossier assurance (mobile) : les grilles à 3 colonnes contiennent des champs date/select dont la
      largeur minimale ne rentre pas sur un petit écran → débordement. On autorise le rétrécissement
@@ -423,8 +423,8 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20261002f"></script>
-<script src="../assets/js/supabase-client.js?v=20261002f"></script>
+<script src="../assets/js/vendor/supabase.js?v=20261002g"></script>
+<script src="../assets/js/supabase-client.js?v=20261002g"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -440,11 +440,11 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261002f"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261002g"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20261002f"></script>
+<script src="../assets/js/app.min.js?v=20261002g"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -1996,14 +1996,18 @@
       if (!isEdl && !isKm) {
         const veh = (data.vehicules || []).find(v => (FP.immatEq ? FP.immatEq(v.immat, d.plaque || '') : (FP.normImmat(v.immat) === FP.normImmat(d.plaque || ''))));
         const chauffeur = (veh && veh.chauffeur && veh.chauffeur !== '—') ? String(veh.chauffeur).trim() : '';
-        const tel = (FP.conducteurContact ? (FP.conducteurContact(chauffeur).tel || '') : '');
+        const _contact = (FP.conducteurContact ? (FP.conducteurContact(chauffeur) || {}) : {});
+        const tel = _contact.tel || '';
+        const email = _contact.email || '';
         const prenom = chauffeur ? chauffeur.split(/\s+/)[0] : '';
         const _nbp = String(d.plaque || '').replace(/-/g, '‑').replace(/ /g, ' ');
         const _veh = d.plaque ? ('le véhicule ' + _nbp) : 'le véhicule';
         const msgTxt = isQuestion
           ? `Bonjour ${prenom},\n💬 En réponse à la question concernant ${_veh} : `
           : `Bonjour ${prenom},\n👍 Le signalement concernant ${_veh} est bien arrivé — on s'en occupe !`;
-        smsBtn = `<button type="button" class="btn btn-outline text-xs" data-msg-open data-msg-phone="${FP.esc(tel)}" data-msg-nom="${FP.esc(prenom)}" data-msg-title="${FP.esc((isQuestion ? 'Répondre à ' : 'Prévenir ') + (prenom || 'le conducteur'))}" data-msg-text="${FP.esc(msgTxt)}"><i data-lucide="message-circle" class="w-3.5 h-3.5"></i> ${isQuestion ? 'Répondre (SMS/WhatsApp)' : 'SMS / WhatsApp'}</button>`;
+        // 3 canaux (règle projet) : SMS + WhatsApp + Email. data-msg-email → le bouton 📧 Email apparaît
+        // dans FP.msg.open dès qu'une adresse est connue. (La réponse ÉCRITE persistée reste le bouton dédié.)
+        smsBtn = `<button type="button" class="btn btn-outline text-xs" data-msg-open data-msg-phone="${FP.esc(tel)}" data-msg-email="${FP.esc(email)}" data-msg-nom="${FP.esc(prenom)}" data-msg-title="${FP.esc((isQuestion ? 'Répondre à ' : 'Prévenir ') + (prenom || 'le conducteur'))}" data-msg-text="${FP.esc(msgTxt)}"><i data-lucide="message-circle" class="w-3.5 h-3.5"></i> ${isQuestion ? 'Répondre' : 'SMS / WhatsApp / Email'}</button>`;
       }
       return `<div style="border:1px solid ${borderCol};border-radius:12px;padding:12px 14px;background:${bgCol}" data-decl="${FP.esc(d.id)}">
         <div class="flex items-center justify-between gap-2 flex-wrap mb-1">
@@ -2095,6 +2099,10 @@
         const prof = FP.societeProfil ? FP.societeProfil() : {};
         let socNom = String((prof && prof.nom) || '').trim();
         if (!socNom || /^parc\s*pilot$/i.test(socNom)) { try { const k = (FP.activeSociete && FP.activeSociete()) || ''; if (k && k !== '__all__') socNom = k; } catch (e) {} }
+        // Logo e-mail : MÊME source que tous les autres mails (profil.logoDataUrl || logoUrl ; hébergement
+        // via FP.hostSocieteLogo) — pas prof.mailLogo (souvent vide → logo manquant dans la réponse).
+        try { if (FP.hostSocieteLogo) await FP.hostSocieteLogo(); } catch (e) {}
+        let logoUrl = ''; try { const _p = (FP.settings.get().profil) || {}; logoUrl = _p.logoDataUrl || _p.logoUrl || ''; } catch (e) {}
         const lang = (FP.condLangue ? FP.condLangue(chauffeur) : 'fr') === 'en' ? 'en' : 'fr';
         const vehLbl = veh ? [veh.marque, veh.modele].filter(Boolean).join(' ') : '';
         const quoted = String(d.description || '').trim();
@@ -2110,7 +2118,7 @@
              ${quoted ? '<p style="margin:16px 0 4px;font-size:12px;color:#94A3B8;text-transform:uppercase;letter-spacing:.5px;font-weight:700">Ton signalement</p><p style="margin:0;font-size:13px;color:#475569;white-space:pre-line">' + esc(quoted) + '</p>' : ''}`;
         const subject = (lang === 'en' ? 'Reply to your report' : 'Réponse à ton signalement') + (d.plaque ? ' · ' + d.plaque : '');
         const title = lang === 'en' ? 'Reply from your fleet manager' : 'Réponse de ton gestionnaire';
-        const html = FP.mailBrand({ nomSoc: socNom, logoUrl: (prof && prof.mailLogo) || '', prenom: chauffeur, plaque: d.plaque || '', vehicule: vehLbl, title, bodyHtml, lang });
+        const html = FP.mailBrand({ nomSoc: socNom, logoUrl: logoUrl, prenom: chauffeur, plaque: d.plaque || '', vehicule: vehLbl, title, bodyHtml, lang });
         await FP.sendEmail({ to: email, cc: '', subject, html, text: reponse, replyTo: (prof && prof.mailExpediteur) || '' });
         if (FP.toast) FP.toast('Réponse envoyée au conducteur (espace + e-mail ✅).');
       } catch (e) { if (FP.toast) FP.toast('Réponse enregistrée — l\'e-mail n\'a pas pu partir.'); }

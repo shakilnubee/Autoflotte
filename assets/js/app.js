@@ -6040,6 +6040,20 @@ FP.driverKeysFromData = (data) => {
 
 // Éditeur de cellule inline réutilisable (double-clic → champ éditable)
 // FP.cellEditor(el, value, type, { options, onSave(newVal), onCancel })
+// Date ISO (yyyy-mm-dd) valide + année plausible (1990–2100) — SOURCE UNIQUE de validation de date.
+// Évite les dates aberrantes qui faisaient planter l'affichage (« en retard 738969 j ») ou polluaient
+// les filtres/décomptes (FP.joursRestants). Réutilisable partout (éditeurs inline, formulaires d'ajout).
+FP.dateIsoValide = (iso, opts) => {
+  opts = opts || {};
+  const min = opts.min || 1990, max = opts.max || 2100;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || '').trim());
+  if (!m) return false;
+  const yr = +m[1];
+  return yr >= min && yr <= max && !isNaN(new Date(iso).getTime());
+};
+// Un calendrier FP.datePicker est-il ouvert ? (overlay .fp-dp) — pour ne pas committer un éditeur
+// inline par blur pendant que l'utilisateur tape dans le calendrier (sinon re-render → éjection).
+FP.datePickerOuvert = () => { try { return !!document.querySelector('.fp-dp'); } catch (e) { return false; } };
 FP.cellEditor = (el, value, type, opts) => {
   opts = opts || {};
   if (!el || el.querySelector('.cell-edit')) return;
@@ -6057,20 +6071,40 @@ FP.cellEditor = (el, value, type, opts) => {
   inp.focus(); if (inp.select) inp.select();
   let done = false;
   const finish = (save) => {
-    if (done) return; done = true;
+    if (done) return;
     if (save) {
       let nv = inp.value;
       if (type === 'number') nv = (nv === '' ? null : parseFloat(nv));
+      else if (type === 'date') {
+        nv = (nv || '').trim();
+        if (nv) {
+          // Refuse une année aberrante (hors 1990–2100) — même garde que la fiche véhicule, désormais
+          // centralisée → protège factures ET amendes. On annule proprement (revient à l'ancienne valeur
+          // via onCancel), sans enregistrer de date cassée.
+          if (!FP.dateIsoValide(nv)) { if (FP.toast) FP.toast('Date invalide — année entre 1990 et 2100'); done = true; if (opts.onCancel) opts.onCancel(); return; }
+        } else nv = null;
+      }
       else if (typeof nv === 'string') nv = nv.trim();
+      done = true;
       if (opts.onSave) opts.onSave(nv);
-    } else if (opts.onCancel) opts.onCancel();
+    } else { done = true; if (opts.onCancel) opts.onCancel(); }
   };
   inp.addEventListener('keydown', ev => {
     if (ev.key === 'Enter') { ev.preventDefault(); finish(true); }
     else if (ev.key === 'Escape') { ev.preventDefault(); finish(false); }
   });
-  inp.addEventListener('blur', () => finish(true));
-  if (type === 'select') inp.addEventListener('change', () => finish(true));
+  inp.addEventListener('blur', (ev) => {
+    // ⚠️ Champs DATE : édités via le calendrier FP.datePicker (pop-up séparé). Cliquer dedans fait perdre
+    // le focus → blur → commit → re-render → éjection pendant la saisie. On ignore donc le blur tant que
+    // le calendrier est ouvert / reçoit le focus ; c'est le 'change' émis par FP.datePicker qui enregistre.
+    if (type === 'date') {
+      try { const rt = ev && ev.relatedTarget; if (rt && rt.closest && rt.closest('.fp-dp')) return; } catch (e) {}
+      if (FP.datePickerOuvert()) return;
+    }
+    finish(true);
+  });
+  // 'change' : pour un select, et pour une date (le calendrier FP.datePicker émet 'change' au choix → commit).
+  if (type === 'select' || type === 'date') inp.addEventListener('change', () => finish(true));
 };
 
 FP.groupeLabel = (key) => {
@@ -14500,6 +14534,14 @@ FP.exportRows = function (baseName, colDefs, rows, kind, opts) {
     pv.querySelector('#fp-prev-back').onclick = () => { pClose(); modal.style.display = 'flex'; };
     pv.querySelector('#fp-prev-dl').onclick = () => { if (curDoc) curDoc.save(curName); };
     pv.querySelector('#fp-prev-print').onclick = () => { const f = pv.querySelector('#fp-prev-frame'); try { f.contentWindow.focus(); f.contentWindow.print(); } catch (e) { if (f.src) window.open(f.src); } };
+    // ⚠️ Échap ferme la couche DU DESSUS (aperçu d'abord, sinon la modale de choix des colonnes), pas la
+    // fiche/tiroir derrière. Ces overlays ont un z-index < 1000 → invisibles au garde Échap central ; on
+    // gère donc Échap localement (comme FP.lightbox) : fermeture 1 par 1 + drapeau + stopPropagation.
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      if (pv.style.display !== 'none') { e.preventDefault(); e.stopPropagation(); try { window.__fpEscLayerClosedAt = Date.now(); } catch (_) {} pClose(); return; }
+      if (el.style.display !== 'none') { e.preventDefault(); e.stopPropagation(); try { window.__fpEscLayerClosedAt = Date.now(); } catch (_) {} close(); }
+    }, true);
   }
 
   function ctx() {
@@ -14652,6 +14694,15 @@ FP.pdfPreview = function (doc, filename, subtitle) {
     ov.querySelector('#fp-pdfprev-x').onclick = close;
     ov.querySelector('#fp-pdfprev-close').onclick = close;
     ov.addEventListener('click', e => { if (e.target === ov) close(); });
+    // ⚠️ Échap doit fermer CET aperçu (couche du dessus), PAS la fiche derrière. Ce overlay a un z-index
+    // < 1000 → le garde Échap central ne le voit pas ; on gère donc Échap localement (comme FP.lightbox) :
+    // on ferme, on pose le drapeau « une couche fermée » et on stoppe la propagation (fermeture 1 par 1).
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || ov.style.display === 'none') return;
+      e.preventDefault(); e.stopPropagation();
+      try { window.__fpEscLayerClosedAt = Date.now(); } catch (_) {}
+      close();
+    }, true);
     ov.querySelector('#fp-pdfprev-dl').onclick = () => { if (ov._doc) ov._doc.save(ov._name || 'document.pdf'); };
     ov.querySelector('#fp-pdfprev-print').onclick = () => { const f = ov.querySelector('#fp-pdfprev-frame'); try { f.contentWindow.focus(); f.contentWindow.print(); } catch (e) { if (f.src) window.open(f.src); } };
   }
@@ -15076,6 +15127,10 @@ document.addEventListener('click', (e) => {
   e.preventDefault();
   FP.msg.open({
     phone: b.getAttribute('data-msg-phone') || '',
+    // Canal E-mail (règle « 3 canaux ») : si data-msg-email est fourni, FP.msg.open affiche le bouton 📧
+    // et brande le texte. data-msg-emailsubject permet un objet personnalisé (sinon FP.msg en génère un).
+    email: b.getAttribute('data-msg-email') || '',
+    emailSubject: b.getAttribute('data-msg-emailsubject') || '',
     nom: b.getAttribute('data-msg-nom') || '',
     text: b.getAttribute('data-msg-text') || '',
     title: b.getAttribute('data-msg-title') || ''
