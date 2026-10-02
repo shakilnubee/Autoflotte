@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261002e">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261002f">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20261002e"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20261002f"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20261002e">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20261002f">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -692,8 +692,8 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20261002e"></script>
-<script src="../assets/js/supabase-client.js?v=20261002e"></script>
+<script src="../assets/js/vendor/supabase.js?v=20261002f"></script>
+<script src="../assets/js/supabase-client.js?v=20261002f"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -709,11 +709,11 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261002e"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261002f"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20261002e"></script>
+<script src="../assets/js/app.min.js?v=20261002f"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -858,8 +858,17 @@
     sel.innerHTML = html;
     sel.value = [...sel.options].some(o => o.value === cur) ? cur : 'all';
     leasingLoueurFilter = sel.value;
-    // Le filtre ne sert que s'il y a au moins 2 loueurs possibles.
-    { const wrap = document.getElementById('leasing-loueur-filter-outer') || document.getElementById('leasing-loueur-filter-wrap'); if (wrap) wrap.style.display = (noms.length + (hasLoc ? 1 : 0)) > 1 ? '' : 'none'; }
+    // Le filtre « par loueur » est PROPRE au sous-onglet Leasing : il ne doit JAMAIS apparaître
+    // sur Assurance / Contrats cadre (sinon « Tous les loueurs » s'affiche à côté d'« Ajouter un
+    // contrat », ce qui n'a aucun sens). On croise donc 2 conditions : (1) onglet actif = leasing,
+    // (2) au moins 2 loueurs possibles. Ce rendu pouvant tourner pendant qu'un AUTRE onglet est
+    // actif (rafraîchissement), on relit l'onglet courant sur le conteneur au lieu de ré-afficher.
+    { const wrap = document.getElementById('leasing-loueur-filter-outer') || document.getElementById('leasing-loueur-filter-wrap');
+      if (wrap) {
+        let tab = 'leasing'; try { tab = ($('contrat-sections') && $('contrat-sections').getAttribute('data-ctab')) || 'leasing'; } catch (e) {}
+        const assezDeLoueurs = (noms.length + (hasLoc ? 1 : 0)) > 1;
+        wrap.style.display = (tab === 'leasing' && assezDeLoueurs) ? '' : 'none';
+      } }
   }
 
   function rebuildLeasingData() {
@@ -2426,8 +2435,10 @@
     if (ba) ba.classList.toggle('active', name === 'assurance');
     if (bc) bc.classList.toggle('active', name === 'cadre');
     if (name === 'cadre') { try { renderCadre(); } catch (e) {} }
-    // Filtre « par loueur » + astuce de réorganisation = pertinents seulement sur Leasing.
-    const lw = document.getElementById('leasing-loueur-filter-outer') || document.getElementById('leasing-loueur-filter-wrap'); if (lw) lw.style.display = (name === 'leasing') ? '' : 'none';
+    // Filtre « par loueur » + astuce de réorganisation = pertinents seulement sur Leasing. Sur Leasing
+    // on délègue la visibilité à populateLeasingLoueurFilter (règle « ≥ 2 loueurs ») ; ailleurs on masque.
+    if (name === 'leasing') { try { populateLeasingLoueurFilter(); } catch (e) {} }
+    else { const lw = document.getElementById('leasing-loueur-filter-outer') || document.getElementById('leasing-loueur-filter-wrap'); if (lw) lw.style.display = 'none'; }
     const dh = document.getElementById('contrat-drag-hint'); if (dh) dh.style.display = (name === 'leasing') ? '' : 'none';
     // Boutons « Ajouter » CONTEXTUELS (gros bouton orange de l'en-tête) : un seul visible selon le
     // sous-onglet. Chaque bouton délègue au bouton d'action déjà présent dans sa section (source unique).

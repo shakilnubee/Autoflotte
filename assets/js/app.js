@@ -9511,7 +9511,13 @@ FP.dialog = function (opts) {
     const m = document.createElement('div'); m.className = 'fp-dlg-msg'; m.textContent = msg; body.appendChild(m);
     let input = null;
     if (type === 'prompt') {
-      input = document.createElement('input'); input.className = 'fp-dlg-input'; input.type = 'text';
+      // `multiline:true` → zone de texte (plusieurs lignes). Entrée = saut de ligne ; Ctrl/⌘+Entrée = valider.
+      if (opts.multiline) {
+        input = document.createElement('textarea'); input.className = 'fp-dlg-input';
+        input.rows = opts.rows || 4; input.style.resize = 'vertical'; input.style.minHeight = '90px'; input.style.lineHeight = '1.45';
+      } else {
+        input = document.createElement('input'); input.type = 'text'; input.className = 'fp-dlg-input';
+      }
       input.value = opts.defaultValue != null ? String(opts.defaultValue) : '';
       if (opts.placeholder) input.placeholder = opts.placeholder;
       body.appendChild(input);
@@ -9548,7 +9554,11 @@ FP.dialog = function (opts) {
     back.addEventListener('click', (e) => { if (e.target === back) onCancel(); });
     const onKey = (e) => {
       if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
-      else if (e.key === 'Enter' && (type === 'alert' || type === 'prompt' || e.target !== cancelBtn)) { e.preventDefault(); onOk(); }
+      else if (e.key === 'Enter') {
+        // Dans une zone de texte (multiline), Entrée = saut de ligne ; on ne valide qu'avec Ctrl/⌘+Entrée.
+        if (opts.multiline && e.target === input) { if (e.ctrlKey || e.metaKey) { e.preventDefault(); onOk(); } return; }
+        if (type === 'alert' || type === 'prompt' || e.target !== cancelBtn) { e.preventDefault(); onOk(); }
+      }
     };
     document.addEventListener('keydown', onKey, true);
     setTimeout(() => { try { (input || okBtn).focus(); } catch (e) {} }, 40);
@@ -15187,8 +15197,9 @@ FP.share = function (opts) {
 // tête) reçoit AUTOMATIQUEMENT un petit chevron pour la plier/déplier — sur toutes les pages, sans rien
 // marquer. État mémorisé (localStorage par société + page + titre). On IGNORE : les tuiles sans titre
 // (KPI, barres de filtres), les <details> (déjà pliables), les cartes dans un modal/tiroir, et toute carte
-// avec [data-no-collapse]. Seul le CHEVRON plie (pas de clic sur le titre → aucun conflit avec l'édition
-// de titre / les boutons d'en-tête). [data-collapsible="clé"] force une clé explicite. Idempotent.
+// avec [data-no-collapse]. Le CHEVRON **ou** un clic sur l'EN-TÊTE de la carte plie/déplie (geste naturel,
+// plus moderne) ; les contrôles interactifs de l'en-tête (boutons, liens, champs, titre en cours d'édition,
+// poignées de glisser) restent épargnés. [data-collapsible="clé"] force une clé explicite. Idempotent.
 (function () {
   const CHEV = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
   const _seen = {};
@@ -15223,10 +15234,21 @@ FP.share = function (opts) {
         chev.style.cssText = 'background:none;border:none;cursor:pointer;color:var(--fp-muted,#94a3b8);padding:4px;line-height:0;margin-left:auto;transition:transform .18s;flex:0 0 auto;align-self:flex-start';
         chev.innerHTML = CHEV;
         const apply = () => { bodies.forEach(b => { b.style.display = collapsed ? 'none' : ''; }); chev.style.transform = collapsed ? 'rotate(-90deg)' : ''; };
+        const toggle = () => { collapsed = !collapsed; try { localStorage.setItem(key, collapsed ? '1' : '0'); } catch (e2) {} apply(); };
         // Place le chevron dans l'en-tête, aligné à droite (header rendu flex si besoin).
         try { const cs = getComputedStyle(header); if (cs.display.indexOf('flex') < 0) { header.style.display = 'flex'; header.style.alignItems = 'center'; header.style.gap = header.style.gap || '8px'; } } catch (e) { header.style.display = 'flex'; }
         header.appendChild(chev);
-        chev.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); collapsed = !collapsed; try { localStorage.setItem(key, collapsed ? '1' : '0'); } catch (e2) {} apply(); });
+        chev.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); toggle(); });
+        // ⚡ Cliquer EN HAUT de la carte (l'en-tête) plie/déplie aussi — plus moderne, geste naturel. On
+        // ignore les clics sur un contrôle interactif (bouton, lien, champ, titre en cours d'édition, poignée
+        // de glisser) pour ne casser NI l'édition de titre (double-clic), NI les boutons d'en-tête, NI le
+        // réordonnancement par glisser. Le chevron a déjà son propre handler (stopPropagation).
+        header.style.cursor = 'pointer';
+        header.addEventListener('click', (e) => {
+          if (e.target.closest('button, a, input, select, textarea, label, [contenteditable], [contenteditable="true"], [draggable="true"], .drag-handle, [data-drag], [data-dragk], [data-no-collapse-click]')) return;
+          const sel = (window.getSelection && window.getSelection()); if (sel && String(sel).length > 0) return; // ne pas plier si on sélectionne du texte
+          toggle();
+        });
         apply();
       });
     } catch (e) {}
