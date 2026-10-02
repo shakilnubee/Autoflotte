@@ -1384,17 +1384,19 @@
     } catch (e) {}
   }
   // Lit le KM de TOUS les états des lieux importés (PDF/photo) qui n'ont pas encore de relevé km, via l'IA.
-  async function scanExistingEdlDocs(vehId) {
-    if (!(window.FP && FP.scanEdlKm && FP.edlHisto)) { if (FP.toast) FP.toast('Lecture IA indisponible (connexion requise).'); return; }
+  async function scanExistingEdlDocs(vehId, opts) {
+    opts = opts || {};
+    const silent = !!opts.silencieuxSiRien;   // auto (ouverture de fiche) : pas de toast si rien / échec
+    if (!(window.FP && FP.scanEdlKm && FP.edlHisto)) { if (!silent && FP.toast) FP.toast('Lecture IA indisponible (connexion requise).'); return; }
     const docs = FP.edlHisto.docsDe(getVehDocs(vehId), vehId);
     const inspList = (FP.settings.get().inspections || {})[vehId] || [];
     const hasKm = (date, sensNorm) => inspList.some(x => x && x.date === date && x.sens === sensNorm && x.km != null);
     const todo = docs.filter(d => { const date = FP.edlHisto.dateDe(d); const sensNorm = FP.edlHisto.sensDe(d) === 'restitution' ? 'Sortie' : 'Entrée'; return date && !hasKm(date, sensNorm); });
-    if (!todo.length) { if (FP.toast) FP.toast('Aucun état des lieux importé sans km à lire.'); return; }
+    if (!todo.length) { if (!silent && FP.toast) FP.toast('Aucun état des lieux importé sans km à lire.'); return; }
     let ok = 0, fail = 0;
     for (let i = 0; i < todo.length; i++) {
       const d = todo[i];
-      if (FP.toast) FP.toast('🔎 Lecture de l\'état des lieux ' + (i + 1) + '/' + todo.length + '…');
+      if (!silent && FP.toast) FP.toast('🔎 Lecture de l\'état des lieux ' + (i + 1) + '/' + todo.length + '…');
       try {
         const u = FP.signedScanUrl ? (await FP.signedScanUrl(d.url, 600)) : d.url;
         const resp = await fetch(u); const blob = await resp.blob();
@@ -1405,8 +1407,10 @@
       } catch (e) { fail++; }
     }
     reanchorVehEdl(vehId);
-    openDrawer(vehId);
-    if (FP.toast) FP.toast('✓ ' + ok + ' km lu(s)' + (fail ? (' · ' + fail + ' sans km (à saisir à la main)') : ''));
+    if (ok > 0) openDrawer(vehId);   // re-render seulement si on a VRAIMENT lu quelque chose (évite un refresh inutile)
+    // Auto (silencieux) : on ne parle QUE si on a lu un km. Manuel : on rapporte toujours le résultat.
+    if (ok > 0 && FP.toast) FP.toast('✓ ' + ok + ' km lu(s) sur les états des lieux' + (fail ? (' · ' + fail + ' illisible(s)') : ''));
+    else if (!silent && FP.toast) FP.toast(fail ? ('❌ Km non lu sur ' + fail + ' état(s) des lieux — saisis-le à la main (clic sur « Dernière révision » ou la ligne km).') : '✓ Terminé');
   }
   async function delVehDoc(vehId, docId) {
     // Corbeille 7 jours (restaurable) AVANT de retirer de la liste live.
@@ -2943,13 +2947,17 @@
       if (window.FP && FP.scanEdlKm && FP.edlHisto) {
         const _soc = (FP.activeSociete ? (FP.activeSociete() || '') : '') || 'PXP';
         const _flag = 'fp_edlkm_auto_' + _soc + '_' + id;
-        let _done = false; try { _done = localStorage.getItem(_flag) === '1'; } catch (e) {}
-        if (!_done) {
+        // ⚠️ On ne bloque PLUS définitivement après un seul essai : une lecture IA qui échoue (hors-ligne,
+        // PDF momentanément illisible) ne doit pas condamner la correction pour toujours. On RÉESSAIE jusqu'à
+        // 3 ouvertures de fiche TANT QU'il reste des états des lieux importés SANS km. Au-delà, on s'arrête
+        // (l'utilisateur garde le bouton « 🤖 Lire le km » pour relancer à la main).
+        let _att = 0; try { _att = parseInt(localStorage.getItem(_flag) || '0', 10) || 0; } catch (e) {}
+        if (_att < 3) {
           const _docs = FP.edlHisto.docsDe(getVehDocs(id), id);
           const _inspL = (FP.settings.get().inspections || {})[id] || [];
           const _hasKm = (dt, sn) => _inspL.some(x => x && x.date === dt && x.sens === sn && x.km != null);
           const _todo = _docs.filter(d => { const dt = FP.edlHisto.dateDe(d); const sn = FP.edlHisto.sensDe(d) === 'restitution' ? 'Sortie' : 'Entrée'; return dt && !_hasKm(dt, sn); });
-          if (_todo.length) { try { localStorage.setItem(_flag, '1'); } catch (e) {} setTimeout(() => { try { scanExistingEdlDocs(id); } catch (e) {} }, 500); }
+          if (_todo.length) { try { localStorage.setItem(_flag, String(_att + 1)); } catch (e) {} setTimeout(() => { try { scanExistingEdlDocs(id, { silencieuxSiRien: true }); } catch (e) {} }, 500); }
         }
       }
     } catch (e) {}
