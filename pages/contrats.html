@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261002m">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261002n">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20261002m"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20261002n"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20261002m">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20261002n">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -692,8 +692,8 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20261002m"></script>
-<script src="../assets/js/supabase-client.js?v=20261002m"></script>
+<script src="../assets/js/vendor/supabase.js?v=20261002n"></script>
+<script src="../assets/js/supabase-client.js?v=20261002n"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -709,11 +709,11 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261002m"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261002n"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20261002m"></script>
+<script src="../assets/js/app.min.js?v=20261002n"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -1541,18 +1541,31 @@
     const st = $('prime-doc-status');
     const show = (msg, col) => { if (st) { st.className = 'text-xs mt-1'; st.setAttribute('style', col || ''); st.innerHTML = msg; } };
     try {
-      // 1) Lecture IA du montant (comme une facture) — best effort, avant l'envoi.
-      show('🔍 Lecture du montant…', 'color:#475569');
-      let ia = null; try { ia = (window.FP && FP.scanIA) ? await FP.scanIA(file) : null; } catch (e) { console.warn('[prime IA]', e); }
-      if (ia) {
-        if (ia.montantTTC != null && !primeNum($('prime-ttc').value)) $('prime-ttc').value = String(ia.montantTTC).replace('.', ',');
-        if (ia.montantHT != null && !primeNum($('prime-ht').value)) $('prime-ht').value = String(ia.montantHT).replace('.', ',');
-      }
+      // 1) Lecture IA du montant — lecteur DÉDIÉ prime d'assurance (ancré sur les libellés « Prime/Cotisation
+      //    annuelle TTC », exclut franchise/capital/n° de police). Repli sur le lecteur générique si besoin.
+      show('🔍 Lecture du montant de la prime…', 'color:#475569');
+      let ttcLu = null, htLu = null, calcule = false;
+      try {
+        if (window.FP && FP.scanPrimeAssur) {
+          const r = await FP.scanPrimeAssur(file);
+          if (r) { ttcLu = r.ttc; htLu = r.ht; calcule = !!r.calcule; }
+        }
+        if (ttcLu == null && htLu == null && window.FP && FP.scanIA) {
+          const ia = await FP.scanIA(file); // repli générique
+          if (ia) { ttcLu = primeNum(ia.montantTTC); htLu = primeNum(ia.montantHT); }
+        }
+      } catch (e) { console.warn('[prime IA]', e); }
+      if (ttcLu != null && !primeNum($('prime-ttc').value)) $('prime-ttc').value = String(ttcLu).replace('.', ',');
+      if (htLu != null && !primeNum($('prime-ht').value)) $('prime-ht').value = String(htLu).replace('.', ',');
       // 2) Envoi du document dans le stockage.
       show('☁️ Envoi du document…', 'color:#475569');
       const url = (window.FP && FP.uploadScan) ? await FP.uploadScan(file, 'assurance') : '';
-      if (url) { _primeDoc = { url, name: file.name || 'prime-assurance.pdf' }; show('✓ Document déposé' + (ia && ia.montantTTC != null ? ' · montant lu automatiquement (vérifie).' : ' · saisis le montant.'), 'color:#047857'); }
-      else show('Document non enregistré (tu peux quand même saisir le montant).', 'color:#B45309');
+      const lu = (ttcLu != null);
+      const msg = url
+        ? ('✓ Document déposé' + (lu ? (' · montant lu automatiquement' + (calcule ? ' (reconstitué sur l\'année — vérifie)' : ' (vérifie)') + '.') : ' · montant non trouvé, saisis-le.'))
+        : (lu ? '✓ Montant lu (document non enregistré, réessaie le dépôt).' : 'Document non enregistré (tu peux saisir le montant).');
+      if (url) _primeDoc = { url, name: file.name || 'prime-assurance.pdf' };
+      show(msg, url ? 'color:#047857' : 'color:#B45309');
     } catch (e) { console.warn('[prime file]', e); show('Échec du dépôt : ' + (e.message || e), 'color:#B91C1C'); }
   }
 
@@ -4130,6 +4143,9 @@
     const k = normPlaque(immat);
     const findKey = (obj) => { for (const key in obj) if (normPlaque(key) === k) return key; return null; };
     const cur = (() => { const p = assurPrimes(); const key = findKey(p); return key ? p[key] : null; })();
+    // Prime MANQUANTE → ouvrir la modale (dépôt du document + lecture auto du montant par l'IA), plutôt qu'une
+    // simple saisie texte : c'est le chemin le plus direct pour « joindre la prime et laisser l'IA lire le montant ».
+    if (!(cur && Number.isFinite(cur.ttc))) { openPrimeModal(immat); return; }
     const curVal = (cur && Number.isFinite(cur.ttc)) ? cur.ttc : '';
     td.innerHTML = `<input type="text" inputmode="decimal" value="${curVal}" placeholder="€/an TTC" style="width:110px;text-align:right;border:1px solid var(--fp-accent);border-radius:6px;padding:2px 6px">`;
     const inp = td.querySelector('input'); inp.focus(); if (inp.select) inp.select();
