@@ -971,7 +971,10 @@
     if (sel) {
       const s = FP.settings.get(); s.sinistreStatut = s.sinistreStatut || {};
       if (sel.value) s.sinistreStatut[sel.dataset.id] = sel.value; else delete s.sinistreStatut[sel.dataset.id];
-      FP.settings.save(s); renderTimeline(); return;
+      FP.settings.save(s); renderTimeline();
+      // Retour visible (règle anti-écriture-silencieuse) : l'utilisateur voit que le statut est bien pris en compte.
+      if (FP.toast) { const lbl = (STAT_LABELS[sel.value] || 'Statut').replace(/^[^\wÀ-ÿ]+\s*/, ''); FP.toast('✓ Statut enregistré : ' + lbl); }
+      return;
     }
     const stg = e.target.closest('.sin-stage');
     if (stg) {
@@ -1762,8 +1765,10 @@
       const allFiles = sinDocs.filter(d => normPl(d.vehiculeId) === normPl(pl));
       const fileTile = d => {
         const u = escapeHtml(d.url || '');
+        // ⚠️ Bucket « scans » PRIVÉ : l'URL publique brute ne charge NI la miniature NI l'ouverture (403).
+        // → miniature via lien SIGNÉ (data-sign, signé après rendu) ; clic = FP.openScan (signe DANS le geste).
         return `<div class="drive-file" draggable="true" data-file-id="${escapeHtml(d.id)}" title="Glisser vers un sous-dossier pour ranger ce fichier">
-          <a href="${u}" target="_blank" rel="noopener" draggable="false" class="drive-file-preview">${isImg(d.url) ? `<img src="${u}" loading="lazy" draggable="false">` : `<i data-lucide="file-text"></i>`}</a>
+          <a href="#" draggable="false" class="drive-file-preview" data-drive-open="${u}" title="Voir ${escapeHtml(d.label || 'le fichier')}">${isImg(d.url) ? `<img data-sign="${u}" loading="lazy" draggable="false" alt="">` : `<i data-lucide="file-text"></i>`}</a>
           <div class="drive-file-name" title="${escapeHtml(d.label || '')}">${escapeHtml(d.label || 'fichier')}</div>
           <button type="button" class="drive-file-del" data-drive-del="${escapeHtml(d.id)}" title="Supprimer">✕</button>
         </div>`;
@@ -1794,8 +1799,18 @@
         const files = allFiles.filter(d => docSub(d.id) === driveSub);
         view.innerHTML = '<div class="drive-grid fp-gallery">' + uploadTile + files.map(fileTile).join('') + '</div>' + fileInput;
       }
+      signDriveImgs(view);   // miniatures privées → src signé
     }
     lucide.createIcons();
+  }
+  // Signe les miniatures (bucket privé) : chaque <img data-sign="urlPublique"> reçoit son src signé.
+  async function signDriveImgs(root){
+    if (!root || !(window.FP && FP.signedScanUrl)) return;
+    const imgs = Array.from(root.querySelectorAll('img[data-sign]'));
+    await Promise.all(imgs.map(async im => {
+      const raw = im.getAttribute('data-sign'); if (!raw) return;
+      try { const s = await FP.signedScanUrl(raw, 3600); if (s) im.src = s; } catch (e) {}
+    }));
   }
   // Ne redessine QUE la grille des dossiers (filtre + tri) sans toucher à la barre d'outils
   // → le focus reste dans le champ de recherche pendant la frappe.
@@ -1868,6 +1883,10 @@
     const f = e.target.closest('[data-folder]'); if (f){ driveFolder = f.dataset.folder; driveSub = null; renderDrive(); return; }
     if (e.target.closest('#drive-add')){ const inp = $('drive-file-input'); if (inp) inp.click(); return; }
     const del = e.target.closest('[data-drive-del]'); if (del){ delDriveDoc(del.dataset.driveDel); return; }
+    // Ouvrir un constat / une photo : bucket privé → FP.openScan ouvre l'onglet DANS le geste puis charge
+    // le lien signé (un window.open après await serait bloqué par le navigateur).
+    const openF = e.target.closest('[data-drive-open]');
+    if (openF){ e.preventDefault(); const u = openF.getAttribute('data-drive-open'); if (u){ if (window.FP && FP.openScan) FP.openScan(u); else window.open(u, '_blank', 'noopener'); } return; }
   });
   $('drive-view').addEventListener('input', (e) => {
     const s = e.target.closest('#drive-search'); if (s){ driveSearch = s.value; renderDriveGrid(); }
