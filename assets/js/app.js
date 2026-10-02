@@ -1786,7 +1786,12 @@ FP.ECHEANCE_COULEUR = { expire: '#DC2626', urgent: '#EA580C', bientot: '#D97706'
 FP.echeanceStatut = function (dateOrISO, kind) {
   const j = FP.joursRestants ? FP.joursRestants(dateOrISO) : null;
   if (j == null) return { jours: null, statut: 'inconnu', couleur: FP.ECHEANCE_COULEUR.inconnu };
-  const S = FP.ECHEANCE_SEUILS[kind] || FP.ECHEANCE_SEUILS.defaut;
+  // CT : les seuils suivent le RÉGLAGE configurable `notifCfg().ctJours` (Paramètres → Notifications),
+  // comme les alertes et Entretiens (urgent = ctJours/3, bientôt = ctJours×2/3 → 30/60 par défaut à 90).
+  // → une SEULE vérité pour la couleur/urgence du CT : tableau Véhicules, fiche, Contrats, Alertes.
+  let S;
+  if (kind === 'ct' && FP.notifCfg) { const I = (FP.notifCfg().ctJours || 90); S = { urgent: Math.round(I / 3), bientot: Math.round(I * 2 / 3) }; }
+  else S = FP.ECHEANCE_SEUILS[kind] || FP.ECHEANCE_SEUILS.defaut;
   let statut = 'valide';
   if (j < 0) statut = 'expire'; else if (j <= S.urgent) statut = 'urgent'; else if (j <= S.bientot) statut = 'bientot';
   return { jours: j, statut, couleur: FP.ECHEANCE_COULEUR[statut] };
