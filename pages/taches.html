@@ -317,6 +317,11 @@
         <summary class="field-label" style="cursor:pointer;margin-bottom:0">Historique</summary>
         <div id="t-hist" class="text-xs text-slate-500 space-y-1 mt-2"></div>
       </details>
+      <div id="t-garagepdf-wrap" style="display:none">
+        <div class="field-label">📎 Joindre la fiche du garage au conducteur (coordonnées, PDF) — optionnel</div>
+        <select class="field-input" id="t-garagepdf"></select>
+        <p class="text-xs text-slate-500 mt-1">Le conducteur recevra ce PDF <b>par e-mail</b> avec le rendez-vous. Pour ajouter la fiche PDF d'un garage, va dans <a href="entretiens.html#garages" style="color:var(--fp-accent);font-weight:600">Entretiens → Garages &amp; concessionnaires</a>.</p>
+      </div>
       <label class="flex items-center gap-2 text-sm" id="t-notify-wrap" style="cursor:pointer">
         <input type="checkbox" id="t-notify" class="task-check" checked>
         <span>Prévenir le conducteur maintenant (e-mail / SMS / WhatsApp). <b>Le rappel de la veille partira tout seul</b> si un véhicule est choisi.</span>
@@ -697,9 +702,10 @@
     document.querySelectorAll('#t-type-switch .filter-chip').forEach(c => c.classList.toggle('active', c.dataset.t === ty));
     $('t-date-lbl').textContent = ty === 'rdv' ? 'Date du rendez-vous' : 'Échéance (optionnel)';
     $('t-lieu-lbl').textContent = ty === 'rdv' ? 'Lieu / garage' : (ty === 'achat' ? 'Fournisseur' : 'Lieu');
-    // Heure + « prévenir le conducteur » : seulement pour un rendez-vous.
+    // Heure + « prévenir le conducteur » + fiche garage à joindre : seulement pour un rendez-vous.
     $('t-heure-wrap').style.display = ty === 'rdv' ? '' : 'none';
     $('t-notify-wrap').style.display = ty === 'rdv' ? '' : 'none';
+    { const gw = $('t-garagepdf-wrap'); if (gw) gw.style.display = ty === 'rdv' ? '' : 'none'; }
     const motifs = MOTIFS[ty] || [];
     $('t-motifs').innerHTML = motifs.map(mo => `<button type="button" class="filter-chip" data-motif="${escapeHtml(mo)}">${escapeHtml(mo)}</button>`).join('');
   }
@@ -735,6 +741,19 @@
     renderEtiquettes();
   }
 
+  // Remplit le menu « fiche du garage à joindre » avec les garages du carnet qui ONT un PDF (coordonnées).
+  // Défaut : le garage rattaché au véhicule choisi (s'il a un PDF) → zéro ressaisie. Source unique = carnet garages.
+  function populateGaragePdfSelect(selectedId, vehId) {
+    const sel = $('t-garagepdf'); if (!sel) return;
+    let list = []; try { list = (FP.getPrestataires ? FP.getPrestataires() : []).filter(p => p && p.pdfUrl); } catch (e) { list = []; }
+    // Garage par défaut rattaché au véhicule (règle marque / exception véhicule) s'il a un PDF.
+    let autoId = '';
+    try { const veh = (data.vehicules || []).find(v => v.id === vehId); const g = (veh && FP.garages) ? FP.garages.garageDe(veh) : null; if (g && g.pdfUrl) autoId = g.id; } catch (e) {}
+    const want = selectedId || autoId || '';
+    sel.innerHTML = '<option value="">— Aucune —</option>'
+      + list.map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.nom || 'Garage')}${(autoId && p.id === autoId) ? ' (garage du véhicule)' : ''}</option>`).join('');
+    sel.value = [...sel.options].some(o => o.value === want) ? want : '';
+  }
   function openNew(preset) {
     editingId = null; editSous = []; editEtiquettes = []; editComments = []; editHist = [];
     $('task-title').textContent = 'Nouvelle tâche';
@@ -745,6 +764,7 @@
     if (preset && preset.vehiculeId) { $('t-vehicule').value = preset.vehiculeId; try { $('t-vehicule').dispatchEvent(new Event('change')); } catch (e) {} }
     if (preset && preset.conducteur) $('t-conducteur').value = preset.conducteur;
     $('t-notify').checked = true;
+    populateGaragePdfSelect('', (preset && preset.vehiculeId) || '');
     renderEditSous(); renderEtiquettes(); renderComments(); renderHist();
     $('modal-task').classList.add('open');
     setTimeout(() => $('t-titre').focus(), 50);
@@ -768,6 +788,7 @@
     $('t-fournisseur').value = t.fournisseur || '';
     $('t-priorite').value = t.priorite || 'normale';
     $('t-note').value = t.note || '';
+    populateGaragePdfSelect(t.garagePdfId || '', t.vehiculeId || '');
     renderEditSous(); renderEtiquettes(); renderComments(); renderHist();
     $('modal-task').classList.add('open');
   }
@@ -790,6 +811,7 @@
       fournisseur: $('t-fournisseur').value.trim(),
       priorite: $('t-priorite').value || 'normale',
       note: $('t-note').value.trim(),
+      garagePdfId: (ty === 'rdv' && $('t-garagepdf')) ? ($('t-garagepdf').value || '') : '',
       etiquettes: editEtiquettes.slice(),
       commentaires: editComments.map(c => ({ txt: c.txt, at: c.at })),
       sousTaches: editSous.map(s => ({ txt: s.txt, done: !!s.done }))
@@ -885,6 +907,14 @@
           }
         } catch (_) {}
       }
+      // 📎 Fiche du garage (coordonnées, PDF) → jointe à l'e-mail du conducteur. Priorité à la fiche
+      // choisie sur la tâche ; sinon celle du garage rattaché au véhicule (source unique : carnet garages).
+      let garagePj = null;
+      try {
+        if (t.garagePdfId && FP.garages && FP.garages.byId) { const g = FP.garages.byId(t.garagePdfId); if (g && g.pdfUrl) garagePj = { filename: (g.pdfName || ((g.nom || 'garage') + '.pdf')), path: g.pdfUrl }; }
+        if (!garagePj && veh && FP.garages && FP.garages.pdfAttachmentDe) garagePj = FP.garages.pdfAttachmentDe(veh);
+      } catch (_) {}
+      if (garagePj) { emailOpts.attachments = (emailOpts.attachments || []).concat([garagePj]); }
       const html = FP.mailShell ? FP.mailShell({ brand: soc, logoUrl: logo, title: titre, bodyHtml: '<div style="white-space:pre-wrap;line-height:1.55">' + FP.esc(msg).replace(/\n/g, '<br>') + '</div>' + noteAgenda }) : '';
       // Objet : RDV → objet ÉDITABLE (Paramètres → E-mails), balises {motif}{date}{immat}{prenom} ;
       // autres types → objet générique repli.
@@ -980,7 +1010,12 @@
   }
   // Sélecteur véhicule CHERCHABLE (taper plaque / marque / modèle) — règle projet.
   if (FP.searchSelect) FP.searchSelect($('t-vehicule'), { placeholder: 'Rechercher (plaque, marque, modèle…)' });
-  if ($('t-vehicule')) $('t-vehicule').addEventListener('change', tkVehToCond);
+  if ($('t-vehicule')) $('t-vehicule').addEventListener('change', function () {
+    tkVehToCond();
+    // Re-propose la fiche du garage rattaché au nouveau véhicule — seulement si l'utilisateur n'a pas
+    // déjà choisi une fiche à la main (on ne change jamais un choix explicite).
+    try { const g = $('t-garagepdf'); if (g && !g.value) populateGaragePdfSelect('', $('t-vehicule').value || ''); } catch (e) {}
+  });
   // Conducteur : choisir dans la liste OU créer — règle projet (FP.conducteurPicker).
   if (FP.conducteurPicker) FP.conducteurPicker($('t-conducteur'), { onPick: tkCondToVeh });
   if ($('t-conducteur')) { $('t-conducteur').addEventListener('change', tkCondToVeh); $('t-conducteur').addEventListener('blur', tkCondToVeh); }
