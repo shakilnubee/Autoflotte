@@ -2915,6 +2915,22 @@
     if (!v) return;
     drawerVehId = id;
     edlPending = [];   // repart à zéro à chaque ouverture de fiche (pas de fuite entre véhicules)
+    // 🤖 Lecture AUTOMATIQUE (une seule fois par véhicule) du km des états des lieux IMPORTÉS qui n'ont
+    // pas encore de relevé → renseigne le km de début (remise) / restitution sans action de l'utilisateur.
+    try {
+      if (window.FP && FP.scanEdlKm && FP.edlHisto) {
+        const _soc = (FP.activeSociete ? (FP.activeSociete() || '') : '') || 'PXP';
+        const _flag = 'fp_edlkm_auto_' + _soc + '_' + id;
+        let _done = false; try { _done = localStorage.getItem(_flag) === '1'; } catch (e) {}
+        if (!_done) {
+          const _docs = FP.edlHisto.docsDe(getVehDocs(id), id);
+          const _inspL = (FP.settings.get().inspections || {})[id] || [];
+          const _hasKm = (dt, sn) => _inspL.some(x => x && x.date === dt && x.sens === sn && x.km != null);
+          const _todo = _docs.filter(d => { const dt = FP.edlHisto.dateDe(d); const sn = FP.edlHisto.sensDe(d) === 'restitution' ? 'Sortie' : 'Entrée'; return dt && !_hasKm(dt, sn); });
+          if (_todo.length) { try { localStorage.setItem(_flag, '1'); } catch (e) {} setTimeout(() => { try { scanExistingEdlDocs(id); } catch (e) {} }, 500); }
+        }
+      }
+    } catch (e) {}
     // Bouton « QR vente » visible seulement pour un véhicule « à vendre » (même règle que le portail).
     try { const _sv = (v.statut || '').toString().trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); const _btnv = $('drawer-qr-vente'); if (_btnv) _btnv.hidden = !/^a[\s-]?vendre$/.test(_sv); } catch (e) {}
 
