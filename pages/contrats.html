@@ -620,9 +620,11 @@
           <div id="prime-doc-status" class="text-xs mt-1"></div>
         </div>
       </div>
-      <div class="flex justify-end gap-2 mt-5">
+      <div class="flex justify-between items-center gap-2 mt-5">
+        <button id="prime-remove" type="button" class="btn btn-outline text-sm !text-red-600 !border-red-200 hidden" title="Supprimer la prime de ce véhicule"><i data-lucide="trash-2" class="w-4 h-4"></i> Retirer la prime</button>
+        <span class="flex-1"></span>
         <button id="prime-cancel" type="button" class="btn btn-outline text-sm">Annuler</button>
-        <button id="prime-save" type="button" class="btn btn-dark text-sm"><i data-lucide="check" class="w-4 h-4"></i> Ajouter au total</button>
+        <button id="prime-save" type="button" class="btn btn-dark text-sm"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer</button>
       </div>
     </div>
   </div>
@@ -1216,7 +1218,7 @@
         <td>${assCell}</td>
         <td><div class="flex flex-wrap gap-1">${FP.vehGroupes(v).map(k => `<span class="groupe-pill gp-${k}"><span class="dot"></span>${FP.groupeLabel(k)}</span>`).join('')}</div></td>
         <td><span class="badge ${pr ? 'badge-ok' : (hasPerVeh ? 'badge-warn' : 'badge-ok')}">${pr ? 'Couvert' : (hasPerVeh ? 'Prime manquante' : 'Couvert')}</span></td>
-        <td style="text-align:right;cursor:pointer" data-assur-edit="${FP.esc(v.immat||'')}" title="Cliquer pour modifier la prime (€/an TTC)">${cout} <i data-lucide="pencil" class="w-3 h-3 inline text-slate-300" style="vertical-align:-1px"></i>${(pr && pr.docUrl) ? ` <button type="button" data-assur-doc="${escC(pr.docUrl)}" onclick="event.stopPropagation()" title="Voir le document de la prime (${escC(pr.docName || 'PDF')})" style="background:none;border:none;cursor:pointer;color:var(--fp-accent);font-size:11.5px;font-weight:600">📄 PDF</button>` : ''} <button type="button" data-assur-attach="${FP.esc(v.immat||'')}" onclick="event.stopPropagation()" title="${(pr && pr.docUrl) ? 'Remplacer' : 'Joindre'} le PDF de la prime de ce véhicule" style="background:none;border:none;cursor:pointer;color:var(--fp-muted);font-size:11.5px">📎</button></td>
+        <td style="text-align:right;cursor:pointer" data-assur-edit="${FP.esc(v.immat||'')}" title="Cliquer pour saisir / modifier la prime (et déposer le document — montant lu par l'IA)">${cout} <i data-lucide="pencil" class="w-3 h-3 inline text-slate-300" style="vertical-align:-1px"></i>${(pr && pr.docUrl) ? ` <button type="button" data-assur-doc="${escC(pr.docUrl)}" onclick="event.stopPropagation()" title="Voir le document de la prime (${escC(pr.docName || 'PDF')})" style="background:none;border:none;cursor:pointer;color:var(--fp-accent);font-size:11.5px;font-weight:600">📄 PDF</button>` : ''}</td>
       </tr>`;
     }).join('');
     if (!tbody.children.length) tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:18px;color:var(--fp-muted)">Aucun véhicule à assurer pour le moment.</td></tr>`;
@@ -1531,8 +1533,26 @@
       }
     }
     const st = $('prime-doc-status'); if (st) { st.textContent = preImmat ? 'Dépose le PDF de la prime de ce véhicule (ou remplace-le).' : ''; st.className = 'text-xs mt-1'; }
+    updatePrimeRemoveBtn();
     const m = $('prime-modal'); m.classList.remove('hidden'); m.classList.add('flex');
     if (window.lucide) lucide.createIcons();
+  }
+  // Affiche le bouton « Retirer la prime » uniquement si le véhicule choisi a déjà une prime enregistrée.
+  function updatePrimeRemoveBtn(){
+    const btn = $('prime-remove'); if (!btn) return;
+    const immat = ($('prime-veh') && $('prime-veh').value || '').trim();
+    let has = false;
+    if (immat) { const p = assurPrimes(); const k = normPlaque(immat); for (const key in p) { if (normPlaque(key) === k && p[key] && Number.isFinite(p[key].ttc)) { has = true; break; } } }
+    btn.classList.toggle('hidden', !has);
+  }
+  function removePrime(){
+    const immat = ($('prime-veh').value || '').trim();
+    if (!immat) return;
+    const s = FP.settings.get(); s.assurancePrimes = (s.assurancePrimes && typeof s.assurancePrimes === 'object') ? s.assurancePrimes : {};
+    const k = normPlaque(immat); let existKey = null; for (const key in s.assurancePrimes) { if (normPlaque(key) === k) { existKey = key; break; } }
+    if (existKey) { delete s.assurancePrimes[existKey]; FP.settings.save(s); if (FP.toast) FP.toast('Prime retirée'); }
+    closePrimeModal();
+    renderKPIs(); renderAssurance();
   }
   function closePrimeModal(){ const m = $('prime-modal'); m.classList.add('hidden'); m.classList.remove('flex'); _primeDoc = null; }
 
@@ -4106,6 +4126,8 @@
   if ($('prime-drop')) $('prime-drop').addEventListener('click', () => { const inp = $('prime-file'); if (inp) { inp.value = ''; inp.click(); } });
   if ($('prime-file')) $('prime-file').addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; if (f) primeFileSelected(f); });
   if ($('prime-save')) $('prime-save').addEventListener('click', savePrime);
+  if ($('prime-remove')) $('prime-remove').addEventListener('click', removePrime);
+  if ($('prime-veh')) $('prime-veh').addEventListener('change', updatePrimeRemoveBtn);
   // Tri du tableau Assurance : clic sur l'en-tête « Véhicule » ou « Coût annuel/véh. » → trie / bascule
   // asc↔desc. Mémorisé (settings.assurSort) → retrouvé sur tous les postes. Défaut = par montant (desc).
   document.querySelectorAll('[data-assur-sort]').forEach(th => th.addEventListener('click', () => {
@@ -4123,7 +4145,9 @@
     if (FP.toast) FP.toast('Assureur du véhicule mis à jour ✓');
     renderAssurance();
   });
-  // Édition inline de la prime au clic dans le tableau assurance (modifier / vider une prime).
+  // Clic sur la prime dans le tableau assurance → ouvre la MODALE (saisie du montant + dépôt du document,
+  // lu par l'IA). Un SEUL point d'entrée (plus de bouton « 📎 joindre » séparé, source de confusion) :
+  // qu'une prime existe ou non, on gère tout au même endroit. La modale est pré-remplie si la prime existe.
   if ($('tbody-assurance')) $('tbody-assurance').addEventListener('click', (e) => {
     // 📄 Voir le document de la prime (bucket privé → URL signée avant ouverture).
     const doc = e.target.closest('[data-assur-doc]');
@@ -4135,38 +4159,9 @@
         .catch(() => { if (url) window.open(url, '_blank', 'noopener'); });
       return;
     }
-    // 📎 Joindre / remplacer le PDF de la prime de CE véhicule → ouvre la modale pré-remplie (dépôt du PDF).
-    const att = e.target.closest('[data-assur-attach]');
-    if (att) { e.preventDefault(); e.stopPropagation(); openPrimeModal(att.getAttribute('data-assur-attach')); return; }
-    const td = e.target.closest('[data-assur-edit]'); if (!td || td.querySelector('input')) return;
+    const td = e.target.closest('[data-assur-edit]'); if (!td) return;
     const immat = td.dataset.assurEdit; if (!immat) return;
-    const k = normPlaque(immat);
-    const findKey = (obj) => { for (const key in obj) if (normPlaque(key) === k) return key; return null; };
-    const cur = (() => { const p = assurPrimes(); const key = findKey(p); return key ? p[key] : null; })();
-    // Prime MANQUANTE → ouvrir la modale (dépôt du document + lecture auto du montant par l'IA), plutôt qu'une
-    // simple saisie texte : c'est le chemin le plus direct pour « joindre la prime et laisser l'IA lire le montant ».
-    if (!(cur && Number.isFinite(cur.ttc))) { openPrimeModal(immat); return; }
-    const curVal = (cur && Number.isFinite(cur.ttc)) ? cur.ttc : '';
-    td.innerHTML = `<input type="text" inputmode="decimal" value="${curVal}" placeholder="€/an TTC" style="width:110px;text-align:right;border:1px solid var(--fp-accent);border-radius:6px;padding:2px 6px">`;
-    const inp = td.querySelector('input'); inp.focus(); if (inp.select) inp.select();
-    let done = false;
-    const commit = (save) => {
-      if (done) return; done = true;
-      if (save) {
-        const val = parseFloat((inp.value || '').replace(/[^\d,.\-]/g, '').replace(',', '.'));
-        const s = FP.settings.get(); s.assurancePrimes = (s.assurancePrimes && typeof s.assurancePrimes === 'object') ? s.assurancePrimes : {};
-        const existKey = findKey(s.assurancePrimes);
-        if (Number.isFinite(val) && val > 0) {
-          s.assurancePrimes[existKey || immat] = Object.assign({}, existKey ? s.assurancePrimes[existKey] : {}, { ttc: val });
-          FP.settings.save(s); if (FP.toast) FP.toast(`Prime mise à jour : ${FP.euro(val)}/an`);
-        } else if ((inp.value || '').trim() === '' || val === 0) {
-          if (existKey) { delete s.assurancePrimes[existKey]; FP.settings.save(s); if (FP.toast) FP.toast('Prime retirée'); }
-        }
-      }
-      renderAssurance(); renderKPIs();
-    };
-    inp.addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); commit(true); } else if (ev.key === 'Escape') { ev.preventDefault(); commit(false); } });
-    inp.addEventListener('blur', () => commit(true));
+    openPrimeModal(immat);
   });
   // Masquer / réafficher les véhicules « sans prime » que l'utilisateur sait normaux
   if ($('assur-missing')) $('assur-missing').addEventListener('click', (e) => {
