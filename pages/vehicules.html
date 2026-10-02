@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261002i">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261002j">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20261002i"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20261002j"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20261002i">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20261002j">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -1137,8 +1137,8 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20261002i"></script>
-<script src="../assets/js/supabase-client.js?v=20261002i"></script>
+<script src="../assets/js/vendor/supabase.js?v=20261002j"></script>
+<script src="../assets/js/supabase-client.js?v=20261002j"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -1154,13 +1154,13 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261002i"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261002j"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
-<script src="../assets/js/fleet-docs.js?v=20261002i"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20261002i"></script>
+<script src="../assets/js/fleet-docs.js?v=20261002j"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20261002j"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20261002i"></script>
+<script src="../assets/js/app.min.js?v=20261002j"></script>
 <script>
   lucide.createIcons();
 
@@ -4578,9 +4578,22 @@
       } catch (e) {}
       commit(true);
     });
-    // 'change' couvre AUSSI le choix d'une date dans le calendrier FP.datePicker (qui émet 'change') →
-    // la date sélectionnée s'enregistre TOUT DE SUITE, sans avoir à cliquer ailleurs ni valider.
-    el.addEventListener('change', () => commit(true));
+    // 'change' couvre AUSSI le choix d'une date dans le calendrier FP.datePicker (qui émet 'change').
+    if (type === 'date') {
+      // ⚠️ BUG « ça sort de la page quand j'écris l'année directement » : en TAPANT dans le champ date, le
+      // navigateur émet 'change' à CHAQUE date complète intermédiaire (ex. « 0202 » avant « 2027 »). Comme
+      // ces années sont hors plage, commit() re-rendait la fiche → éjection en pleine saisie. On ne valide
+      // donc sur 'change' QUE si la date est DÉJÀ complète ET dans la plage 1990–2100 ; sinon on ignore en
+      // silence (l'utilisateur continue de taper). Entrée / sortie du champ (blur) finalisent normalement.
+      const dateCompleteOk = () => {
+        const nv = (el.value || '').trim(); if (!nv) return false;
+        const md = /^(\d{4})-(\d{2})-(\d{2})$/.exec(nv); const yr = md ? +md[1] : NaN;
+        return !!(md && yr >= 1990 && yr <= 2100 && !isNaN(new Date(nv).getTime()));
+      };
+      el.addEventListener('change', () => { if (dateCompleteOk()) commit(true); });
+    } else {
+      el.addEventListener('change', () => commit(true));
+    }
   }
 
   let _rowClickTimer = null;
