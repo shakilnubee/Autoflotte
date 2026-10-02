@@ -1532,7 +1532,20 @@
         if (cur.docUrl) _primeDoc = { url: cur.docUrl, name: cur.docName || 'prime-assurance.pdf' };
       }
     }
-    const st = $('prime-doc-status'); if (st) { st.textContent = preImmat ? 'Dépose le PDF de la prime de ce véhicule (ou remplace-le).' : ''; st.className = 'text-xs mt-1'; }
+    const st = $('prime-doc-status');
+    if (st) {
+      st.className = 'text-xs mt-1';
+      if (_primeDoc && _primeDoc.url) {
+        // Un document est déjà déposé pour ce véhicule → lien direct pour LE VOIR (le clic ne doit pas rester muet).
+        st.innerHTML = '✓ Document déjà déposé — <a href="#" id="prime-view-doc" style="color:var(--fp-accent);font-weight:700">📄 Voir le document</a> · tu peux le remplacer en déposant un nouveau fichier.';
+        const vd = $('prime-view-doc');
+        if (vd) vd.onclick = (ev) => {
+          ev.preventDefault();
+          const u0 = (_primeDoc && _primeDoc.url) || '';
+          if (u0) { if (window.FP && FP.openScan) FP.openScan(u0); else window.open(u0, '_blank', 'noopener'); }
+        };
+      } else { st.textContent = preImmat ? 'Dépose le PDF de la prime de ce véhicule (le montant est lu automatiquement).' : ''; }
+    }
     updatePrimeRemoveBtn();
     const m = $('prime-modal'); m.classList.remove('hidden'); m.classList.add('flex');
     if (window.lucide) lucide.createIcons();
@@ -4154,9 +4167,9 @@
     if (doc) {
       e.preventDefault(); e.stopPropagation();
       const url = doc.getAttribute('data-assur-doc');
-      Promise.resolve((window.FP && FP.signedScanUrl) ? FP.signedScanUrl(url, 3600) : url)
-        .then(u => { if (u) window.open(u, '_blank', 'noopener'); })
-        .catch(() => { if (url) window.open(url, '_blank', 'noopener'); });
+      // SOURCE UNIQUE d'ouverture d'un document : FP.openScan ouvre l'onglet DANS le geste de clic (sinon le
+      // navigateur BLOQUE la fenêtre ouverte après l'await du lien signé → « je clique mais rien ne s'ouvre »).
+      if (url) { if (window.FP && FP.openScan) FP.openScan(url); else window.open(url, '_blank', 'noopener'); }
       return;
     }
     const td = e.target.closest('[data-assur-edit]'); if (!td) return;

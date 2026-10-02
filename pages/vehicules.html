@@ -1558,7 +1558,8 @@
       Object.keys(m).forEach(key => {
         if (normImmat(key) !== vK) return;
         (Array.isArray(m[key]) ? m[key] : []).forEach((d, i) => {
-          if (d && d.url && !seenUrls.has(d.url)) { seenUrls.add(d.url); leaseDocs.push({ url: d.url, label: d.name || 'Contrat de leasing', _k: key + '::' + i }); }
+          // ⚠️ TITRE = le TYPE (jamais le nom de fichier brut « 5528091_TJMAX___… ») — demande utilisateur.
+          if (d && d.url && !seenUrls.has(d.url)) { seenUrls.add(d.url); leaseDocs.push({ url: d.url, label: 'Contrat de leasing', _k: key + '::' + i }); }
         });
       });
       // (b) Ayvens / LLD / autres loueurs (ex. Xpeng) : contrats saisis dans Contrats, docs rattachés au contrat.
@@ -1568,9 +1569,10 @@
         if (!cK || cK !== vK) return;
         const lab = 'Contrat de leasing' + (c.loueur ? ' — ' + c.loueur : '');
         const cdocs = Array.isArray(c.docs) ? c.docs.slice() : [];
-        if (!cdocs.length && c.pdfUrl) cdocs.push({ url: c.pdfUrl, name: lab });
+        if (!cdocs.length && c.pdfUrl) cdocs.push({ url: c.pdfUrl });
         cdocs.forEach(d => {
-          if (d && d.url && !seenUrls.has(d.url)) { seenUrls.add(d.url); leaseDocs.push({ url: d.url, label: d.name || lab, _ro: true }); }
+          // ⚠️ TITRE = le TYPE (+ loueur), jamais le nom de fichier brut — demande utilisateur.
+          if (d && d.url && !seenUrls.has(d.url)) { seenUrls.add(d.url); leaseDocs.push({ url: d.url, label: lab, _ro: true }); }
         });
       });
     } catch (e) {}
@@ -5447,9 +5449,10 @@
     const open = e.target.closest('[data-doc-open]');
     if (open) {
       e.preventDefault();
-      let url = open.getAttribute('data-doc-open');
-      try { if (window.FP && FP.signedScanUrl) url = await FP.signedScanUrl(url, 3600); } catch (e2) {}
-      if (url) window.open(url, '_blank', 'noopener');
+      const url = open.getAttribute('data-doc-open');
+      // SOURCE UNIQUE : FP.openScan ouvre l'onglet DANS le geste de clic puis y charge le lien signé — sinon
+      // le window.open APRÈS l'await est BLOQUÉ par le navigateur (« je clique sur Voir mais rien ne s'ouvre »).
+      if (url) { if (window.FP && FP.openScan) FP.openScan(url); else window.open(url, '_blank', 'noopener'); }
       return;
     }
     // Carnet d'entretien : « Voir » une facture d'entretien/réparation du véhicule.
