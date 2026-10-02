@@ -132,6 +132,143 @@
     <div style="display:none">
     </div>
 
+    <!-- 🏭 GARAGES & CONCESSIONNAIRES (déplacé depuis Paramètres — carnet + PDF lu par IA + règle marque + par véhicule) -->
+    <details class="card p-6 mb-6" id="garages-card">
+      <summary style="cursor:pointer;list-style:none" class="flex items-center justify-between gap-2">
+        <span class="font-extrabold flex items-center gap-2" style="color:var(--fp-primary)"><i data-lucide="wrench" class="w-5 h-5"></i> Garages &amp; concessionnaires</span>
+        <i data-lucide="chevron-down" class="w-5 h-5 text-slate-400"></i>
+      </summary>
+      <p class="text-sm text-slate-600 mt-3 mb-4">Ton <b>carnet d'adresses garages</b> (partagé avec Sinistres et les e-mails « Prévenir ») : nom, adresse, e-mail, téléphone, et un <b>PDF</b> (fiche du garage / bon de rendez-vous) qui se <b>joindra tout seul</b> à l'e-mail « Prévenir » du véhicule concerné. <b>💡 Dépose le PDF : l'IA remplit le nom / l'adresse / l'e-mail / le téléphone tout seuls.</b> Ensuite choisis <b>quel garage pour quelle marque</b>, et au besoin une <b>exception par véhicule</b>.</p>
+
+      <div class="section-title" style="font-size:1rem;margin-top:.5rem"><i data-lucide="notebook-tabs" class="w-4 h-4"></i> Carnet d'adresses</div>
+      <div id="garages-rows" class="space-y-3 mt-2"></div>
+      <input type="file" id="garage-pdf-file" accept="application/pdf,image/*" class="hidden" />
+      <div class="mt-3"><button class="btn btn-outline text-sm" id="btn-add-garage"><i data-lucide="plus" class="w-4 h-4"></i> Ajouter un garage</button></div>
+
+      <div class="section-title" style="font-size:1rem;margin-top:1.6rem"><i data-lucide="git-branch" class="w-4 h-4"></i> Garage par marque</div>
+      <p class="text-sm text-slate-600 mb-2">Pour chaque marque de ta flotte, choisis le garage par défaut. Il s'appliquera automatiquement à tous les véhicules de cette marque (sauf exception par véhicule ci-dessous).</p>
+      <div id="garages-marques" class="space-y-2"></div>
+
+      <div class="section-title" style="font-size:1rem;margin-top:1.6rem"><i data-lucide="car" class="w-4 h-4"></i> Garage par véhicule (exception)</div>
+      <p class="text-sm text-slate-600 mb-2">Si un véhicule va dans un garage <b>différent</b> de celui de sa marque, choisis-le ici (deux véhicules d'une même marque peuvent ainsi avoir un garage différent). Laisse « — Selon la marque — » sinon.</p>
+      <input type="text" id="garages-veh-search" class="field-input mb-2" placeholder="Filtrer un véhicule (plaque, marque, conducteur)…" style="max-width:360px" />
+      <div id="garages-vehicules" class="space-y-2"></div>
+      <p id="garages-status" class="text-xs mt-3 text-slate-400">Tout est enregistré et synchronisé automatiquement sur tous tes appareils.</p>
+    </details>
+    <script>
+    // ===== GARAGES & CONCESSIONNAIRES (déplacé de Paramètres) — carnet + PDF lu par IA + règle marque + par véhicule.
+    // Réutilise le référentiel UNIQUE (FP.getPrestataires/savePrestataire/delete, FP.garages) → aucune donnée dupliquée.
+    (function garagesCard(){
+      const esc = (window.FP && FP.esc) ? FP.esc : (x => String(x == null ? '' : x));
+      let _pdfTarget = '', _vehSearch = '';
+      const vehs = () => (window.FP_DATA && Array.isArray(FP_DATA.vehicules)) ? FP_DATA.vehicules : ((window.data && data.vehicules) || []);
+      function status(t){ const s=document.getElementById('garages-status'); if(!s) return; s.textContent=t; s.style.color='#15803D'; setTimeout(()=>{ s.textContent='Tout est enregistré et synchronisé automatiquement sur tous tes appareils.'; s.style.color=''; }, 2800); }
+      function rowHTML(g){
+        const pdf = g.pdfUrl
+          ? '<a href="'+esc(g.pdfUrl)+'" target="_blank" class="text-xs font-semibold" style="color:var(--fp-accent)">📄 '+esc(g.pdfName||'PDF')+'</a> · <button type="button" class="text-xs font-semibold" data-g-pdf-del="'+esc(g.id)+'" style="color:#dc2626">retirer</button>'
+          : '<button type="button" class="btn btn-outline text-xs" data-g-pdf="'+esc(g.id)+'"><i data-lucide="paperclip" class="w-3.5 h-3.5"></i> Ajouter un PDF (lu par l\'IA)</button>';
+        return '<div class="rounded-lg border p-3" style="border-color:var(--fp-border)" data-g-row="'+esc(g.id)+'">'
+          + '<div class="grid grid-cols-1 md:grid-cols-2 gap-2">'
+            + '<label class="text-xs font-semibold text-slate-500">Nom<input class="field-input w-full mt-1" data-g-id="'+esc(g.id)+'" data-g-field="nom" value="'+esc(g.nom||'')+'" placeholder="ex. BYD Enghien-les-Bains"></label>'
+            + '<label class="text-xs font-semibold text-slate-500">Adresse<input class="field-input w-full mt-1" data-g-id="'+esc(g.id)+'" data-g-field="adresse" value="'+esc(g.adresse||'')+'" placeholder="163 av. de la Division Leclerc…"></label>'
+            + '<label class="text-xs font-semibold text-slate-500">E-mail<input class="field-input w-full mt-1" type="email" data-g-id="'+esc(g.id)+'" data-g-field="email" value="'+esc(g.email||'')+'" placeholder="contact@garage.fr"></label>'
+            + '<label class="text-xs font-semibold text-slate-500">Téléphone<input class="field-input w-full mt-1" data-g-id="'+esc(g.id)+'" data-g-field="tel" value="'+esc(g.tel||'')+'" placeholder="+33 1 84 75 28 30"></label>'
+          + '</div>'
+          + '<div class="flex items-center justify-between gap-2 mt-2 flex-wrap">'
+            + '<div class="text-xs">'+pdf+' <span class="text-slate-400">— joint auto à l\'e-mail « Prévenir »</span></div>'
+            + '<button type="button" class="btn btn-outline text-xs" data-g-del="'+esc(g.id)+'"><i data-lucide="trash-2" class="w-3.5 h-3.5 text-red-600"></i> Supprimer</button>'
+          + '</div>'
+        + '</div>';
+      }
+      function renderRows(){
+        const box=document.getElementById('garages-rows'); if(!box) return;
+        const list=FP.getPrestataires?FP.getPrestataires():[];
+        box.innerHTML = list.length ? list.map(rowHTML).join('') : '<p class="text-sm text-slate-400">Aucun garage enregistré. Clique « Ajouter un garage ».</p>';
+        if(window.lucide) lucide.createIcons();
+      }
+      function renderMarques(){
+        const box=document.getElementById('garages-marques'); if(!box) return;
+        const list=FP.getPrestataires?FP.getPrestataires():[];
+        const seen={},marques=[];
+        vehs().forEach(v=>{ if(!v||!v.marque) return; if(FP.horsFlotte&&FP.horsFlotte(v)) return; const k=FP.normMarque(v.marque); if(!k||seen[k]) return; seen[k]=true; marques.push({key:k,label:String(v.marque).trim()}); });
+        marques.sort((a,b)=>a.label.localeCompare(b.label));
+        if(!marques.length){ box.innerHTML='<p class="text-sm text-slate-400">Aucune marque dans la flotte pour le moment.</p>'; return; }
+        const regle=(FP.settings.get().garageParMarque)||{};
+        const opts=(selId)=>'<option value="">— Aucun —</option>'+list.map(g=>'<option value="'+esc(g.id)+'"'+(g.id===selId?' selected':'')+'>'+esc(g.nom||'(sans nom)')+'</option>').join('');
+        box.innerHTML = marques.map(m=>'<div class="flex items-center gap-2 flex-wrap"><span class="text-sm font-semibold" style="min-width:130px">'+esc(m.label)+'</span><select class="field-input !py-1 !text-sm" data-g-marque="'+esc(m.key)+'" style="min-width:210px">'+opts(regle[m.key]||'')+'</select></div>').join('');
+        box.querySelectorAll('select[data-g-marque]').forEach(sel=>{ try{ if(FP.searchSelect) FP.searchSelect(sel,{placeholder:'Choisir un garage…'}); }catch(e){} });
+      }
+      function renderVehicules(){
+        const box=document.getElementById('garages-vehicules'); if(!box) return;
+        const list=FP.getPrestataires?FP.getPrestataires():[];
+        const vmap=(FP.settings.get().vehGarage)||{};
+        const q=(_vehSearch||'').toLowerCase().trim();
+        let vv=vehs().filter(v=>v&&!(FP.horsFlotte&&FP.horsFlotte(v)));
+        if(q) vv=vv.filter(v=>((v.immat||'')+' '+(v.marque||'')+' '+(v.modele||'')+' '+(v.chauffeur||'')).toLowerCase().includes(q));
+        vv=vv.slice().sort((a,b)=>String(a.immat||'').localeCompare(String(b.immat||'')));
+        if(!vv.length){ box.innerHTML='<p class="text-sm text-slate-400">Aucun véhicule'+(q?' pour ce filtre':'')+'.</p>'; return; }
+        const opts=(selId,marque)=>'<option value="">— Selon la marque ('+esc(marque||'—')+') —</option>'+list.map(g=>'<option value="'+esc(g.id)+'"'+(g.id===selId?' selected':'')+'>'+esc(g.nom||'(sans nom)')+'</option>').join('');
+        box.innerHTML = vv.slice(0,80).map(v=>'<div class="flex items-center gap-2 flex-wrap"><span class="text-sm font-semibold" style="min-width:150px">'+esc(v.immat||'?')+' <span class="text-slate-400 font-normal">'+esc(((v.marque||'')+' '+(v.modele||'')).trim())+'</span></span><select class="field-input !py-1 !text-sm" data-g-veh="'+esc(v.id)+'" style="min-width:230px">'+opts(vmap[v.id]||'',v.marque)+'</select></div>').join('')
+          + (vv.length>80?'<p class="text-xs text-slate-400 mt-1">… '+(vv.length-80)+' autres — utilise le filtre ci-dessus.</p>':'');
+      }
+      window.renderGaragesSection = function(){ renderRows(); renderMarques(); renderVehicules(); };
+      // Prompt IA pour lire un PDF/fiche de garage (raison sociale + coordonnées). LIRE, JAMAIS DEVINER.
+      const GARAGE_PROMPT = [
+        "Lis ce document : c'est la FICHE / le PAPIER A EN-TETE / le BON DE RENDEZ-VOUS d'un GARAGE ou CONCESSIONNAIRE automobile. Redresse mentalement l'image si elle est de travers.",
+        "Renvoie UNIQUEMENT un objet JSON valide, sans texte autour (null si absent) :",
+        "nom : la RAISON SOCIALE ou l'ENSEIGNE du garage/concession (ex. 'BYD Enghien-les-Bains', 'Garage Dupont', 'Renault Nation').",
+        "adresse : l'adresse postale complète du garage (rue, code postal, ville).",
+        "email : l'adresse e-mail de contact du garage.",
+        "tel : le numero de telephone du garage (format tel quel).",
+        "Ne recopie QUE ce qui est ecrit sur le document, n'invente rien."
+      ].join("\n");
+      function bind(){
+        const rows=document.getElementById('garages-rows'); if(!rows||rows._bound) return; rows._bound=true;
+        const marq=document.getElementById('garages-marques');
+        const vehBox=document.getElementById('garages-vehicules');
+        const addBtn=document.getElementById('btn-add-garage');
+        const pdfFile=document.getElementById('garage-pdf-file');
+        const vSearch=document.getElementById('garages-veh-search');
+        rows.addEventListener('change',(e)=>{ const inp=e.target.closest('[data-g-id]'); if(!inp) return; const id=inp.getAttribute('data-g-id'),field=inp.getAttribute('data-g-field'); const g=FP.getPrestataires().find(x=>x&&x.id===id); if(!g) return; g[field]=(inp.value||'').trim(); FP.savePrestataire(g); status('✓ Enregistré'); renderMarques(); renderVehicules(); });
+        rows.addEventListener('click',(e)=>{
+          const del=e.target.closest('[data-g-del]'); if(del){ if(confirm('Supprimer ce garage du carnet d\'adresses ?')){ FP.deletePrestataire(del.getAttribute('data-g-del')); window.renderGaragesSection(); status('✓ Supprimé'); } return; }
+          const pdfDel=e.target.closest('[data-g-pdf-del]'); if(pdfDel){ const g=FP.getPrestataires().find(x=>x&&x.id===pdfDel.getAttribute('data-g-pdf-del')); if(g){ delete g.pdfUrl; delete g.pdfName; FP.savePrestataire(g); renderRows(); status('✓ PDF retiré'); } return; }
+          const pdf=e.target.closest('[data-g-pdf]'); if(pdf){ _pdfTarget=pdf.getAttribute('data-g-pdf'); if(pdfFile) pdfFile.click(); return; }
+        });
+        if(pdfFile) pdfFile.addEventListener('change', async (e)=>{
+          const f=e.target.files&&e.target.files[0]; e.target.value=''; if(!f||!_pdfTarget) return;
+          const g=FP.getPrestataires().find(x=>x&&x.id===_pdfTarget); if(!g) return;
+          let url=null;
+          try{ url=await FP.uploadScan(f,'garages',{name:(g.nom||'garage')+'-'+(f.name||'doc').replace(/\.[^.]+$/,'')}); }catch(err){}
+          if(!url){ if(FP.notifyError) FP.notifyError('Échec du PDF'); else alert('Échec du PDF.'); return; }
+          g.pdfUrl=url; g.pdfName=f.name||'garage.pdf'; FP.savePrestataire(g); renderRows(); status('✓ PDF joint');
+          // 🤖 Lecture IA du PDF → remplit les champs VIDES (nom/adresse/email/tel).
+          try{
+            if(FP.scanIA){
+              status('🔎 Lecture du PDF par l\'IA…');
+              const fields=await FP.scanIA(f,'garage',GARAGE_PROMPT,{maxTokens:700});
+              if(fields){
+                let n=0; const fill=(k,val)=>{ if(val&&String(val).trim()&&(!g[k]||!String(g[k]).trim())){ g[k]=String(val).trim(); n++; } };
+                fill('nom',fields.nom); fill('adresse',fields.adresse); fill('email',fields.email); fill('tel',fields.tel);
+                if(n){ FP.savePrestataire(g); renderRows(); renderMarques(); renderVehicules(); status('✓ PDF lu par l\'IA — '+n+' champ(s) rempli(s)'); }
+                else status('✓ PDF joint (rien à remplir — champs déjà saisis).');
+              } else status('✓ PDF joint (lecture IA indisponible).');
+            }
+          }catch(err){}
+        });
+        if(addBtn) addBtn.addEventListener('click',()=>{ FP.savePrestataire({nom:'',adresse:'',email:'',tel:''}); renderRows(); status('✓ Garage ajouté — remplis ses infos (ou dépose son PDF)'); });
+        if(marq) marq.addEventListener('change',(e)=>{ const sel=e.target.closest('[data-g-marque]'); if(!sel) return; FP.garages.setRegleMarque(sel.getAttribute('data-g-marque'),sel.value||''); status('✓ Règle marque enregistrée'); });
+        if(vehBox) vehBox.addEventListener('change',(e)=>{ const sel=e.target.closest('[data-g-veh]'); if(!sel) return; FP.garages.setVehGarage(sel.getAttribute('data-g-veh'),sel.value||''); status('✓ Garage du véhicule enregistré'); });
+        if(vSearch) vSearch.addEventListener('input',()=>{ _vehSearch=vSearch.value||''; renderVehicules(); });
+      }
+      function boot(){ if(!(window.FP&&FP.getPrestataires)) return; bind(); window.renderGaragesSection(); }
+      document.addEventListener('DOMContentLoaded', boot);
+      document.addEventListener('fp:data-ready', ()=>{ try{ if(window.FP&&FP.getPrestataires){ bind(); window.renderGaragesSection(); } }catch(e){} });
+      // Ouvre la section si on arrive via #garages (lien depuis la fiche véhicule).
+      try{ if(location.hash==='#garages'){ const d=document.getElementById('garages-card'); if(d){ d.open=true; setTimeout(()=>{ try{ d.scrollIntoView({behavior:'smooth',block:'start'}); }catch(e){} }, 200); } } }catch(e){}
+    })();
+    </script>
+
     <!-- Modal : coordonnées du garage -->
     <div class="modal-backdrop" id="garage-modal" onclick="if(event.target===this)this.classList.remove('open')">
       <div class="modal p-6" style="max-width:430px">
