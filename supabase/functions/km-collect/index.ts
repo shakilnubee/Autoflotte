@@ -736,7 +736,7 @@ Deno.serve(async (req) => {
         const { qr, err } = await loadQr(db, qtok0);
         if (err) return json({ error: err }, 404);
         const { data } = await db.from("declarations_conducteur")
-          .select("id,type,date_incident,lieu,description,tiers,blesses,photos,statut,created_at")
+          .select("id,type,date_incident,lieu,description,tiers,blesses,photos,statut,created_at,reponse,reponse_at")
           .eq("vehicule_id", qr.vehicule_id)
           .order("created_at", { ascending: false })
           .limit(30);
@@ -748,6 +748,8 @@ Deno.serve(async (req) => {
           photos: Array.isArray(d.photos) ? d.photos.length : 0,
           statut: String(d.statut || "nouveau"), createdAt: String(d.created_at || ""),
           editable: String(d.statut || "nouveau") === "nouveau",
+          // Réponse écrite du gestionnaire (facultative) — affichée dans « Mes signalements ».
+          reponse: String(d.reponse || ""), reponseAt: String(d.reponse_at || ""),
         }));
         return json({ ok: true, declarations: list });
       }
