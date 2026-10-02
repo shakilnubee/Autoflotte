@@ -15182,41 +15182,59 @@ FP.share = function (opts) {
   };
 })();
 
-// ===== CARTES PLIABLES (sections d'une page) — SOURCE UNIQUE, mémorisé =====
-// Toute carte marquée [data-collapsible="<clé>"] devient pliable : un chevron dans son EN-TÊTE (1er enfant)
-// plie/déplie le reste de la carte. État mémorisé par clé + société (localStorage). Pour les longues listes
-// (coût par véhicule, révisions…) qui prennent toute la page. Cliquer un bouton/lien/select/input de l'en-tête
-// ne plie PAS (seuls le chevron et les zones neutres de l'en-tête basculent). Idempotent.
+// ===== CARTES PLIABLES PARTOUT (toutes les pages, automatique) — SOURCE UNIQUE, mémorisé =====
+// ⚠️ Fonctionnalité de BASE : CHAQUE carte de section (une .card qui a un TITRE h1-h4 / .section-title en
+// tête) reçoit AUTOMATIQUEMENT un petit chevron pour la plier/déplier — sur toutes les pages, sans rien
+// marquer. État mémorisé (localStorage par société + page + titre). On IGNORE : les tuiles sans titre
+// (KPI, barres de filtres), les <details> (déjà pliables), les cartes dans un modal/tiroir, et toute carte
+// avec [data-no-collapse]. Seul le CHEVRON plie (pas de clic sur le titre → aucun conflit avec l'édition
+// de titre / les boutons d'en-tête). [data-collapsible="clé"] force une clé explicite. Idempotent.
 (function () {
-  const CHEV = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
+  const CHEV = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
+  const _seen = {};
   FP.collapseCards = function (root) {
     try {
       root = root || document;
       const soc = (FP.activeSociete ? (FP.activeSociete() || '') : '') || 'PXP';
-      root.querySelectorAll('[data-collapsible]').forEach(card => {
-        if (card._fpColl) return; const header = card.firstElementChild; if (!header) return; card._fpColl = true;
-        const key = 'fp_collapse_' + soc + '_' + card.getAttribute('data-collapsible');
+      const page = ((typeof location !== 'undefined' ? location.pathname.split('/').pop() : '') || 'index').replace(/\.html$/, '');
+      const norm = s => String(s || '').replace(/\s+/g, ' ').trim().toLowerCase().slice(0, 70);
+      root.querySelectorAll('.card, [data-collapsible]').forEach(card => {
+        if (card._fpColl) return;
+        if (card.tagName === 'DETAILS') return;                          // déjà pliable nativement
+        if (card.hasAttribute && card.hasAttribute('data-no-collapse')) return;
+        if (card.closest && card.closest('.modal, .modal-backdrop, .drawer, dialog, #fp-msg-ov, #fp-share-ov, [role="dialog"]')) return;
+        const header = card.firstElementChild; if (!header) return;
+        const explicit = card.getAttribute && card.getAttribute('data-collapsible');
+        // Titre = le 1er enfant EST un titre, ou le CONTIENT directement (ex. <div class="flex"><h3>…).
+        let heading = null;
+        if (header.matches && header.matches('h1,h2,h3,h4,.section-title')) heading = header;
+        else if (header.querySelector) heading = header.querySelector(':scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > .section-title');
+        if (!explicit && !heading) return;                               // pas de titre → tuile KPI / filtres → on ne plie pas
         const bodies = Array.prototype.slice.call(card.children).filter(c => c !== header);
+        if (!bodies.length) return;
+        card._fpColl = true;
+        let label = explicit || (page + ':' + norm(heading ? heading.textContent : (card.getAttribute('aria-label') || '')));
+        let key = 'fp_collapse_' + soc + '_' + label;
+        if (!explicit) { _seen[key] = (_seen[key] || 0) + 1; if (_seen[key] > 1) key += '#' + _seen[key]; }
         let collapsed = false; try { collapsed = localStorage.getItem(key) === '1'; } catch (e) {}
         const chev = document.createElement('button');
-        chev.type = 'button'; chev.className = 'fp-card-collapse'; chev.title = 'Plier / déplier';
-        chev.style.cssText = 'background:none;border:none;cursor:pointer;color:var(--fp-muted,#94a3b8);padding:4px;line-height:0;margin-left:8px;transition:transform .18s;flex-shrink:0';
+        chev.type = 'button'; chev.className = 'fp-card-collapse'; chev.title = 'Plier / déplier cette carte';
+        chev.setAttribute('aria-label', 'Plier / déplier');
+        chev.style.cssText = 'background:none;border:none;cursor:pointer;color:var(--fp-muted,#94a3b8);padding:4px;line-height:0;margin-left:auto;transition:transform .18s;flex:0 0 auto;align-self:flex-start';
         chev.innerHTML = CHEV;
         const apply = () => { bodies.forEach(b => { b.style.display = collapsed ? 'none' : ''; }); chev.style.transform = collapsed ? 'rotate(-90deg)' : ''; };
+        // Place le chevron dans l'en-tête, aligné à droite (header rendu flex si besoin).
+        try { const cs = getComputedStyle(header); if (cs.display.indexOf('flex') < 0) { header.style.display = 'flex'; header.style.alignItems = 'center'; header.style.gap = header.style.gap || '8px'; } } catch (e) { header.style.display = 'flex'; }
         header.appendChild(chev);
-        if (getComputedStyle(header).display.indexOf('flex') < 0) header.style.display = 'flex', header.style.alignItems = 'center', header.style.justifyContent = 'space-between';
-        header.style.cursor = 'pointer';
-        header.addEventListener('click', (e) => {
-          if (e.target.closest && e.target.closest('button,a,select,input,textarea,label') && !e.target.closest('.fp-card-collapse')) return;
-          collapsed = !collapsed; try { localStorage.setItem(key, collapsed ? '1' : '0'); } catch (e2) {} apply();
-        });
+        chev.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); collapsed = !collapsed; try { localStorage.setItem(key, collapsed ? '1' : '0'); } catch (e2) {} apply(); });
         apply();
       });
     } catch (e) {}
   };
   if (typeof document !== 'undefined') {
-    document.addEventListener('DOMContentLoaded', () => { try { FP.collapseCards(); } catch (e) {} });
-    document.addEventListener('fp:data-ready', () => { try { FP.collapseCards(); } catch (e) {} });
+    const run = () => { try { FP.collapseCards(); } catch (e) {} };
+    document.addEventListener('DOMContentLoaded', () => { run(); setTimeout(run, 400); });
+    document.addEventListener('fp:data-ready', () => { run(); setTimeout(run, 300); });
   }
 })();
 
