@@ -858,8 +858,17 @@
     sel.innerHTML = html;
     sel.value = [...sel.options].some(o => o.value === cur) ? cur : 'all';
     leasingLoueurFilter = sel.value;
-    // Le filtre ne sert que s'il y a au moins 2 loueurs possibles.
-    { const wrap = document.getElementById('leasing-loueur-filter-outer') || document.getElementById('leasing-loueur-filter-wrap'); if (wrap) wrap.style.display = (noms.length + (hasLoc ? 1 : 0)) > 1 ? '' : 'none'; }
+    // Le filtre « par loueur » est PROPRE au sous-onglet Leasing : il ne doit JAMAIS apparaître
+    // sur Assurance / Contrats cadre (sinon « Tous les loueurs » s'affiche à côté d'« Ajouter un
+    // contrat », ce qui n'a aucun sens). On croise donc 2 conditions : (1) onglet actif = leasing,
+    // (2) au moins 2 loueurs possibles. Ce rendu pouvant tourner pendant qu'un AUTRE onglet est
+    // actif (rafraîchissement), on relit l'onglet courant sur le conteneur au lieu de ré-afficher.
+    { const wrap = document.getElementById('leasing-loueur-filter-outer') || document.getElementById('leasing-loueur-filter-wrap');
+      if (wrap) {
+        let tab = 'leasing'; try { tab = ($('contrat-sections') && $('contrat-sections').getAttribute('data-ctab')) || 'leasing'; } catch (e) {}
+        const assezDeLoueurs = (noms.length + (hasLoc ? 1 : 0)) > 1;
+        wrap.style.display = (tab === 'leasing' && assezDeLoueurs) ? '' : 'none';
+      } }
   }
 
   function rebuildLeasingData() {
@@ -2426,8 +2435,10 @@
     if (ba) ba.classList.toggle('active', name === 'assurance');
     if (bc) bc.classList.toggle('active', name === 'cadre');
     if (name === 'cadre') { try { renderCadre(); } catch (e) {} }
-    // Filtre « par loueur » + astuce de réorganisation = pertinents seulement sur Leasing.
-    const lw = document.getElementById('leasing-loueur-filter-outer') || document.getElementById('leasing-loueur-filter-wrap'); if (lw) lw.style.display = (name === 'leasing') ? '' : 'none';
+    // Filtre « par loueur » + astuce de réorganisation = pertinents seulement sur Leasing. Sur Leasing
+    // on délègue la visibilité à populateLeasingLoueurFilter (règle « ≥ 2 loueurs ») ; ailleurs on masque.
+    if (name === 'leasing') { try { populateLeasingLoueurFilter(); } catch (e) {} }
+    else { const lw = document.getElementById('leasing-loueur-filter-outer') || document.getElementById('leasing-loueur-filter-wrap'); if (lw) lw.style.display = 'none'; }
     const dh = document.getElementById('contrat-drag-hint'); if (dh) dh.style.display = (name === 'leasing') ? '' : 'none';
     // Boutons « Ajouter » CONTEXTUELS (gros bouton orange de l'en-tête) : un seul visible selon le
     // sous-onglet. Chaque bouton délègue au bouton d'action déjà présent dans sa section (source unique).
