@@ -7385,8 +7385,24 @@ FP.affectations = {
     if (!ch || ch === '—') return null;
     const cur = this.courante(veh.id);
     if (cur) return cur;                                   // une affectation est déjà ouverte
-    this.addEntry(veh.id, ch, veh.dateMiseEnCirculation || null, null);
+    // ⚠️ Point de départ = ÉTAT DES LIEUX de remise (km + date signés par le conducteur), sinon 1re mise
+    //    en circulation. JAMAIS un relevé km (sinon la date « bougerait » à chaque relevé — bug signalé).
+    const rem = this._remise(veh.id, null);
+    this.addEntry(veh.id, ch, rem.date || veh.dateMiseEnCirculation || null, null, rem.km, null);
     return this.courante(veh.id);
+  },
+  // Remise (état des lieux d'ENTRÉE) servant de point de départ d'une affectation : la 1re prise en main
+  // à partir de `since` (début de période), sinon la 1re tout court. Source UNIQUE pour le km + la date de
+  // début (lien avec l'état des lieux signé). Renvoie { km, date } (null si aucune remise connue).
+  _remise(vehId, since) {
+    try {
+      const insp = (((FP.settings.get().inspections) || {})[vehId] || [])
+        .filter(x => x && x.date && x.sens !== 'Sortie' && (!since || String(x.date) >= String(since)))
+        .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+      const r = insp[0]; if (!r) return { km: null, date: null };
+      const km = (r.km != null && String(r.km).trim() !== '' && Number.isFinite(+r.km)) ? +r.km : null;
+      return { km, date: String(r.date).slice(0, 10) };
+    } catch (e) { return { km: null, date: null }; }
   },
   // Date d'ENTRÉE affichée du chauffeur actuel : début de l'affectation en cours si connu, sinon
   // (défaut) la 1re mise en circulation du véhicule. 'AAAA-MM-JJ' ou null. Ne mute rien (lecture).
@@ -7513,13 +7529,12 @@ FP.affectations = {
     s.affectations[vehId] = list;
     FP.settings.save(s);
   },
-  // ⚠️ INITIALISATION (non destructive, IDEMPOTENTE) du km de départ des conducteurs ACTUELS des véhicules
-  // NON-LEASING : on GÈLE le km de début de l'affectation en cours au DERNIER RELEVÉ km connu (= km actuel),
-  // et la date de début à celle du dernier relevé si on la connaît. But (consigne) : « commencer à partir
-  // du dernier relevé km ». Ne touche JAMAIS un km déjà présent (guard `kmDebut == null`) → une modif
-  // ultérieure du véhicule ne « remet pas à aujourd'hui » le compteur, et un conducteur/véhicule AJOUTÉ
-  // plus tard est rattrapé au prochain passage (pas de drapeau global qui bloquait les nouveaux).
-  // Les LEASINGS sont exclus (ils démarrent à 0 automatiquement, cf. kmPeriode). N'écrit que si ça change.
+  // ⚠️ INITIALISATION (non destructive, IDEMPOTENTE) du point de départ des conducteurs ACTUELS des
+  // véhicules NON-LEASING. Le km ET la date de début sont ancrés sur l'ÉTAT DES LIEUX de remise (prise
+  // en main signée par le conducteur) — PAS sur le relevé km courant. ⚠️ CORRECTION DE BUG : l'ancienne
+  // version prenait le DERNIER relevé km (km + date), donc la « date de début » bougeait à CHAQUE relevé
+  // d'un conducteur. On ne remplit QUE les champs VIDES et on n'utilise JAMAIS un relevé km → une fois
+  // posée, la date de début ne bouge plus. Les LEASINGS sont exclus (0 km auto, cf. kmPeriode).
   initDebutsNonLeasing(data) {
     data = data || (typeof window !== 'undefined' ? window.FP_DATA : null) || {};
     const s = FP.settings.get();
@@ -7531,21 +7546,19 @@ FP.affectations = {
       if (FP.estLeasing && FP.estLeasing(v)) return;                // leasings : 0 km auto, on ne gèle rien
       const ch = (v.chauffeur != null ? String(v.chauffeur) : '').trim();
       if (!ch || ch === '—') return;
-      const kmA = FP.kmActuel ? FP.kmActuel(v) : (Number(v.km) || 0);
-      if (!(kmA > 0)) return;                                       // pas de km connu → rien à geler
-      // Date du dernier relevé si le cache relevés est chargé (sinon on laissera la date telle quelle).
-      let dernDate = null;
-      try { const r = (FP.releveKm && FP.releveKm.recusDe) ? FP.releveKm.recusDe(v)[0] : null; if (r && r.used_at) dernDate = String(r.used_at).slice(0, 10); } catch (e) {}
       let list = Array.isArray(s.affectations[v.id]) ? s.affectations[v.id] : [];
       let cur = [...list].reverse().find(x => !x.fin) || null;
-      if (!cur) { cur = { conducteur: ch, debut: dernDate || v.dateMiseEnCirculation || null, fin: null }; list.push(cur); s.affectations[v.id] = list; }
-      if (cur.kmDebut == null) {                                    // ne JAMAIS écraser un km déjà présent
-        cur.kmDebut = this._km(kmA);
-        if (!cur.debut && dernDate) cur.debut = dernDate;          // date de début = dernier relevé (si connu, jamais « aujourd'hui »)
-        changed++;
+      if (!cur) {
+        // Pas d'affectation ouverte : on en crée une (début rempli plus bas depuis la remise / MEC).
+        cur = { conducteur: ch, debut: null, fin: null }; list.push(cur); s.affectations[v.id] = list; changed++;
       }
+      // Remise (état des lieux d'entrée) de la période en cours = km + date de prise en main signés.
+      const rem = this._remise(v.id, cur.debut);
+      // On ne REMPLIT QUE le vide (jamais d'écrasement d'une valeur saisie/corrigée). Sources STABLES.
+      if (cur.kmDebut == null && rem.km != null) { cur.kmDebut = this._km(rem.km); changed++; }
+      if (!cur.debut) { const d = rem.date || v.dateMiseEnCirculation || null; if (d) { cur.debut = d; changed++; } }
     });
-    if (changed) FP.settings.save(s);                              // n'écrit QUE si quelque chose a été gelé
+    if (changed) FP.settings.save(s);                              // n'écrit QUE si quelque chose a été posé
     return changed;
   },
   // Renomme un conducteur dans tout l'historique (suit un renommage de fiche).
