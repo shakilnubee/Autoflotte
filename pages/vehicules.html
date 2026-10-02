@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261002j">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261002k">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20261002j"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20261002k"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20261002j">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20261002k">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -1137,8 +1137,8 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20261002j"></script>
-<script src="../assets/js/supabase-client.js?v=20261002j"></script>
+<script src="../assets/js/vendor/supabase.js?v=20261002k"></script>
+<script src="../assets/js/supabase-client.js?v=20261002k"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -1154,13 +1154,13 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261002j"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261002k"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
-<script src="../assets/js/fleet-docs.js?v=20261002j"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20261002j"></script>
+<script src="../assets/js/fleet-docs.js?v=20261002k"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20261002k"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20261002j"></script>
+<script src="../assets/js/app.min.js?v=20261002k"></script>
 <script>
   lucide.createIcons();
 
@@ -1358,18 +1358,22 @@
     const sensNorm = (sv.indexOf('resti') >= 0 || sv.indexOf('sort') >= 0) ? 'Sortie' : 'Entrée';
     const d = (o.date && /^\d{4}-\d{2}-\d{2}$/.test(String(o.date).slice(0, 10))) ? String(o.date).slice(0, 10) : new Date().toISOString().slice(0, 10);
     const kmN = (o.km != null && Number.isFinite(+o.km) && +o.km > 0) ? Math.round(+o.km) : null;
-    if (kmN == null) return false;
+    // ⚠️ km FACULTATIF : on enregistre l'inspection même SANS km (ex. état des lieux où le km saisi est 0
+    // ou vide) — c'est la DATE qui ré-ancre le début d'affectation. Le km sera complété plus tard (facture
+    // d'achat / saisie manuelle). On refuse seulement s'il n'y a NI km NI date exploitable.
+    if (kmN == null && !(o.date && /^\d{4}-\d{2}-\d{2}$/.test(String(o.date).slice(0, 10)))) return false;
+    let created = false;
     try {
       const s = FP.settings.get(); s.inspections = s.inspections || {};
       const listv = s.inspections[vehId] || [];
       const existing = listv.find(x => x && x.date === d && x.sens === sensNorm);
-      if (existing) { if (existing.km == null) { existing.km = kmN; } else { return false; } }
-      else { s.inspections[vehId] = [{ id: 'INS' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), date: d, sens: sensNorm, km: kmN, items: {}, note: 'Km lu automatiquement (IA) sur l\'état des lieux importé' }, ...listv]; }
+      if (existing) { if (kmN != null && existing.km == null) { existing.km = kmN; created = true; } else if (!existing) { /* n/a */ } else { /* déjà présent : la date est déjà enregistrée */ } }
+      else { s.inspections[vehId] = [{ id: 'INS' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), date: d, sens: sensNorm, km: kmN, items: {}, note: (kmN != null ? 'Km lu automatiquement' : 'Date lue automatiquement') + ' sur l\'état des lieux importé' }, ...listv]; created = true; }
       FP.settings.save(s);
     } catch (e) { return false; }
     // Met à jour le km COURANT du véhicule seulement s'il est plus élevé (ne baisse jamais un km).
     if (Number.isFinite(kmN) && kmN > (Number(v.km) || 0)) { v.km = kmN; try { persistVehFields(v, 'km'); } catch (e) {} try { renderTable(); renderKPIs(); } catch (e) {} }
-    return true;
+    return created;
   }
   // Ré-ancre le km/la date de début de la période EN COURS (si un seul conducteur) sur la remise désormais connue.
   function reanchorVehEdl(vehId) {
@@ -1390,9 +1394,10 @@
     if (!(window.FP && FP.scanEdlKm && FP.edlHisto)) { if (!silent && FP.toast) FP.toast('Lecture IA indisponible (connexion requise).'); return; }
     const docs = FP.edlHisto.docsDe(getVehDocs(vehId), vehId);
     const inspList = (FP.settings.get().inspections || {})[vehId] || [];
-    const hasKm = (date, sensNorm) => inspList.some(x => x && x.date === date && x.sens === sensNorm && x.km != null);
-    const todo = docs.filter(d => { const date = FP.edlHisto.dateDe(d); const sensNorm = FP.edlHisto.sensDe(d) === 'restitution' ? 'Sortie' : 'Entrée'; return date && !hasKm(date, sensNorm); });
-    if (!todo.length) { if (!silent && FP.toast) FP.toast('Aucun état des lieux importé sans km à lire.'); return; }
+    // « Déjà traité » = une inspection existe pour cette date+sens (avec OU sans km) → on ne re-scanne pas.
+    const hasInsp = (date, sensNorm) => inspList.some(x => x && x.date === date && x.sens === sensNorm);
+    const todo = docs.filter(d => { const date = FP.edlHisto.dateDe(d); const sensNorm = FP.edlHisto.sensDe(d) === 'restitution' ? 'Sortie' : 'Entrée'; return date && !hasInsp(date, sensNorm); });
+    if (!todo.length) { if (!silent && FP.toast) FP.toast('États des lieux déjà lus.'); return; }
     let ok = 0, fail = 0;
     for (let i = 0; i < todo.length; i++) {
       const d = todo[i];
@@ -1403,14 +1408,16 @@
         const isPdf = /pdf/i.test(blob.type || '') || /\.pdf($|\?)/i.test(d.url || '');
         const file = new File([blob], isPdf ? 'edl.pdf' : 'edl.jpg', { type: blob.type || (isPdf ? 'application/pdf' : 'image/jpeg') });
         const r = await FP.scanEdlKm(file);
-        if (r && r.km != null && createEdlInspection(vehId, { sens: FP.edlHisto.sensDe(d), date: FP.edlHisto.dateDe(d), km: r.km })) ok++; else fail++;
+        // On enregistre dès qu'on a le km OU la date (la date ré-ancre le début même si le km est 0/absent).
+        // On privilégie la date LUE sur le document (r.date) à la date du nom de fichier (FP.edlHisto.dateDe).
+        if (r && (r.km != null || r.date) && createEdlInspection(vehId, { sens: r.sens || FP.edlHisto.sensDe(d), date: r.date || FP.edlHisto.dateDe(d), km: r.km })) ok++; else fail++;
       } catch (e) { fail++; }
     }
     reanchorVehEdl(vehId);
     if (ok > 0) openDrawer(vehId);   // re-render seulement si on a VRAIMENT lu quelque chose (évite un refresh inutile)
     // Auto (silencieux) : on ne parle QUE si on a lu un km. Manuel : on rapporte toujours le résultat.
-    if (ok > 0 && FP.toast) FP.toast('✓ ' + ok + ' km lu(s) sur les états des lieux' + (fail ? (' · ' + fail + ' illisible(s)') : ''));
-    else if (!silent && FP.toast) FP.toast(fail ? ('❌ Km non lu sur ' + fail + ' état(s) des lieux — saisis-le à la main (clic sur « Dernière révision » ou la ligne km).') : '✓ Terminé');
+    if (ok > 0 && FP.toast) FP.toast('✓ ' + ok + ' état(s) des lieux lu(s) — date/km mis à jour' + (fail ? (' · ' + fail + ' illisible(s)') : ''));
+    else if (!silent && FP.toast) FP.toast(fail ? ('❌ Rien de lisible sur ' + fail + ' état(s) des lieux (km souvent à 0 / champ vide) — saisis le km à la main : clic sur la ligne « Dernière révision » ou le km.') : '✓ Terminé');
   }
   async function delVehDoc(vehId, docId) {
     // Corbeille 7 jours (restaurable) AVANT de retirer de la liste live.
@@ -2955,8 +2962,8 @@
         if (_att < 3) {
           const _docs = FP.edlHisto.docsDe(getVehDocs(id), id);
           const _inspL = (FP.settings.get().inspections || {})[id] || [];
-          const _hasKm = (dt, sn) => _inspL.some(x => x && x.date === dt && x.sens === sn && x.km != null);
-          const _todo = _docs.filter(d => { const dt = FP.edlHisto.dateDe(d); const sn = FP.edlHisto.sensDe(d) === 'restitution' ? 'Sortie' : 'Entrée'; return dt && !_hasKm(dt, sn); });
+          const _hasInsp = (dt, sn) => _inspL.some(x => x && x.date === dt && x.sens === sn);
+          const _todo = _docs.filter(d => { const dt = FP.edlHisto.dateDe(d); const sn = FP.edlHisto.sensDe(d) === 'restitution' ? 'Sortie' : 'Entrée'; return dt && !_hasInsp(dt, sn); });
           if (_todo.length) { try { localStorage.setItem(_flag, String(_att + 1)); } catch (e) {} setTimeout(() => { try { scanExistingEdlDocs(id, { silencieuxSiRien: true }); } catch (e) {} }, 500); }
         }
       }
