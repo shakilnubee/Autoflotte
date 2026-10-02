@@ -15182,6 +15182,44 @@ FP.share = function (opts) {
   };
 })();
 
+// ===== CARTES PLIABLES (sections d'une page) — SOURCE UNIQUE, mémorisé =====
+// Toute carte marquée [data-collapsible="<clé>"] devient pliable : un chevron dans son EN-TÊTE (1er enfant)
+// plie/déplie le reste de la carte. État mémorisé par clé + société (localStorage). Pour les longues listes
+// (coût par véhicule, révisions…) qui prennent toute la page. Cliquer un bouton/lien/select/input de l'en-tête
+// ne plie PAS (seuls le chevron et les zones neutres de l'en-tête basculent). Idempotent.
+(function () {
+  const CHEV = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
+  FP.collapseCards = function (root) {
+    try {
+      root = root || document;
+      const soc = (FP.activeSociete ? (FP.activeSociete() || '') : '') || 'PXP';
+      root.querySelectorAll('[data-collapsible]').forEach(card => {
+        if (card._fpColl) return; const header = card.firstElementChild; if (!header) return; card._fpColl = true;
+        const key = 'fp_collapse_' + soc + '_' + card.getAttribute('data-collapsible');
+        const bodies = Array.prototype.slice.call(card.children).filter(c => c !== header);
+        let collapsed = false; try { collapsed = localStorage.getItem(key) === '1'; } catch (e) {}
+        const chev = document.createElement('button');
+        chev.type = 'button'; chev.className = 'fp-card-collapse'; chev.title = 'Plier / déplier';
+        chev.style.cssText = 'background:none;border:none;cursor:pointer;color:var(--fp-muted,#94a3b8);padding:4px;line-height:0;margin-left:8px;transition:transform .18s;flex-shrink:0';
+        chev.innerHTML = CHEV;
+        const apply = () => { bodies.forEach(b => { b.style.display = collapsed ? 'none' : ''; }); chev.style.transform = collapsed ? 'rotate(-90deg)' : ''; };
+        header.appendChild(chev);
+        if (getComputedStyle(header).display.indexOf('flex') < 0) header.style.display = 'flex', header.style.alignItems = 'center', header.style.justifyContent = 'space-between';
+        header.style.cursor = 'pointer';
+        header.addEventListener('click', (e) => {
+          if (e.target.closest && e.target.closest('button,a,select,input,textarea,label') && !e.target.closest('.fp-card-collapse')) return;
+          collapsed = !collapsed; try { localStorage.setItem(key, collapsed ? '1' : '0'); } catch (e2) {} apply();
+        });
+        apply();
+      });
+    } catch (e) {}
+  };
+  if (typeof document !== 'undefined') {
+    document.addEventListener('DOMContentLoaded', () => { try { FP.collapseCards(); } catch (e) {} });
+    document.addEventListener('fp:data-ready', () => { try { FP.collapseCards(); } catch (e) {} });
+  }
+})();
+
 // ===== Gabarit d'e-mail BRANDÉ (source unique) — même design que le relevé km =====
 // En-tête sombre (logo société ou « Parc Pilot », titre, prénom, plaque) + corps blanc contenant le
 // message. Robuste au MODE SOMBRE de Gmail (background-color solide → le texte blanc reste blanc).
