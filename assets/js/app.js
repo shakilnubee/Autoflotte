@@ -4249,7 +4249,7 @@ FP.PROFIL_CHAMPS = [
   { key: 'mailObjetAmende',      label: "Objet e-mail — amendes (paiement / désignation / relance)", type: 'text', ph: 'Balises : {avis}, {plaque}.', default: FP.MAIL_OBJET_DEFAUT.amende },
   { key: 'mailModelePaiement',   label: "Modèle e-mail — demande de paiement",     type: 'textarea', ph: 'Écris {prenom} pour insérer le prénom.', default: FP.MAIL_DEFAUT.paiement },
   { key: 'mailModeleDesignation',label: "Modèle e-mail — demande de désignation",  type: 'textarea', ph: 'Écris {prenom}.', default: FP.MAIL_DEFAUT.designation },
-  { key: 'mailModeleRelance',    label: "Modèle e-mail — relance",                 type: 'textarea', ph: 'Écris {prenom}.', default: FP.MAIL_DEFAUT.relance },
+  { key: 'mailModeleRelance',    label: "Amende — relance depuis la FICHE (bouton « Relancer »)",  type: 'textarea', ph: "Envoyé quand tu cliques « Relancer » sur une amende (PDF de l'avis joint). Balises : {prenom}. ⚠️ À NE PAS confondre avec « Relance — amende à régler » (écran 📣 Relances, rappel multi-canal).", default: FP.MAIL_DEFAUT.relance },
   // Versions ANGLAISES (utilisées pour les conducteurs en langue « English »).
   { key: 'mailModelePaiement_en',   label: "E-mail EN — payment request",      type: 'textarea', ph: 'Use {prenom} for the first name.', default: FP.MAIL_DEFAUT.paiement_en, lang: 'en' },
   { key: 'mailModeleDesignation_en',label: "E-mail EN — driver designation",   type: 'textarea', ph: 'Use {prenom}.', default: FP.MAIL_DEFAUT.designation_en, lang: 'en' },
@@ -4277,7 +4277,7 @@ FP.PROFIL_CHAMPS = [
   { key: 'mailObjetRelanceKm',        label: "Objet — relance relevé km",             type: 'text', ph: 'Balises : {immat}, {prenom}.', default: FP.MAIL_OBJET_DEFAUT.relanceKm },
   { key: 'mailModeleRelanceKm',       label: "Relance — relevé kilométrique",         type: 'textarea', ph: 'Balises : {prenom}, {immat}. Le lien de relevé est ajouté automatiquement.', default: FP.MAIL_DEFAUT.relanceKm },
   { key: 'mailObjetRelanceAmende',    label: "Objet — relance amende à régler",       type: 'text', ph: 'Balises : {immat}, {prenom}.', default: FP.MAIL_OBJET_DEFAUT.relanceAmende },
-  { key: 'mailModeleRelanceAmende',   label: "Relance — amende à régler",             type: 'textarea', ph: 'Balises : {prenom}, {immat}.', default: FP.MAIL_DEFAUT.relanceAmende },
+  { key: 'mailModeleRelanceAmende',   label: "Relance — amende à régler (écran 📣 Relances)", type: 'textarea', ph: "Rappel multi-canal depuis l'écran 📣 Relances. Balises : {prenom}, {immat}. ⚠️ À NE PAS confondre avec « Amende — relance depuis la FICHE ».", default: FP.MAIL_DEFAUT.relanceAmende },
   // ── Messages RAPIDES « Prévenir » (fiche véhicule → SMS / WhatsApp / e-mail). Balises {prenom}{immat}{lien}{date}.
   //    {lien} = espace véhicule (accès/carte grise), lien de relevé km, ou annonce de vente selon le message.
   { key: 'mailModelePrevAcces',       label: "Prévenir — Accès véhicule (espace QR)",  type: 'textarea', ph: 'Balises : {prenom}, {immat}, {lien}.', default: FP.MAIL_DEFAUT.prevAcces },
