@@ -7561,6 +7561,41 @@ FP.affectations = {
     if (changed) FP.settings.save(s);                              // n'écrit QUE si quelque chose a été posé
     return changed;
   },
+  // ⚠️ RÉ-ANCRAGE UNIQUE (one-shot, sécurisé) des débuts figés PAR ERREUR par l'ancienne logique (km/date
+  // du dernier relevé). Pour chaque véhicule NON-LEASING qui a UN SEUL conducteur (1 période ouverte) ET
+  // un ÉTAT DES LIEUX de remise, on remet la date + le km de début sur la REMISE signée (la vraie prise en
+  // main). Prudence : (1) sauvegarde complète AVANT (s._affectBackupPreEdl, restaurable) ; (2) on SAUTE les
+  // véhicules à plusieurs périodes (ambigu → correction manuelle) ; (3) drapeau persistant → ne tourne
+  // qu'UNE fois ; (4) ne touche RIEN sans état des lieux. Exécuté après chargement des données (vehicules.html).
+  reanchorEdlOnce(data) {
+    const s = FP.settings.get();
+    if (s._edlReanchorV1) return 0;                                 // déjà fait
+    data = data || (typeof window !== 'undefined' ? window.FP_DATA : null) || {};
+    if (!Array.isArray(data.vehicules) || !data.vehicules.length) return 0;   // données pas prêtes → on réessaiera
+    s.affectations = (s.affectations && typeof s.affectations === 'object') ? s.affectations : {};
+    // Sauvegarde de sécurité (une seule fois) → tout est restaurable si besoin.
+    if (!s._affectBackupPreEdl) { try { s._affectBackupPreEdl = JSON.parse(JSON.stringify(s.affectations)); } catch (e) {} }
+    let changed = 0, touchedVeh = 0, skippedMulti = 0, noEdl = 0;
+    (data.vehicules || []).forEach(v => {
+      if (!v || v.id == null) return;
+      if (FP.horsFlotte && FP.horsFlotte(v)) return;
+      if (FP.estLeasing && FP.estLeasing(v)) return;
+      const list = Array.isArray(s.affectations[v.id]) ? s.affectations[v.id] : null;
+      if (!list || !list.length) return;
+      if (list.length > 1) { skippedMulti++; return; }              // plusieurs périodes → ambigu, on laisse
+      const cur = list[0]; if (cur.fin) return;                     // la seule période doit être EN COURS
+      const rem = this._remise(v.id, null);                        // remise la plus ancienne (prise en main)
+      if (rem.km == null && !rem.date) { noEdl++; return; }         // pas d'état des lieux → on ne touche à rien
+      let did = false;
+      if (rem.km != null && this._km(rem.km) !== cur.kmDebut) { cur.kmDebut = this._km(rem.km); changed++; did = true; }
+      if (rem.date && rem.date !== cur.debut) { cur.debut = rem.date; changed++; did = true; }
+      if (did) touchedVeh++;
+    });
+    s._edlReanchorV1 = true;                                        // drapeau persistant → une seule fois
+    FP.settings.save(s);
+    try { FP._edlReanchorStats = { touchedVeh, skippedMulti, noEdl, changed }; } catch (e) {}
+    return touchedVeh;
+  },
   // Renomme un conducteur dans tout l'historique (suit un renommage de fiche).
   rename(oldName, newName) {
     const from = this._norm(oldName).toLowerCase(); const to = this._norm(newName);
