@@ -426,6 +426,11 @@
         <div class="ac-wrap"><input class="field-input" id="am-prenom" placeholder="Prénom" required autocomplete="off" /></div>
       </div>
       <div>
+        <div class="field-label">Véhicule concerné (plaque)</div>
+        <input class="field-input" id="am-immat" placeholder="ex. AB-123-CD — lue sur l'avis" autocomplete="off" />
+        <div id="am-veh-choix" class="text-xs mt-1"></div>
+      </div>
+      <div>
         <div class="field-label">Motif *</div>
         <div class="ac-wrap"><input class="field-input" id="am-motif" placeholder="ex. Excès de vitesse, Stationnement…" autocomplete="off" required /></div>
       </div>
@@ -2181,6 +2186,7 @@
     $('am-points').value = '0'; $('am-date').value = new Date().toISOString().slice(0, 10);
     $('am-statut').value = 'à payer'; $('am-avis').value = '';
     $('am-telepaiement').value = ''; $('am-cle').value = '';
+    if ($('am-immat')) $('am-immat').value = ''; if ($('am-veh-choix')) $('am-veh-choix').innerHTML = '';
     _avisFile = null; _pointsTouched = false;
     $('am-etrangere').checked = false; $('am-points').removeAttribute('disabled');
     $('am-is-majoration').checked = false; $('am-majoration-pick').classList.add('hidden');
@@ -2238,6 +2244,30 @@
     const pts = pointsRetrait($('am-motif').value.trim(), '');
     if (pts != null) $('am-points').value = pts;
   }
+  // Véhicules (non vendus) rattachés à un conducteur, par prénom tolérant (FP.normPrenom).
+  function _vehiculesDuConducteur(nom) {
+    try {
+      const np = FP.normPrenom ? FP.normPrenom(nom) : String(nom || '').trim().toLowerCase();
+      if (!np) return [];
+      return (data.vehicules || []).filter(v => v && v.chauffeur && (FP.normPrenom ? FP.normPrenom(v.chauffeur) === np : String(v.chauffeur).trim().toLowerCase() === np) && !(FP.estVendu && FP.estVendu(v)));
+    } catch (e) { return []; }
+  }
+  // Gère le champ « Véhicule concerné » : si le conducteur n'a qu'UN véhicule → on le pré-remplit ;
+  // s'il en a PLUSIEURS et que le champ est vide → on propose de CHOISIR (puces cliquables). La plaque
+  // lue sur l'avis (si présente) a toujours priorité (elle désigne la voiture réellement verbalisée).
+  function majAmVehChoix() {
+    const box = $('am-veh-choix'); const inp = $('am-immat'); if (!box || !inp) return;
+    const cur = String(inp.value || '').trim();
+    const vehs = _vehiculesDuConducteur($('am-prenom') ? $('am-prenom').value : '');
+    if (cur) { box.innerHTML = ''; return; }                 // déjà une plaque (avis ou saisie) → rien à proposer
+    if (vehs.length === 1) { inp.value = vehs[0].immat || ''; box.innerHTML = '<span class="text-slate-400">Véhicule du conducteur pré-rempli.</span>'; return; }
+    if (vehs.length >= 2) {
+      box.innerHTML = '<span style="color:#B45309;font-weight:600">⚠️ ' + FP.esc(($('am-prenom').value || 'Ce conducteur').split(/\s+/)[0]) + ' a ' + vehs.length + ' véhicules — choisis lequel :</span> '
+        + vehs.map(v => '<button type="button" class="btn btn-outline !py-0.5 !px-2 text-xs ml-1 mt-1" data-am-veh="' + FP.esc(v.immat) + '">' + FP.esc(v.immat) + (v.modele ? ' · ' + FP.esc(v.modele) : '') + '</button>').join('');
+      return;
+    }
+    box.innerHTML = '';
+  }
   function openAmendeModal() {
     // Suggestions conducteurs : chauffeurs des véhicules + prénoms d'amendes existantes
     const nonPersonnes = (window.FP && FP.NON_CHAUFFEURS) || ['Siège', 'Dépôt', 'Navette', 'VENDU', 'x', 'X', 'Fenwick'];
@@ -2247,13 +2277,14 @@
     const motifsList = [...new Set(data.amendes.map(a => a.motif).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
     // Conducteur : choisir dans la liste OU créer en tapant (règle projet). Repli sur l'ancien
     // autocomplete si le helper global n'est pas encore chargé.
-    if (window.FP && FP.conducteurPicker) FP.conducteurPicker($('am-prenom'));
+    if (window.FP && FP.conducteurPicker) FP.conducteurPicker($('am-prenom'), { onPick: () => { try { majAmVehChoix(); } catch (e) {} } });
     else attachAutocomplete($('am-prenom'), prenoms);
     attachAutocomplete($('am-motif'), motifsList);
     $('am-prenom').value = ''; $('am-motif').value = ''; $('am-montant').value = '';
     $('am-points').value = '0'; $('am-date').value = new Date().toISOString().slice(0, 10);
     $('am-statut').value = 'à payer'; $('am-avis').value = '';
     $('am-telepaiement').value = ''; $('am-cle').value = '';
+    if ($('am-immat')) $('am-immat').value = ''; if ($('am-veh-choix')) $('am-veh-choix').innerHTML = '';
     _avisFile = null;
     _pointsTouched = false;
     $('am-etrangere').checked = false; $('am-points').removeAttribute('disabled');
@@ -2357,6 +2388,9 @@
       id: nextAmendeId(), date, annee: (date || '').slice(0, 4),
       prenom, numeroAvis: numAvis, motif: $('am-motif').value.trim(),
       montant, points, retraitPoints: points > 0,
+      // Plaque de la voiture verbalisée (lue sur l'avis ou choisie) → source directe pour FP.amendePlaque :
+      // plus de « plaque manquante » dans l'e-mail quand le conducteur a plusieurs véhicules.
+      immatriculation: ($('am-immat') ? $('am-immat').value.trim() : ''),
       numeroTelepaiement: $('am-telepaiement').value.trim(), cle: $('am-cle').value.trim(),
       statut: $('am-statut').value || 'à payer', commentaire: etrangere ? 'Amende étrangère' : '', avisUrl
     };
@@ -2709,8 +2743,11 @@
       const filled = [];
       // Conducteur : on déduit le chauffeur via la plaque ↔ véhicule
       if (parsed.immat) {
-        const norm = s => (s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+        const norm = s => (FP.normImmat ? FP.normImmat(s) : (s || '').toUpperCase().replace(/[^A-Z0-9]/g, ''));
         const veh = data.vehicules && data.vehicules.find(v => norm(v.immat) === norm(parsed.immat));
+        // La plaque LUE SUR L'AVIS désigne la voiture réellement verbalisée → on la stocke (prioritaire,
+        // même si le conducteur a plusieurs véhicules). On garde le format fiche s'il existe.
+        if ($('am-immat') && !$('am-immat').value) { $('am-immat').value = (veh && veh.immat) ? veh.immat : parsed.immat; filled.push('plaque'); }
         if (veh && veh.chauffeur && !$('am-prenom').value) { $('am-prenom').value = veh.chauffeur; filled.push('conducteur (via la plaque)'); }
       }
       if (parsed.motif      && !$('am-motif').value)   { $('am-motif').value   = parsed.motif;      filled.push('motif'); }
@@ -2751,6 +2788,7 @@
         return;
       }
 
+      try { majAmVehChoix(); } catch (e) {} // si pas de plaque sur l'avis + conducteur à 2+ véhicules → propose de choisir
       checkDoublonLive(); // alerte immédiate si l'avis importé existe déjà
       refreshAmAnomalies(); // bandeau « À vérifier » : incohérences typiques (montant/télépaiement/clé/points/dates)
       // Si l'IA a échoué, on affiche la VRAIE raison (remontée par FP.scanIA) au lieu d'un « non disponible » muet.
@@ -2807,6 +2845,11 @@
     $(id).addEventListener('change', refreshAmAnomalies);
   });
   $('am-etrangere').addEventListener('change', refreshAmAnomalies);
+  // Véhicule concerné : quand on (ou l'IA) renseigne le conducteur → proposer son/ses véhicule(s).
+  if ($('am-prenom')) { $('am-prenom').addEventListener('change', majAmVehChoix); $('am-prenom').addEventListener('blur', majAmVehChoix); }
+  if ($('am-immat')) $('am-immat').addEventListener('input', () => { const b = $('am-veh-choix'); if (b && String($('am-immat').value || '').trim()) b.innerHTML = ''; });
+  // Clic sur une puce « choisir le véhicule » (conducteur à 2+ voitures).
+  if ($('am-veh-choix')) $('am-veh-choix').addEventListener('click', (e) => { const b = e.target.closest('[data-am-veh]'); if (!b) return; $('am-immat').value = b.getAttribute('data-am-veh') || ''; $('am-veh-choix').innerHTML = ''; });
   // Points : on retient si l'utilisateur les saisit lui-même, sinon on les calcule depuis le motif
   $('am-points').addEventListener('input', () => { _pointsTouched = true; });
   $('am-motif').addEventListener('change', autoPointsFromMotif);
