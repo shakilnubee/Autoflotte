@@ -483,9 +483,15 @@
       <button aria-label="Fermer" class="p-2 hover:bg-slate-100 rounded-lg" id="modal-close"><i data-lucide="x" class="w-5 h-5"></i></button>
     </div>
     <form id="driver-form" class="space-y-4" style="max-height:72vh;overflow-y:auto">
-      <div>
-        <div class="field-label">Nom complet *</div>
-        <input class="field-input" id="f-name" placeholder="Prénom Nom" required />
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <div class="field-label">Prénom *</div>
+          <input class="field-input" id="f-prenom" placeholder="Prénom" required />
+        </div>
+        <div>
+          <div class="field-label">Nom</div>
+          <input class="field-input" id="f-nom" placeholder="Nom de famille" />
+        </div>
       </div>
       <div class="grid grid-cols-2 gap-3">
         <div>
@@ -2135,14 +2141,16 @@
     }
     const da = $('f-arrivee'); if (da && !da.value) da.value = new Date().toISOString().slice(0, 10);
     $('modal-backdrop').classList.add('open');
-    $('f-name').focus();
+    const fp = $('f-prenom'); if (fp) fp.focus();
   }
   function closeModal() { $('modal-backdrop').classList.remove('open'); }
 
   function addDriver(e) {
     e.preventDefault();
-    const name = $('f-name').value.trim();
-    if (!name) { alert('Le nom est obligatoire.'); return; }
+    const prenom = ($('f-prenom') ? $('f-prenom').value : '').trim();
+    const nom = ($('f-nom') ? $('f-nom').value : '').trim();
+    const name = (prenom + ' ' + nom).trim();
+    if (!name) { alert('Indique au moins un prénom.'); return; }
     let key = normPrenom(name);
     // ⚠️ ANTI-FUSION D'HOMONYMES (même logique que FP.conducteurs.create) : si un conducteur
     // EXISTANT partage ce prénom mais porte un nom complet DIFFÉRENT, on lui donne une clé
@@ -2171,6 +2179,10 @@
     // ne vient jamais effacer une info existante (tel/email/permis déjà connus).
     const _ch = { name, manuel: true, masque: false };
     const _put = (k, val) => { const v = (val == null ? '' : String(val)).trim(); if (v) _ch[k] = v; };
+    // SOURCE UNIQUE : on stocke prénom ET nom séparément (même forme que FP.conducteurs.create) → la fiche,
+    // l'édition et les rapprochements lisent les bons champs (plus de « tout dans le prénom »).
+    _put('prenom', prenom);
+    _put('nom', nom);
     _put('poste', $('f-poste') ? $('f-poste').value : '');
     _put('tel', $('f-tel').value);
     _put('email', $('f-email').value);
