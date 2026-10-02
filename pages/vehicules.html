@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261002b">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261002c">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20261002b"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20261002c"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20261002b">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20261002c">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -1125,8 +1125,8 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20261002b"></script>
-<script src="../assets/js/supabase-client.js?v=20261002b"></script>
+<script src="../assets/js/vendor/supabase.js?v=20261002c"></script>
+<script src="../assets/js/supabase-client.js?v=20261002c"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -1142,13 +1142,13 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261002b"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261002c"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
-<script src="../assets/js/fleet-docs.js?v=20261002b"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20261002b"></script>
+<script src="../assets/js/fleet-docs.js?v=20261002c"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20261002c"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20261002b"></script>
+<script src="../assets/js/app.min.js?v=20261002c"></script>
 <script>
   lucide.createIcons();
 
@@ -1321,9 +1321,80 @@
         await addVehDoc(vehId, 'etat-des-lieux', label, url);   // insère + rafraîchit la fiche (openDrawer)
         if (!v.etatDesLieux) { v.etatDesLieux = true; try { persistVehFields(v, 'etatDesLieux'); } catch (e2) {} }
         if (FP.toast) FP.toast('✓ État des lieux signé importé et rattaché au conducteur');
+        // 🤖 Lire le KM de l'état des lieux (IA) → crée l'inspection → alimente le km de début/restitution.
+        try {
+          if (FP.scanEdlKm) {
+            if (FP.toast) FP.toast('🔎 Lecture du km de l\'état des lieux…');
+            const r = await FP.scanEdlKm(f);
+            if (r && r.km != null && createEdlInspection(vehId, { sens, date: (r.date || iso), km: r.km })) {
+              reanchorVehEdl(vehId);
+              if (FP.toast) FP.toast('✓ Km lu : ' + FP.num(r.km) + ' km — enregistré');
+              openDrawer(vehId);
+            } else if (FP.toast) FP.toast('ℹ️ Km non trouvé dans l\'état des lieux — tu peux le saisir à la main.');
+          }
+        } catch (e2) {}
       });
       inp.click();
     });
+  }
+  // Crée une INSPECTION (état des lieux) à partir d'un km lu par l'IA — alimente le km de début/restitution.
+  // Dédoublonne par date + sens : si une inspection existe déjà à cette date/sens, on complète son km s'il
+  // manque, sinon on ne touche à rien (pas de doublon). sens accepté : 'remise'/'restitution' ou 'Entrée'/'Sortie'.
+  function createEdlInspection(vehId, o) {
+    o = o || {}; const v = (data.vehicules || []).find(x => x.id === vehId); if (!v) return false;
+    const sv = String(o.sens || '').toLowerCase();
+    const sensNorm = (sv.indexOf('resti') >= 0 || sv.indexOf('sort') >= 0) ? 'Sortie' : 'Entrée';
+    const d = (o.date && /^\d{4}-\d{2}-\d{2}$/.test(String(o.date).slice(0, 10))) ? String(o.date).slice(0, 10) : new Date().toISOString().slice(0, 10);
+    const kmN = (o.km != null && Number.isFinite(+o.km) && +o.km > 0) ? Math.round(+o.km) : null;
+    if (kmN == null) return false;
+    try {
+      const s = FP.settings.get(); s.inspections = s.inspections || {};
+      const listv = s.inspections[vehId] || [];
+      const existing = listv.find(x => x && x.date === d && x.sens === sensNorm);
+      if (existing) { if (existing.km == null) { existing.km = kmN; } else { return false; } }
+      else { s.inspections[vehId] = [{ id: 'INS' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), date: d, sens: sensNorm, km: kmN, items: {}, note: 'Km lu automatiquement (IA) sur l\'état des lieux importé' }, ...listv]; }
+      FP.settings.save(s);
+    } catch (e) { return false; }
+    // Met à jour le km COURANT du véhicule seulement s'il est plus élevé (ne baisse jamais un km).
+    if (Number.isFinite(kmN) && kmN > (Number(v.km) || 0)) { v.km = kmN; try { persistVehFields(v, 'km'); } catch (e) {} try { renderTable(); renderKPIs(); } catch (e) {} }
+    return true;
+  }
+  // Ré-ancre le km/la date de début de la période EN COURS (si un seul conducteur) sur la remise désormais connue.
+  function reanchorVehEdl(vehId) {
+    try {
+      if (!(FP.affectations && FP.affectations._remise)) return;
+      const s = FP.settings.get(); const al = (s.affectations || {})[vehId];
+      if (!Array.isArray(al) || al.length !== 1 || al[0].fin) return;   // 1 seule période ouverte → sans ambiguïté
+      const rem = FP.affectations._remise(vehId, null); let did = false;
+      if (rem.km != null && al[0].kmDebut !== FP.affectations._km(rem.km)) { al[0].kmDebut = FP.affectations._km(rem.km); did = true; }
+      if (rem.date && al[0].debut !== rem.date) { al[0].debut = rem.date; did = true; }
+      if (did) FP.settings.save(s);
+    } catch (e) {}
+  }
+  // Lit le KM de TOUS les états des lieux importés (PDF/photo) qui n'ont pas encore de relevé km, via l'IA.
+  async function scanExistingEdlDocs(vehId) {
+    if (!(window.FP && FP.scanEdlKm && FP.edlHisto)) { if (FP.toast) FP.toast('Lecture IA indisponible (connexion requise).'); return; }
+    const docs = FP.edlHisto.docsDe(getVehDocs(vehId), vehId);
+    const inspList = (FP.settings.get().inspections || {})[vehId] || [];
+    const hasKm = (date, sensNorm) => inspList.some(x => x && x.date === date && x.sens === sensNorm && x.km != null);
+    const todo = docs.filter(d => { const date = FP.edlHisto.dateDe(d); const sensNorm = FP.edlHisto.sensDe(d) === 'restitution' ? 'Sortie' : 'Entrée'; return date && !hasKm(date, sensNorm); });
+    if (!todo.length) { if (FP.toast) FP.toast('Aucun état des lieux importé sans km à lire.'); return; }
+    let ok = 0, fail = 0;
+    for (let i = 0; i < todo.length; i++) {
+      const d = todo[i];
+      if (FP.toast) FP.toast('🔎 Lecture de l\'état des lieux ' + (i + 1) + '/' + todo.length + '…');
+      try {
+        const u = FP.signedScanUrl ? (await FP.signedScanUrl(d.url, 600)) : d.url;
+        const resp = await fetch(u); const blob = await resp.blob();
+        const isPdf = /pdf/i.test(blob.type || '') || /\.pdf($|\?)/i.test(d.url || '');
+        const file = new File([blob], isPdf ? 'edl.pdf' : 'edl.jpg', { type: blob.type || (isPdf ? 'application/pdf' : 'image/jpeg') });
+        const r = await FP.scanEdlKm(file);
+        if (r && r.km != null && createEdlInspection(vehId, { sens: FP.edlHisto.sensDe(d), date: FP.edlHisto.dateDe(d), km: r.km })) ok++; else fail++;
+      } catch (e) { fail++; }
+    }
+    reanchorVehEdl(vehId);
+    openDrawer(vehId);
+    if (FP.toast) FP.toast('✓ ' + ok + ' km lu(s)' + (fail ? (' · ' + fail + ' sans km (à saisir à la main)') : ''));
   }
   async function delVehDoc(vehId, docId) {
     // Corbeille 7 jours (restaurable) AVANT de retirer de la liste live.
@@ -1682,6 +1753,15 @@
     const _seenEdl = new Set();
     const photos = getVehDocs(v.id).filter(edlIsPhoto).filter(p => { const k = _edlKey(p.url); if (_seenEdl.has(k)) return false; _seenEdl.add(k); return true; });
     const list = getInspections(v.id);
+    // Nombre d'états des lieux IMPORTÉS (PDF/photo) qui n'ont pas encore de km lu → bouton « Lire le km (IA) ».
+    let edlNoKm = 0;
+    try {
+      if (FP.edlHisto) {
+        const _docs = FP.edlHisto.docsDe(getVehDocs(v.id), v.id);
+        const _hasKm = (date, sn) => list.some(x => x && x.date === date && x.sens === sn && x.km != null);
+        edlNoKm = _docs.filter(d => { const dt = FP.edlHisto.dateDe(d); const sn = FP.edlHisto.sensDe(d) === 'restitution' ? 'Sortie' : 'Entrée'; return dt && !_hasKm(dt, sn); }).length;
+      }
+    } catch (e) {}
     const isImgUrl = u => /\.(jpe?g|png|gif|webp|heic|bmp|avif)(\?|$)/i.test(u || '');
     const photoTile = (p) => {
       const ph = (p.label || '').toLowerCase().startsWith('sort') ? '📤' : '📥';
@@ -1711,6 +1791,7 @@
     return `
       <div>
         <div class="font-semibold mb-3 text-slate-900 border-b border-slate-200 pb-1 flex items-center gap-2">État des lieux <span class="text-xs font-normal text-slate-400">${list.length} inspection${list.length > 1 ? 's' : ''} · ${photos.length} pièce${photos.length > 1 ? 's' : ''}</span></div>
+        ${edlNoKm ? `<button type="button" data-edl-scan-km="${escapeHtml(v.id)}" class="btn btn-outline text-xs w-full justify-center mb-3" title="Lire le kilométrage des états des lieux importés (PDF/photo) avec l'IA et renseigner le km de début / restitution"><i data-lucide="scan-line" class="w-3.5 h-3.5"></i> 🤖 Lire le km de ${edlNoKm} état${edlNoKm > 1 ? 's' : ''} des lieux importé${edlNoKm > 1 ? 's' : ''}</button>` : ''}
         ${list.length ? `<div class="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Historique</div><div class="space-y-2 mb-4">${histRows}</div>` : ''}
         ${photos.length ? `<div class="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Photos</div><div class="mb-4 fp-gallery" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:8px">${photos.map(photoTile).join('')}</div>` : ''}
         ${(!list.length && !photos.length) ? '<p class="text-xs text-slate-400 mb-3">Aucun état des lieux enregistré pour ce véhicule.</p>' : ''}
@@ -5344,6 +5425,11 @@
         if (FP.toast) FP.toast('✓ État des lieux enregistré');
         openDrawer(vehId);
       }
+      return;
+    }
+    if (e.target.closest('[data-edl-scan-km]')) {
+      const vehId = e.target.closest('[data-edl-scan-km]').dataset.edlScanKm || state.editingId;
+      await scanExistingEdlDocs(vehId);
       return;
     }
     if (e.target.closest('[data-insp-del]')) {
