@@ -729,6 +729,52 @@ Deno.serve(async (req) => {
         return json({ ok: true, type, photos: photos.length, saved: _up.saved, sent: _up.sent, dropped: _up.dropped });
       }
 
+      // === Le conducteur CONSULTE ses déclarations (toutes natures) de CE véhicule + leur statut ===
+      if (action === "myDeclarations") {
+        const qtok0 = String(body.q || "").trim();
+        if (!qtok0) return json({ error: "QR incomplet." }, 400);
+        const { qr, err } = await loadQr(db, qtok0);
+        if (err) return json({ error: err }, 404);
+        const { data } = await db.from("declarations_conducteur")
+          .select("id,type,date_incident,lieu,description,tiers,blesses,photos,statut,created_at")
+          .eq("vehicule_id", qr.vehicule_id)
+          .order("created_at", { ascending: false })
+          .limit(30);
+        const list = (data || []).map((d: Record<string, unknown>) => ({
+          id: String(d.id || ""), type: String(d.type || "sinistre"),
+          date: String(d.date_incident || "") || (d.created_at ? String(d.created_at).slice(0, 10) : ""),
+          lieu: String(d.lieu || ""), description: String(d.description || ""),
+          tiers: String(d.tiers || ""), blesses: String(d.blesses || ""),
+          photos: Array.isArray(d.photos) ? d.photos.length : 0,
+          statut: String(d.statut || "nouveau"), createdAt: String(d.created_at || ""),
+          editable: String(d.statut || "nouveau") === "nouveau",
+        }));
+        return json({ ok: true, declarations: list });
+      }
+
+      // === Le conducteur MODIFIE sa déclaration — UNIQUEMENT tant qu'elle n'a pas été prise en compte ===
+      if (action === "editDeclaration") {
+        const qtok0 = String(body.q || "").trim();
+        if (!qtok0) return json({ error: "QR incomplet." }, 400);
+        const { qr, err } = await loadQr(db, qtok0);
+        if (err) return json({ error: err }, 404);
+        const id = String(body.id || "").trim();
+        if (!id) return json({ error: "Déclaration introuvable." }, 400);
+        const { data: cur } = await db.from("declarations_conducteur").select("id,vehicule_id,statut").eq("id", id).maybeSingle();
+        if (!cur || cur.vehicule_id !== qr.vehicule_id) return json({ error: "Déclaration introuvable." }, 404);
+        if (String(cur.statut || "nouveau") !== "nouveau") return json({ error: "Cette déclaration a déjà été prise en compte par ton gestionnaire — tu ne peux plus la modifier." }, 409);
+        const patch: Record<string, unknown> = {};
+        if (typeof body.description === "string") { const d = String(body.description).trim(); if (!d) return json({ error: "La description ne peut pas être vide." }, 400); patch.description = d.slice(0, 4000); }
+        if (typeof body.lieu === "string") patch.lieu = String(body.lieu).slice(0, 240);
+        if (typeof body.dateIncident === "string") patch.date_incident = String(body.dateIncident).slice(0, 120);
+        if (typeof body.tiers === "string") patch.tiers = String(body.tiers).slice(0, 600);
+        if (typeof body.blesses === "string") patch.blesses = String(body.blesses).slice(0, 240);
+        if (!Object.keys(patch).length) return json({ error: "Rien à modifier." }, 400);
+        const up = await db.from("declarations_conducteur").update(patch).eq("id", id);
+        if (up.error) return json({ error: "Échec de la modification. Réessaie." }, 500);
+        return json({ ok: true });
+      }
+
       // === État des lieux : photos de restitution envoyées par le conducteur ===
       if (action === "edl") {
         const qtok0 = String(body.q || "").trim();
