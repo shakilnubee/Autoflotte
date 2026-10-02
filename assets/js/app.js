@@ -11197,6 +11197,55 @@ FP.scanEdlKm = async function (file) {
     return { km, date, sens };
   } catch (e) { return null; }
 };
+// === LECTURE IA d'une PRIME D'ASSURANCE (montant annuel TTC/HT) =============
+// Pour un avis d'échéance / quittance / appel de cotisation d'assurance : extrait la PRIME ANNUELLE
+// (le montant à payer pour l'année), ancrée sur les LIBELLÉS d'assurance — PAS un Math.max aveugle.
+// ⚠️ LIRE, JAMAIS DEVINER (consigne projet) : on EXCLUT franchise, capital assuré, bonus-malus, n° de
+// police/contrat… ; null si absent. Si le document n'affiche qu'une échéance fractionnée (mensuelle…),
+// on reconstitue l'annuel (× période) en le SIGNALANT (calcule:true → l'UI affiche « vérifie »).
+FP.PRIME_ASSUR_PROMPT = [
+  "Lis attentivement ce document : c'est un document d'ASSURANCE automobile (avis d'echeance, quittance, appel de cotisation, attestation, conditions particulieres, releve de prime). Redresse mentalement l'image si elle est de travers.",
+  "Objectif : trouver la PRIME / COTISATION que le client paie pour assurer le vehicule. Ancre-toi sur les LIBELLES, ne prends jamais le plus grand nombre de la page.",
+  "Renvoie UNIQUEMENT un objet JSON valide, sans aucun texte autour (mets null si l'info est absente ou illisible) :",
+  "montantTTC : la PRIME / COTISATION ANNUELLE TTC (toutes taxes comprises) = le montant total a payer pour UNE ANNEE d'assurance. Cherche les libelles : 'Prime annuelle TTC', 'Cotisation annuelle', 'Prime TTC', 'Cotisation TTC', 'Montant TTC', 'Total TTC', 'Net a payer', 'Montant de la cotisation'. Nombre a point decimal, sans symbole euro.",
+  "montantHT : la prime annuelle HORS TAXES si elle figure ('Prime HT', 'Cotisation HT', 'Prime hors taxes'), sinon null.",
+  "periodicite : le rythme de paiement indique sur le document : 'annuelle', 'semestrielle', 'trimestrielle' ou 'mensuelle' ; sinon null.",
+  "montantFraction : SI le document n'affiche qu'un montant PAR ECHEANCE fractionnee (ex. une mensualite, un trimestre) et PAS le total annuel, mets ici ce montant d'une echeance TTC (nombre) ; sinon null.",
+  "NE prends JAMAIS pour la prime : une FRANCHISE, un CAPITAL / une VALEUR ASSURE(E), un plafond de garantie, un BONUS-MALUS / coefficient (CRM), un numero de police / de contrat / de client, un IBAN, une TAXE prise isolement, une date ou une annee. Ce sont des pieges.",
+  "Ne recopie QUE ce qui est ecrit. N'invente aucun montant."
+].join("\n");
+// Parse un montant texte → nombre > 0 (sinon null). Tolère espaces, €, virgule décimale, séparateur de milliers.
+FP._parsePrime = (raw) => {
+  let s = String(raw == null ? '' : raw).replace(/[\s€]/g, '');
+  if (!s) return null;
+  // "1 234,56" / "1.234,56" → virgule = décimale ; "1234.56" → point = décimale ; "1.234" (millier) → 1234.
+  if (s.indexOf(',') >= 0) s = s.replace(/\./g, '').replace(',', '.');
+  else if ((s.match(/\./g) || []).length > 1) s = s.replace(/\./g, '');
+  const n = parseFloat(s);
+  return (Number.isFinite(n) && n > 0) ? n : null;
+};
+FP.scanPrimeAssur = async function (file) {
+  try {
+    const f = await FP.scanIA(file, 'assurance', FP.PRIME_ASSUR_PROMPT, { maxTokens: 700 });
+    if (!f) return null;
+    let ttc = FP._parsePrime(f.montantTTC);
+    const ht = FP._parsePrime(f.montantHT);
+    let calcule = false;
+    const per = String(f.periodicite || '').toLowerCase();
+    // Repli : pas de total annuel lu mais une échéance fractionnée + une périodicité connue → on reconstitue
+    // l'annuel (× nombre d'échéances) en le SIGNALANT (jamais en silence). On n'invente pas : si la périodicité
+    // est inconnue, on laisse la fraction telle quelle (l'utilisateur ajuste).
+    if (ttc == null) {
+      const frac = FP._parsePrime(f.montantFraction);
+      if (frac != null) {
+        const mult = per.indexOf('mensu') >= 0 ? 12 : per.indexOf('trimes') >= 0 ? 4 : per.indexOf('semes') >= 0 ? 2 : 1;
+        ttc = Math.round(frac * mult * 100) / 100; calcule = (mult > 1);
+      }
+    }
+    if (ttc == null && ht == null) return null;
+    return { ttc, ht, calcule, periodicite: per || null };
+  } catch (e) { return null; }
+};
 // === AGENT IA (tableau de bord) ============================================
 // Construit un résumé COMPACT de la flotte (chiffres agrégés + listes bornées)
 // à partir de FP_DATA et des helpers canoniques. Ce contexte est envoyé à l'IA
