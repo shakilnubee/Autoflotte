@@ -11083,6 +11083,30 @@ FP.scanIA = async function (file, docType, promptOverride, opts) {
     return null;
   }
 };
+// === LECTURE IA d'un ÉTAT DES LIEUX (km + date + sens) ======================
+// Pour un PDF/photo d'état des lieux (remise ou restitution) importé : extrait le KM relevé, la DATE et
+// le SENS. Sert à renseigner automatiquement l'inspection (→ km de début/restitution de l'affectation).
+// ⚠️ LIRE, JAMAIS DEVINER (consigne projet) : null si absent, aucune valeur inventée.
+FP.EDL_KM_PROMPT = [
+  "Lis attentivement ce document : c'est un ETAT DES LIEUX de vehicule (remise / prise en main, ou restitution / retour), ou un proces-verbal / contrat de remise de vehicule. Redresse mentalement l'image si elle est de travers.",
+  "Renvoie UNIQUEMENT un objet JSON valide, sans aucun texte autour (mets null si l'info est absente ou illisible) :",
+  "km : le KILOMETRAGE au compteur releve sur cet etat des lieux (entier, sans espaces). C'est le nombre a cote de 'Kilometrage', 'Km', 'Compteur', 'Releve km', 'KM au compteur'. Ne le confonds JAMAIS avec une immatriculation, une date, un prix, un VIN, un numero de telephone.",
+  "date : la date de l'etat des lieux, format AAAA-MM-JJ (date de remise ou de restitution).",
+  "sens : 'remise' si c'est une PRISE EN MAIN / entree / mise a disposition du vehicule ; 'restitution' si c'est un RETOUR / sortie / reprise ; sinon null.",
+  "Ne recopie QUE ce qui est ecrit. N'invente aucun kilometrage, aucune date."
+].join("\n");
+FP.scanEdlKm = async function (file) {
+  try {
+    const f = await FP.scanIA(file, 'etat-des-lieux', FP.EDL_KM_PROMPT, { maxTokens: 600 });
+    if (!f) return null;
+    let km = null;
+    if (f.km != null && String(f.km).replace(/[^\d]/g, '') !== '') { const n = Math.round(Number(String(f.km).replace(/[^\d.]/g, ''))); km = (Number.isFinite(n) && n > 0) ? n : null; }
+    const date = (f.date && /^\d{4}-\d{2}-\d{2}$/.test(String(f.date).slice(0, 10))) ? String(f.date).slice(0, 10) : null;
+    const sv = String(f.sens || '').toLowerCase();
+    const sens = (sv.indexOf('resti') >= 0 || sv.indexOf('sort') >= 0) ? 'restitution' : (f.sens ? 'remise' : null);
+    return { km, date, sens };
+  } catch (e) { return null; }
+};
 // === AGENT IA (tableau de bord) ============================================
 // Construit un résumé COMPACT de la flotte (chiffres agrégés + listes bornées)
 // à partir de FP_DATA et des helpers canoniques. Ce contexte est envoyé à l'IA

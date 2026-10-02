@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261002b">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261002c">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20261002b"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20261002c"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20261002b">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20261002c">
 <style>
   .field-label { font-size: .78rem; font-weight: 600; color: var(--fp-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .35rem; }
   .field-input { width: 100%; padding: .6rem .8rem; border: 1px solid var(--fp-border); border-radius: .55rem; font-size: .9rem; background: white; }
@@ -369,8 +369,8 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20261002b"></script>
-<script src="../assets/js/supabase-client.js?v=20261002b"></script>
+<script src="../assets/js/vendor/supabase.js?v=20261002c"></script>
+<script src="../assets/js/supabase-client.js?v=20261002c"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -386,10 +386,10 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261002b"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261002c"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
-<script src="../assets/js/app.min.js?v=20261002b"></script>
+<script src="../assets/js/app.min.js?v=20261002c"></script>
 <script>
   lucide.createIcons();
   const $ = (id) => document.getElementById(id);
@@ -960,10 +960,30 @@
   }
 
   // ================= WIRING =================
+  // 🔗 Auto-lien véhicule ↔ conducteur (gain de temps) : choisir l'un pré-remplit l'autre s'ils sont liés.
+  //    Véhicule → conducteur = le chauffeur du véhicule. Conducteur → véhicule = SON véhicule (si UN seul).
+  //    Ne REMPLACE jamais une valeur déjà saisie ; en cas de plusieurs véhicules pour un conducteur, on laisse.
+  const _tkVehs = () => ((window.FP_DATA && FP_DATA.vehicules) || []);
+  const _tkGkey = (n) => { try { return FP.condGroupKey ? FP.condGroupKey(n) : (FP.normPrenom ? FP.normPrenom(n) : String(n || '').toLowerCase().trim()); } catch (e) { return String(n || '').toLowerCase().trim(); } };
+  function tkVehToCond() {
+    const vSel = $('t-vehicule'), cInp = $('t-conducteur'); if (!vSel || !cInp) return;
+    const v = _tkVehs().find(x => String(x.id) === String(vSel.value));
+    const ch = (v && v.chauffeur && v.chauffeur !== '—') ? String(v.chauffeur).trim() : '';
+    if (ch && !cInp.value.trim()) { cInp.value = ch; try { cInp.dispatchEvent(new Event('input', { bubbles: true })); } catch (e) {} }
+  }
+  function tkCondToVeh() {
+    const vSel = $('t-vehicule'), cInp = $('t-conducteur'); if (!vSel || !cInp) return;
+    const nom = cInp.value.trim(); if (!nom || vSel.value) return;            // véhicule déjà choisi → on ne touche pas
+    const k = _tkGkey(nom);
+    const matches = _tkVehs().filter(v => { const c = (v.chauffeur || '').trim(); return c && c !== '—' && _tkGkey(c) === k; });
+    if (matches.length === 1) { vSel.value = matches[0].id; try { vSel.dispatchEvent(new Event('change', { bubbles: true })); } catch (e) {} }
+  }
   // Sélecteur véhicule CHERCHABLE (taper plaque / marque / modèle) — règle projet.
   if (FP.searchSelect) FP.searchSelect($('t-vehicule'), { placeholder: 'Rechercher (plaque, marque, modèle…)' });
+  if ($('t-vehicule')) $('t-vehicule').addEventListener('change', tkVehToCond);
   // Conducteur : choisir dans la liste OU créer — règle projet (FP.conducteurPicker).
-  if (FP.conducteurPicker) FP.conducteurPicker($('t-conducteur'), {});
+  if (FP.conducteurPicker) FP.conducteurPicker($('t-conducteur'), { onPick: tkCondToVeh });
+  if ($('t-conducteur')) { $('t-conducteur').addEventListener('change', tkCondToVeh); $('t-conducteur').addEventListener('blur', tkCondToVeh); }
 
   $('btn-new').addEventListener('click', () => openNew());
   $('btn-models').addEventListener('click', openModels);
