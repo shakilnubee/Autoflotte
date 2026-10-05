@@ -4110,7 +4110,7 @@ FP.MAIL_DEFAUT = {
   invitation: `Bonjour,\n\nBienvenue sur Parc Pilot ! 🎉 Ton accès à la plateforme de gestion de flotte est prêt.\n\nChoisis ton mot de passe en un clic (bouton juste en dessous) et tu pourras te connecter tout de suite. Tout est réuni au même endroit, simple et rapide.\n\nTon identifiant : {email}\n\nÀ très vite ! 🚗`,
   // ===== RELANCES (écran « 📣 Relances ») — rappels envoyés au conducteur. TOUS ÉDITABLES. =====
   relanceCt: `Bonjour {prenom},\n🔧 Le contrôle technique du véhicule {immat} approche (échéance le {date}) ⏳ — un petit rendez-vous à caler ! 📅`,
-  relanceEntretien: `Bonjour {prenom},\n🛠️ Le véhicule {immat} : révision {date} 🚗 — pense à caler un passage au garage.`,
+  relanceEntretien: `Bonjour {prenom},\n🛠️ Le véhicule {immat} : révision {revision} 🚗 — pense à caler un passage au garage.`,
   relanceGarage: `Bonjour {prenom},\n🔧 Rendez-vous garage pour le véhicule {immat} ({motif}) : prévu le {date} 📅 — pense à t'organiser.`,
   relanceKm: `Bonjour {prenom},\n📸 Un petit coup d'œil au compteur du véhicule {immat} ? 😊 Ça file en 30 secondes !`,
   relanceAmende: `Bonjour {prenom},\n🎫 Une amende concerne le véhicule {immat} — pense à la régler pour éviter une majoration 💵\nRegarde ta boîte mail 📩`,
@@ -4131,7 +4131,7 @@ FP.MAIL_DEFAUT = {
   invitation_en: `Hello,\n\nWelcome to Parc Pilot! 🎉 Your access to the fleet management platform is ready.\n\nChoose your password in one click (button just below) and you can log in right away. Everything in one place, simple and fast.\n\nYour login: {email}\n\nSee you soon! 🚗`,
   signature_en: `Hello {prenom},\n\nLast step before hitting the road! 🚀 Sign the condition report for your {modele} ({immat}) in seconds, right from this email.`,
   relanceCt_en: `Hello {prenom},\n🔧 The roadworthiness test for vehicle {immat} is coming up (due {date}) ⏳ — time to book a slot! 📅`,
-  relanceEntretien_en: `Hello {prenom},\n🛠️ Vehicle {immat}: service {date} 🚗 — remember to book a garage visit.`,
+  relanceEntretien_en: `Hello {prenom},\n🛠️ Vehicle {immat}: service {revision} 🚗 — remember to book a garage visit.`,
   relanceGarage_en: `Hello {prenom},\n🔧 Garage appointment for vehicle {immat} ({motif}): scheduled on {date} 📅 — please plan ahead.`,
   relanceKm_en: `Hello {prenom},\n📸 A quick look at the odometer of vehicle {immat}? 😊 It takes 30 seconds!`,
   relanceAmende_en: `Hello {prenom},\n🎫 A fine concerns vehicle {immat} — remember to settle it to avoid a surcharge 💵\nCheck your inbox 📩`,
@@ -4157,6 +4157,21 @@ FP.fillTags = function (tpl, o) {
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 };
+// ⚠️ MODÈLES PÉRIMÉS à IGNORER (auto-upgrade propre, SANS réécrire les réglages) : un texte enregistré qui est
+// en fait un ANCIEN défaut (formulation « échéance le {date} » qui devient moche avec la nouvelle balise) est
+// traité comme « non personnalisé » → on retombe sur le NOUVEAU défaut. L'utilisateur garde son vrai texte s'il
+// l'a VRAIMENT personnalisé. Comparaison exacte (trim) : on ne touche que les anciens défauts connus.
+FP._MAIL_OBSOLETE = {
+  relanceEntretien: [
+    'Bonjour {prenom},\n🛠️ Le véhicule {immat} a un entretien à prévoir (échéance le {date}) 🚗 — pense à caler un passage au garage.',
+    'Bonjour {prenom},\n🛠️ Le véhicule {immat} : révision {date} 🚗 — pense à caler un passage au garage.'
+  ],
+  relanceEntretien_en: [
+    'Hello {prenom},\n🛠️ Vehicle {immat} has maintenance due ({date}) 🚗 — remember to book a garage visit.',
+    'Hello {prenom},\n🛠️ Vehicle {immat}: service {date} 🚗 — remember to book a garage visit.'
+  ]
+};
+FP._mailEstObsolete = function (defKey, val) { const a = (FP._MAIL_OBSOLETE && FP._MAIL_OBSOLETE[defKey]) || []; const t = String(val == null ? '' : val).trim(); return a.some(s => String(s).trim() === t); };
 // Modèle e-mail ACTIF : texte personnalisé de la société (profil[profilKey]) sinon défaut (MAIL_DEFAUT[defKey]).
 FP.mailModeleProfil = function (profilKey, defKey) { return FP.mailModeleProfilL(profilKey, defKey, 'fr'); };
 // Idem, mais SELON LA LANGUE (fr/en). lang==='en' → modèle EN personnalisé (profil[key+'_en']) sinon
@@ -4170,8 +4185,8 @@ FP.mailModeleProfilL = function (profilKey, defKey, lang) {
   //   3) défaut EN  4) défaut FR. Sinon un conducteur marqué EN recevait le DÉFAUT anglais au lieu du
   //   modèle FR saisi par l'utilisateur → « j'ai pas les mêmes mails que dans mes réglages ». Un vrai
   //   texte anglais s'obtient en remplissant le champ « English » du modèle (il repasse alors en tête).
-  if (en) { const ve = prof[profilKey + '_en']; if (ve && String(ve).trim()) return String(ve); }
-  const v = prof[profilKey]; if (v && String(v).trim()) return String(v);   // FR personnalisé = les réglages de l'utilisateur
+  if (en) { const ve = prof[profilKey + '_en']; if (ve && String(ve).trim() && !FP._mailEstObsolete(defKey + '_en', ve)) return String(ve); }
+  const v = prof[profilKey]; if (v && String(v).trim() && !FP._mailEstObsolete(defKey, v)) return String(v);   // FR personnalisé = les réglages de l'utilisateur (sauf ancien défaut périmé → nouveau défaut)
   if (en) { const de = FP.MAIL_DEFAUT[defKey + '_en']; if (de && String(de).trim()) return String(de); }
   return FP.MAIL_DEFAUT[defKey] || '';
 };
@@ -4271,7 +4286,7 @@ FP.PROFIL_CHAMPS = [
   { key: 'mailObjetRelanceCt',        label: "Objet — relance contrôle technique",   type: 'text', ph: 'Balises : {immat}, {prenom}.', default: FP.MAIL_OBJET_DEFAUT.relanceCt },
   { key: 'mailModeleRelanceCt',       label: "Relance — contrôle technique",          type: 'textarea', ph: 'Balises : {prenom}, {immat}, {date}.', default: FP.MAIL_DEFAUT.relanceCt },
   { key: 'mailObjetRelanceEntretien', label: "Objet — relance entretien",             type: 'text', ph: 'Balises : {immat}, {prenom}.', default: FP.MAIL_OBJET_DEFAUT.relanceEntretien },
-  { key: 'mailModeleRelanceEntretien',label: "Relance — entretien / révision à prévoir", type: 'textarea', ph: 'Balises : {prenom}, {immat}, {date}. ⚠️ {date} = l\'échéance de révision en toutes lettres, qui tient compte du KILOMÉTRAGE ET de la date (ex. « à faire dès maintenant — km de révision dépassé », « à prévoir d\'ici le 08/06/2027 ») → écris « révision {date} » plutôt que « échéance le {date} ».', default: FP.MAIL_DEFAUT.relanceEntretien },
+  { key: 'mailModeleRelanceEntretien',label: "Relance — entretien / révision à prévoir", type: 'textarea', ph: 'Balises : {prenom}, {immat}, {revision}, {date}. ⚠️ Utilise {revision} : c\'est l\'échéance intelligente en toutes lettres (tient compte du KILOMÉTRAGE ET de la date — ex. « à faire dès maintenant — km de révision dépassé », « à prévoir d\'ici le 08/06/2027 »). {date} = juste la date. Écris « révision {revision} » (PAS « échéance le {date} »).', default: FP.MAIL_DEFAUT.relanceEntretien },
   { key: 'mailObjetRelanceGarage',    label: "Objet — relance rendez-vous garage",    type: 'text', ph: 'Balises : {immat}, {prenom}.', default: FP.MAIL_OBJET_DEFAUT.relanceGarage },
   { key: 'mailModeleRelanceGarage',   label: "Relance — rendez-vous garage",          type: 'textarea', ph: 'Balises : {prenom}, {immat}, {date}, {motif}.', default: FP.MAIL_DEFAUT.relanceGarage },
   { key: 'mailObjetRelanceKm',        label: "Objet — relance relevé km",             type: 'text', ph: 'Balises : {immat}, {prenom}.', default: FP.MAIL_OBJET_DEFAUT.relanceKm },
@@ -4309,7 +4324,7 @@ FP.PROFIL_CHAMPS = [
   { key: 'mailModeleRappelGarage_en', label: "EN — Garage appointment reminder (day before)", type: 'textarea', ph: 'Tags: {prenom}, {immat}, {motif}.', default: FP.MAIL_DEFAUT.rappelgarage_en, lang: 'en' },
   { key: 'mailModeleSignature_en', label: "EN — Condition report to sign", type: 'textarea', ph: 'Tags: {prenom}, {immat}, {modele}, {date}.', default: FP.MAIL_DEFAUT.signature_en, lang: 'en' },
   { key: 'mailModeleRelanceCt_en', label: "EN — Reminder: roadworthiness test", type: 'textarea', ph: 'Tags: {prenom}, {immat}, {date}.', default: FP.MAIL_DEFAUT.relanceCt_en, lang: 'en' },
-  { key: 'mailModeleRelanceEntretien_en', label: "EN — Reminder: service due", type: 'textarea', ph: 'Tags: {prenom}, {immat}, {date}. ⚠️ {date} = the service due wording based on BOTH mileage AND date (e.g. "due now — service mileage passed", "to plan before 08/06/2027") → write "service {date}", not "due on {date}".', default: FP.MAIL_DEFAUT.relanceEntretien_en, lang: 'en' },
+  { key: 'mailModeleRelanceEntretien_en', label: "EN — Reminder: service due", type: 'textarea', ph: 'Tags: {prenom}, {immat}, {revision}, {date}. ⚠️ Use {revision}: smart due wording based on BOTH mileage AND date (e.g. "due now — service mileage passed", "to plan before 08/06/2027"). {date} = date only. Write "service {revision}", not "due on {date}".', default: FP.MAIL_DEFAUT.relanceEntretien_en, lang: 'en' },
   { key: 'mailModeleRelanceGarage_en', label: "EN — Reminder: garage appointment", type: 'textarea', ph: 'Tags: {prenom}, {immat}, {date}, {motif}.', default: FP.MAIL_DEFAUT.relanceGarage_en, lang: 'en' },
   { key: 'mailModeleRelanceKm_en', label: "EN — Reminder: mileage reading", type: 'textarea', ph: 'Tags: {prenom}, {immat}.', default: FP.MAIL_DEFAUT.relanceKm_en, lang: 'en' },
   { key: 'mailModeleRelanceAmende_en', label: "EN — Reminder: fine to settle", type: 'textarea', ph: 'Tags: {prenom}, {immat}.', default: FP.MAIL_DEFAUT.relanceAmende_en, lang: 'en' },
@@ -16417,10 +16432,12 @@ FP.relances = {
     // Langue du conducteur (fr/en) → modèle + objet EN éditables (repli FR). Rien en dur.
     const _lg = (FP.condLangue && FP.condLangue(item.conducteur) === 'en') ? 'en' : 'fr';
     const _en = (_lg === 'en');
-    const _tags = { prenom: p, immat: item.immat, date: this._fdate(item.dueDate), motif: item.motif || '' };
-    // RÉVISION : la balise {date} devient une phrase qui tient compte du KILOMÉTRAGE **et** de la date (le
-    // premier des deux) → si le véhicule a trop roulé, le message dit « à faire dès maintenant », pas la date.
-    try { if (item.type === 'entretien' && item.veh && FP.revisionEcheanceTexte) { const _rp = FP.revisionEcheanceTexte(item.veh, _lg); if (_rp) _tags.date = _rp; } } catch (e) {}
+    const _tags = { prenom: p, immat: item.immat, date: this._fdate(item.dueDate), motif: item.motif || '', revision: '' };
+    // RÉVISION : balise {revision} = phrase qui tient compte du KILOMÉTRAGE **ET** de la date (le premier des
+    // deux) → « à faire dès maintenant — km dépassé » / « à prévoir d'ici le DATE ». {date} reste la DATE seule
+    // (toujours propre, quel que soit le modèle). Repli : si {revision} vide, on retombe sur la date.
+    try { if (item.type === 'entretien' && item.veh && FP.revisionEcheanceTexte) { const _rp = FP.revisionEcheanceTexte(item.veh, _lg); _tags.revision = _rp || _tags.date; } } catch (e) {}
+    if (!_tags.revision) _tags.revision = _tags.date;
     const _msg = (mkey, dkey) => (FP.mailModeleProfilL && FP.fillTags) ? FP.fillTags(FP.mailModeleProfilL(mkey, dkey, _lg), _tags) : (FP.MAIL_DEFAUT[dkey] || '');
     const _obj = (dkey, fallback) => (FP.mailObjetL ? (FP.mailObjetL(dkey, _tags, _lg) || fallback) : fallback);
     let text = '', subject = '', emailText = '', kmLink = '';
