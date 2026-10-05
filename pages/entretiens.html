@@ -232,13 +232,16 @@
         rows.addEventListener('change',(e)=>{ const inp=e.target.closest('[data-g-id]'); if(!inp) return; const id=inp.getAttribute('data-g-id'),field=inp.getAttribute('data-g-field'); const g=FP.getPrestataires().find(x=>x&&x.id===id); if(!g) return; g[field]=(inp.value||'').trim(); FP.savePrestataire(g); status('✓ Enregistré'); renderMarques(); renderVehicules(); });
         rows.addEventListener('click',(e)=>{
           const del=e.target.closest('[data-g-del]'); if(del){ if(confirm('Supprimer ce garage du carnet d\'adresses ?')){ FP.deletePrestataire(del.getAttribute('data-g-del')); window.renderGaragesSection(); status('✓ Supprimé'); } return; }
-          const pdfDel=e.target.closest('[data-g-pdf-del]'); if(pdfDel){ const g=FP.getPrestataires().find(x=>x&&x.id===pdfDel.getAttribute('data-g-pdf-del')); if(g){ delete g.pdfUrl; delete g.pdfName; FP.savePrestataire(g); renderRows(); status('✓ PDF retiré'); } return; }
+          const pdfDel=e.target.closest('[data-g-pdf-del]'); if(pdfDel){ const g=FP.getPrestataires().find(x=>x&&x.id===pdfDel.getAttribute('data-g-pdf-del')); if(g){ g.pdfUrl=null; g.pdfName=null; FP.savePrestataire(g); renderRows(); status('✓ PDF retiré'); } return; }  /* ⚠️ null (pas delete) : savePrestataire FUSIONNE → un delete serait ré-écrasé par l'ancienne valeur */
           const pdfOpen=e.target.closest('[data-g-pdf-open]'); if(pdfOpen){ e.preventDefault(); const u=pdfOpen.getAttribute('data-g-pdf-open'); if(u){ if(window.FP&&FP.openScan) FP.openScan(u); else window.open(u,'_blank','noopener'); } return; }
           const pdf=e.target.closest('[data-g-pdf]'); if(pdf){ _pdfTarget=pdf.getAttribute('data-g-pdf'); if(pdfFile) pdfFile.click(); return; }
         });
         if(pdfFile) pdfFile.addEventListener('change', async (e)=>{
           const f=e.target.files&&e.target.files[0]; e.target.value=''; if(!f||!_pdfTarget) return;
           const g=FP.getPrestataires().find(x=>x&&x.id===_pdfTarget); if(!g) return;
+          // Le garage était-il VIDE avant l'upload ? (sert à l'anti-doublon : un garage vide rempli par l'IA
+          // avec le nom d'un garage DÉJÀ enregistré ne doit pas créer un doublon.)
+          const wasEmpty = !((g.nom||'').trim() || (g.email||'').trim() || (g.tel||'').trim() || (g.adresse||'').trim());
           status('⏳ Envoi du document…');   // retour immédiat (un PDF/photo met quelques secondes)
           let url=null, upErr='';
           try{ url=await FP.uploadScan(f,'garages',{name:(g.nom||'garage')+'-'+(f.name||'doc').replace(/\.[^.]+$/,'')}); }catch(err){ upErr=(err&&(err.message||err))||''; }
@@ -250,6 +253,19 @@
               status('🔎 Lecture du PDF par l\'IA…');
               const fields=await FP.scanIA(f,'garage',GARAGE_PROMPT,{maxTokens:700});
               if(fields){
+                // 🚫 ANTI-DOUBLON : si l'IA lit le nom d'un garage DÉJÀ enregistré (autre fiche) et que CE garage
+                // était vide (fiche créée à blanc) → on rattache le document au garage EXISTANT et on supprime la
+                // fiche vide, au lieu de créer un deuxième garage identique.
+                const norm=s=>String(s||'').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]/g,'');
+                const readNom=(fields.nom||'').trim();
+                const exist=readNom?FP.getPrestataires().find(p=>p&&p.id!==g.id&&norm(p.nom)===norm(readNom)):null;
+                if(exist && wasEmpty){
+                  exist.pdfUrl=url; exist.pdfName=g.pdfName; FP.savePrestataire(exist);
+                  FP.deletePrestataire(g.id);
+                  renderRows(); renderMarques(); renderVehicules();
+                  status('✓ Ce garage était déjà enregistré — document joint au garage existant (doublon évité).');
+                  return;
+                }
                 let n=0; const fill=(k,val)=>{ if(val&&String(val).trim()&&(!g[k]||!String(g[k]).trim())){ g[k]=String(val).trim(); n++; } };
                 fill('nom',fields.nom); fill('adresse',fields.adresse); fill('email',fields.email); fill('tel',fields.tel);
                 if(n){ FP.savePrestataire(g); renderRows(); renderMarques(); renderVehicules(); status('✓ PDF lu par l\'IA — '+n+' champ(s) rempli(s)'); }
