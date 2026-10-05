@@ -34,6 +34,16 @@
   .veh-card .price { font-weight: 800; color: var(--fp-primary); }
   .status-select { width: 100%; padding: .35rem .55rem; border: 1px solid var(--fp-border); border-radius: .4rem; font-size: .78rem; background: white; margin-top: .5rem; }
   .price-input { width: 100%; padding: .35rem .55rem; border: 1px solid var(--fp-border); border-radius: .4rem; font-size: .85rem; margin-top: .5rem; }
+  .veh-card a.immat { color: var(--fp-primary); text-decoration: none; }
+  .veh-card a.immat:hover { text-decoration: underline; }
+  /* QR annonce de vente : photo + survol (ouvrir / copier le lien) */
+  .qr-vente { position: relative; display: inline-block; margin-top: .55rem; }
+  .qr-vente img { width: 92px; height: 92px; display: block; border: 1px solid var(--fp-border); border-radius: .45rem; background: #fff; }
+  .qr-vente .qrv-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .3rem; background: rgba(15,30,61,.85); border-radius: .45rem; opacity: 0; transition: opacity .12s; pointer-events: none; }
+  .qr-vente:hover .qrv-overlay { opacity: 1; pointer-events: auto; }
+  .qr-vente .qrv-overlay a, .qr-vente .qrv-overlay button { font-size: .68rem; font-weight: 700; color: #fff; background: rgba(255,255,255,.16); border: none; border-radius: .35rem; padding: .22rem .55rem; cursor: pointer; text-decoration: none; }
+  .qr-vente .qrv-overlay a:hover, .qr-vente .qrv-overlay button:hover { background: var(--fp-accent); }
+  .qr-vente-cap { font-size: .62rem; color: var(--fp-muted); margin-top: .18rem; }
 </style>
 <script>
 (function(){
@@ -237,12 +247,13 @@
           return `
             <div class="veh-card" data-id="${v.id}">
               <div class="flex justify-between items-start mb-1">
-                <span class="immat">${FP.esc(v.immat)}</span>
+                <a class="immat" href="vehicules.html?veh=${encodeURIComponent(v.id)}" title="Ouvrir la fiche véhicule" onclick="event.stopPropagation()">${FP.esc(v.immat)}</a>
                 <span class="price">${prixSugg ? FP.euro(prixSugg) : '—'}</span>
               </div>
               <div class="text-xs text-slate-600 mb-1">${FP.esc(v.marque)} ${FP.esc(v.modele)}</div>
               <div class="text-xs text-slate-400">${FP.num(v.km)} km · ${FP.esc(v.chauffeur ? (FP.prenomAffiche ? FP.prenomAffiche(v.chauffeur) : v.chauffeur) : '—')}</div>
               ${estim ? `<div class="text-xs mt-1" style="color:var(--fp-accent)" title="Estimation indicative : valeur d'achat, âge et kilométrage">💡 Cote estimée : <b>${FP.euro(estim)}</b></div>` : ''}
+              <div class="qr-vente" data-qrv="${FP.esc(v.id)}" style="display:none"></div>
               <input type="number" class="price-input" data-field="prixVente" data-id="${v.id}" placeholder="Prix visé (€)" value="${v.prixVente || ''}" />
               <select class="status-select" data-field="pipelineStatut" data-id="${v.id}">
                 ${PIPELINE.map(p => `<option value="${p.key}" ${pipelineOf(v) === p.key ? 'selected' : ''}>${p.label}</option>`).join('')}
@@ -253,6 +264,51 @@
         ${byCol[col.key].length === 0 ? '<p class="text-xs text-slate-400 text-center py-4">Vide</p>' : ''}
       </div>
     `).join('');
+    renderVenteQRs();
+  }
+
+  // QR de l'annonce de vente (lien portail + « &vue=vente ») : photo sur chaque carte ;
+  // au survol → ouvrir l'annonce ou copier le lien. Même source QR que la fiche véhicule (FP.qr).
+  const _qrvCache = {}; // id → venteLink (évite de rappeler dataFor à chaque re-render)
+  async function renderVenteQRs() {
+    if (!(window.FP && FP.qr)) return;
+    const slots = document.querySelectorAll('.qr-vente[data-qrv]:not([data-done])');
+    if (!slots.length) return;
+    let okLib = !!window.qrcode;
+    if (!okLib) { try { okLib = await FP.qr.ensureLib(); } catch (e) {} }
+    if (!okLib) return;
+    for (const slot of slots) {
+      if (slot.dataset.done) continue;
+      const v = data.vehicules.find(x => x.id === slot.dataset.qrv);
+      if (!v) continue;
+      let venteLink = _qrvCache[v.id] || '';
+      if (!venteLink) {
+        try { const qd = await FP.qr.dataFor(v); if (qd && qd.url) venteLink = qd.url + '&vue=vente'; } catch (e) {}
+        if (venteLink) _qrvCache[v.id] = venteLink;
+      }
+      if (slot.dataset.done) continue; // re-render pendant l'await → ce slot est périmé
+      if (!venteLink) { slot.style.display = 'none'; continue; }
+      slot.dataset.done = '1';
+      slot.innerHTML = '';
+      slot.style.display = 'inline-block';
+      let cnv; try { cnv = FP.qr.buildCanvas(venteLink, 4, 2); } catch (e) { slot.style.display = 'none'; continue; }
+      const img = document.createElement('img');
+      img.src = cnv.toDataURL('image/png');
+      img.alt = 'QR annonce de vente'; img.title = 'Annonce de vente — scannez ou survolez pour le lien';
+      slot.appendChild(img);
+      const ov = document.createElement('div');
+      ov.className = 'qrv-overlay';
+      ov.innerHTML = '<a target="_blank" rel="noopener">🔗 Ouvrir</a><button type="button">📋 Copier</button>';
+      const link = ov.querySelector('a'); link.href = venteLink; link.addEventListener('click', e => e.stopPropagation());
+      const btn = ov.querySelector('button');
+      btn.addEventListener('click', e => {
+        e.preventDefault(); e.stopPropagation();
+        const flash = () => { btn.textContent = '✓ Copié'; setTimeout(() => { btn.textContent = '📋 Copier'; }, 1300); };
+        const fallback = () => { try { const ta = document.createElement('textarea'); ta.value = venteLink; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); } catch (y) {} flash(); };
+        try { if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(venteLink).then(flash).catch(fallback); else fallback(); } catch (x) { fallback(); }
+      });
+      slot.appendChild(ov);
+    }
   }
 
   // Sauvegarde directe au changement
