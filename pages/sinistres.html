@@ -814,7 +814,8 @@
             <div class="flex items-center justify-between gap-2 mt-3 pt-3" style="border-top:1px solid var(--fp-border)">
               ${statutSelect(g.key)}
               <div class="flex items-center gap-3 shrink-0">
-                <button type="button" data-sin-assoc="${g.key}" title="Associer un devis / une facture" class="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-900"><i data-lucide="link-2" class="w-3.5 h-3.5"></i> Associer</button>
+                <button type="button" data-sin-depose="${s.id}" data-key="${g.key}" title="Déposer la facture de réparation de CET accident : l'IA lit le montant et la rattache à cet incident (sans créer de doublon)" class="inline-flex items-center gap-1 text-xs font-semibold" style="color:var(--fp-accent)"><i data-lucide="receipt" class="w-3.5 h-3.5"></i> Déposer la facture</button>
+                <button type="button" data-sin-assoc="${g.key}" title="Associer un devis / une facture déjà enregistré" class="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-900"><i data-lucide="link-2" class="w-3.5 h-3.5"></i> Associer</button>
                 ${multi ? '' : docLink(s.fileId, false)}
                 ${multi ? '' : `<button type="button" data-sin-pdf="${s.id}" title="Générer le rapport PDF (avec photos) à envoyer à l'assurance" class="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-900"><i data-lucide="file-down" class="w-3.5 h-3.5"></i> Rapport PDF</button>`}
                 ${multi ? '' : `<button type="button" data-sin-del="${s.id}" title="Supprimer ce sinistre" class="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-red-600"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Supprimer</button>`}
@@ -1140,6 +1141,10 @@
     const assoc = e.target.closest('[data-sin-assoc]');
     if (assoc) { const p = $('timeline').querySelector(`[data-assoc-panel="${assoc.dataset.sinAssoc}"]`); if (p) p.classList.toggle('hidden'); return; }
 
+    // « Déposer la facture » de CET accident : lit le montant (IA) + rattache à l'incident SANS doublon.
+    const depose = e.target.closest('[data-sin-depose]');
+    if (depose) { e.preventDefault(); deposeFactureSinistre(depose.dataset.sinDepose, depose.dataset.key); return; }
+
     // Rapport PDF DEPUIS le dossier sinistre (toujours possible, même après avoir traité la demande).
     // On synthétise un objet « déclaration » à partir du dossier + réglages + photos, puis on réutilise
     // le MÊME générateur que les demandes conducteur (DeclCond.exportPdf).
@@ -1206,6 +1211,62 @@
       },
       onCancel: () => refreshAll(),
     });
+  }
+
+  // === « Déposer la facture » d'un sinistre (bouton sur la carte) ============================
+  // Objectif (demande utilisateur) : déposer LA facture de réparation d'un accident en 1 geste, l'IA lit
+  // le montant, et c'est rattaché à CET incident — SANS créer de doublon de coût.
+  //  • Incident à UNE seule ligne (cas courant : une déclaration/constat) → on COMPLÈTE cette ligne avec la
+  //    facture : le montant lu REMPLACE une éventuelle estimation (donc jamais 2× le montant).
+  //  • Incident à PLUSIEURS lignes (déjà des factures réelles) → on AJOUTE une ligne et on la rattache
+  //    (la somme de plusieurs vraies factures est légitime : carrosserie + pare-brise, etc.).
+  // Le document est toujours enregistré (consultable via « Voir le document », la section Photos et le Rapport PDF).
+  async function deposeFactureSinistre(repId, groupKey){
+    if (!(window.FP && FP.uploadScan && FP.persist)) { alert('Connexion requise pour déposer une facture.'); return; }
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = 'image/*,application/pdf,.pdf'; inp.style.display = 'none';
+    document.body.appendChild(inp);
+    inp.addEventListener('change', async () => {
+      const f = inp.files && inp.files[0]; inp.remove();
+      if (!f) return;
+      const g = allGroups().find(x => x.key === groupKey);
+      const rep = sinistres.find(x => x.id === repId) || (g && g.rep);
+      if (!rep) return;
+      const immat = rep.vehiculeImmat || '';
+      if (FP.toast) FP.toast('⏳ Lecture et dépôt de la facture…');
+      let det = {}; try { const ia = await FP.scanIA(f, 'facture'); if (ia) det = ia; } catch (_) {}
+      let url = ''; try { url = await FP.uploadScan(f, 'documents'); } catch (_) {}
+      if (!url) { if (FP.notifyError) FP.notifyError("Le document de la facture n'a pas pu être envoyé — réessaie (vérifie ta connexion)."); else alert("Échec de l'envoi de la facture — réessaie."); return; }
+      const montant = Number.isFinite(det.montantTTC) ? det.montantTTC : null;
+      // Document consultable (section Photos & Rapport PDF) — toujours enregistré, quel que soit le cas.
+      try {
+        const doc = { id: 'SDF' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), vehiculeId: immat, type: 'sinistre-doc', label: 'Facture' + (det.fournisseur ? (' ' + det.fournisseur) : ''), url, driveId: null };
+        await FP.persist.insert('documents', doc);
+        if (typeof sinDocs !== 'undefined' && !sinDocs.some(x => x.url === url)) sinDocs.push(doc);
+      } catch (_) {}
+      const single = !g || g.lines.length <= 1;
+      if (single) {
+        // UNE ligne → on la complète (le montant de la facture REMPLACE l'estimation → pas de double comptage).
+        const patch = {};
+        if (montant != null) { rep.montantTTC = montant; patch.montantTTC = montant; }
+        if (det.fournisseur && !rep.fournisseur) { rep.fournisseur = det.fournisseur; patch.fournisseur = det.fournisseur; }
+        if (det.numeroFacture && !rep.numeroFacture) { rep.numeroFacture = det.numeroFacture; patch.numeroFacture = det.numeroFacture; }
+        if (det.date && !rep.date) { rep.date = det.date; patch.date = det.date; }
+        if (!rep.fileId) { rep.fileId = url; patch.fileId = url; }   // doc principal = la facture si la ligne n'en avait pas
+        const df = (data.factures || []).find(x => x.id === rep.id); if (df) Object.assign(df, patch);
+        try { if (Object.keys(patch).length) await FP.persist.update('factures', rep.id, patch); } catch (_) {}
+      } else {
+        // Plusieurs lignes (déjà des factures) → on AJOUTE une ligne et on la rattache à l'incident.
+        const nid = 'F-SIN-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+        const fact = { id: nid, date: det.date || null, vehiculeImmat: immat || null, fournisseur: det.fournisseur || null, numeroFacture: det.numeroFacture || null, description: f.name || 'Facture sinistre', type: 'sinistre', montantHT: Number.isFinite(det.montantHT) ? det.montantHT : null, montantTVA: Number.isFinite(det.montantTVA) ? det.montantTVA : null, montantTTC: montant, fileId: url, fileName: f.name || null };
+        try { await FP.persist.insert('factures', fact); (data.factures = data.factures || []).push(fact); sinistres = (data.factures || []).filter(x => x.type === 'sinistre'); } catch (_) {}
+        try { associate(groupKey, nid); } catch (_) {}
+      }
+      if (typeof loadSinDocs === 'function') loadSinDocs();
+      refreshAll();
+      if (FP.toast) FP.toast('✓ Facture déposée' + (montant != null ? (' : ' + FP.euroPrecis(montant)) : '') + ' — rattachée à ce sinistre. Passe le statut sur « Remboursé » si besoin.');
+    });
+    inp.click();
   }
 
   // Charts
