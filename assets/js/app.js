@@ -15134,6 +15134,27 @@ document.addEventListener('click', (e) => {
   if (FP.toast) FP.toast('✓ Copié : ' + v);
 });
 
+// ===== Raccourcissement d'URL (RÈGLE : jamais de lien géant dans un SMS/WhatsApp) — SOURCE UNIQUE =====
+// Un lien signé Supabase est ÉNORME (token) → moche dans un message. En SMS/WhatsApp (texte brut) on ne
+// peut pas « masquer » l'URL derrière un intitulé → on la RACCOURCIT (is.gd puis v.gd, publics, sans clé).
+// Repli SÛR : si le service est indisponible/bloqué (CORS, réseau), on renvoie l'URL d'origine (jamais d'échec).
+FP._shortCache = FP._shortCache || {};
+FP.shortenUrl = async function (url) {
+  const u = String(url || '');
+  if (!u || u.length < 60 || !/^https?:\/\//.test(u)) return u;   // déjà court → inutile
+  if (FP._shortCache[u]) return FP._shortCache[u];
+  const tryOne = async (api) => {
+    try {
+      const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 6000);
+      const r = await fetch(api + encodeURIComponent(u), { signal: ctrl.signal });
+      clearTimeout(t);
+      if (r.ok) { const s = (await r.text()).trim(); if (/^https?:\/\/\S+$/.test(s) && s.length < u.length) return s; }
+    } catch (e) {}
+    return null;
+  };
+  const s = (await tryOne('https://is.gd/create.php?format=simple&url=')) || (await tryOne('https://v.gd/create.php?format=simple&url='));
+  const out = s || u; FP._shortCache[u] = out; return out;
+};
 // ===== Envoi manuel SMS / WhatsApp (clic-pour-envoyer, GRATUIT) — SOURCE UNIQUE =====
 // Ouvre l'appli SMS/WhatsApp du téléphone de l'utilisateur avec le message DÉJÀ ÉCRIT. Aucun
 // prestataire, aucun coût : c'est l'utilisateur qui appuie sur « Envoyer », depuis SON numéro.
@@ -15220,8 +15241,9 @@ FP.msg = {
     async function refreshAttLinks() {
       try {
         const paths = atts.map(a => a && a.path).filter(Boolean);
-        const signed = await Promise.all(paths.map(p => (FP.signedScanUrl ? FP.signedScanUrl(p, 604800) : Promise.resolve(p))));
-        _attLinks = signed.filter(Boolean);
+        const signed = (await Promise.all(paths.map(p => (FP.signedScanUrl ? FP.signedScanUrl(p, 604800) : Promise.resolve(p))))).filter(Boolean);
+        // RÈGLE : on RACCOURCIT le lien signé (sinon URL géante et moche dans le SMS/WhatsApp).
+        _attLinks = await Promise.all(signed.map(s => (FP.shortenUrl ? FP.shortenUrl(s) : s)));
       } catch (e) { _attLinks = atts.map(a => a && a.path).filter(Boolean); }
       const note = q('#fp-msg-chan-note'); if (note) note.style.display = _attLinks.length ? '' : 'none';
       const sh = q('#fp-msg-share'); if (sh) sh.style.display = (_attLinks.length && navigator && navigator.share) ? '' : 'none';
