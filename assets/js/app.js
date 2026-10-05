@@ -5501,7 +5501,7 @@ FP.settings = {
       //   « déjà traités », anomalies conso « OK », lignes ignorées du TCO.
       'rapprIgnore', 'tfAnomOk', 'ignores',
       // — Échéances de documents + surveillances/corbeilles synchronisées (jumeaux de docStatus/docTypes) :
-      'docExpire', 'assuranceIgnore', 'amendesJustifWatch', 'docTrash', 'sinistreDossiers',
+      'docExpire', 'assuranceIgnore', 'amendesJustifWatch', 'docTrash', 'sinistreDossiers', 'sinistreDossiersSupprimes',
       // — Notes de zone libres (irrécupérables, sans miroir local), liste des prestataires (garages /
       //   cartes carburant / badges péage), et corbeille de restauration synchronisée (filet anti-perte) :
       //   ce sont des maps/tableaux de DONNÉES → fusion fine multi-appareils (mergeMap/mergeArr), sinon un
