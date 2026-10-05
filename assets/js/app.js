@@ -7685,6 +7685,40 @@ FP.affectations = {
     try { FP._edlReanchorStats = { touchedVeh, skippedMulti, noEdl, changed }; } catch (e) {}
     return touchedVeh;
   },
+  // Enregistre (idempotent) une INSPECTION (état des lieux) avec son km + sa date → c'est la SOURCE que
+  // _remise lit pour renseigner le « Km au début » / la date de la période d'affectation. Appelé à la
+  // génération d'un état des lieux (on connaît alors le km de prise en main / restitution). Non destructif :
+  // ne crée que si absent (même date + même sens), ne complète le km que s'il manque. Settings = synchronisé.
+  ensureInspection(vehId, o) {
+    try {
+      o = o || {}; if (vehId == null) return false;
+      const sv = String(o.sens || '').toLowerCase();
+      const sensNorm = (sv.indexOf('resti') >= 0 || sv.indexOf('sort') >= 0) ? 'Sortie' : 'Entrée';
+      const d = (o.date && /^\d{4}-\d{2}-\d{2}$/.test(String(o.date).slice(0, 10))) ? String(o.date).slice(0, 10) : new Date().toISOString().slice(0, 10);
+      const kmN = this._km(o.km);
+      const s = FP.settings.get(); s.inspections = s.inspections || {};
+      const listv = s.inspections[vehId] || [];
+      const existing = listv.find(x => x && x.date === d && x.sens === sensNorm);
+      let changed = false;
+      if (existing) { if (kmN != null && existing.km == null) { existing.km = kmN; changed = true; } }
+      else { s.inspections[vehId] = [{ id: 'INS' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), date: d, sens: sensNorm, km: kmN, items: {}, note: 'État des lieux (' + (sensNorm === 'Sortie' ? 'restitution' : 'remise') + ')' }, ...listv]; changed = true; }
+      if (changed) FP.settings.save(s);
+      return changed;
+    } catch (e) { return false; }
+  },
+  // Ré-ancre le km + la date de début de la période EN COURS (si UNE seule période ouverte, sans ambiguïté)
+  // sur la remise (état des lieux d'entrée) désormais connue. Source UNIQUE utilisée par la fiche véhicule.
+  reanchorCurrent(vehId) {
+    try {
+      const s = FP.settings.get(); const al = (s.affectations || {})[vehId];
+      if (!Array.isArray(al) || al.length !== 1 || al[0].fin) return false;   // 1 seule période ouverte
+      const rem = this._remise(vehId, null); let did = false;
+      if (rem.km != null && al[0].kmDebut !== this._km(rem.km)) { al[0].kmDebut = this._km(rem.km); did = true; }
+      if (rem.date && al[0].debut !== rem.date) { al[0].debut = rem.date; did = true; }
+      if (did) FP.settings.save(s);
+      return did;
+    } catch (e) { return false; }
+  },
   // Renomme un conducteur dans tout l'historique (suit un renommage de fiche).
   rename(oldName, newName) {
     const from = this._norm(oldName).toLowerCase(); const to = this._norm(newName);
@@ -12272,6 +12306,16 @@ FP.edl = {
           } catch (e) {}
         }
         const fname = 'Etat-des-lieux-' + motLbl + '-' + (data.immat || 'vehicule') + '-' + data.date + '.pdf';
+        // 📌 L'état des lieux fixe le KM + la DATE de prise en main / restitution → on enregistre une
+        // inspection (source unique lue par l'affectation) et on ré-ancre la période EN COURS : la fiche
+        // « Conducteurs — historique » affiche ensuite tout seule le « Km au début » et la date. Déterministe
+        // (pas d'IA) ; synchronisé via settings. Idempotent (ne double pas, n'écrase pas une valeur saisie).
+        try {
+          if (FP.affectations && FP.affectations.ensureInspection) {
+            FP.affectations.ensureInspection(veh.id, { sens: data.sens, date: data.date, km: data.km });
+            if (FP.affectations.reanchorCurrent) FP.affectations.reanchorCurrent(veh.id);
+          }
+        } catch (e) {}
         if (mode === 'dl') { doc.save(fname); btn.disabled = false; btn.innerHTML = old; return; }
         // Enregistre le PDF dans les Documents du véhicule + envoie par e-mail.
         const blob = doc.output('blob');
