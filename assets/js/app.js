@@ -15187,6 +15187,9 @@ FP.msg = {
           + '<button type="button" id="fp-msg-wa" style="flex:1;min-width:120px;justify-content:center;display:inline-flex;align-items:center;gap:6px;padding:11px;border-radius:10px;border:none;background:#25D366;color:#0b3d1f;font-weight:800;cursor:pointer">🟢 WhatsApp</button>'
           + (opts.email ? '<button type="button" id="fp-msg-email" style="flex:1;min-width:120px;justify-content:center;display:inline-flex;align-items:center;gap:6px;padding:11px;border-radius:10px;border:none;background:#0B1220;color:#fff;font-weight:800;cursor:pointer">📧 Email</button>' : '')
         + '</div>'
+        // Quand un document est joint : il part en PIÈCE JOINTE par e-mail, et en LIEN cliquable par SMS/WhatsApp
+        // (ces apps ne permettent pas de joindre un fichier via un lien). Note affichée seulement s'il y a un doc.
+        + '<p id="fp-msg-chan-note" style="display:none;font-size:.72rem;color:var(--fp-muted,#64748b);margin:0;line-height:1.4">📎 Le document part en <b>pièce jointe</b> par e-mail, et en <b>lien à ouvrir</b> par SMS / WhatsApp. <button type="button" id="fp-msg-share" style="display:none;background:none;border:none;color:var(--fp-accent,#0EA5A0);font-weight:800;cursor:pointer;padding:0;text-decoration:underline">📤 Partager le fichier (WhatsApp…)</button></p>'
         // Pièces jointes (uniquement pour l'e-mail) : PDF du garage rattaché (auto) + ajout manuel.
         + (opts.email
             ? '<div id="fp-msg-att" style="display:flex;flex-direction:column;gap:6px">'
@@ -15210,6 +15213,21 @@ FP.msg = {
     // --- Pièces jointes e-mail (format Resend { filename, path|content }) : pré-attachées (PDF du garage)
     //     + ajouts manuels. On les envoie telles quelles à FP.sendEmail (le serveur send-email les gère).
     let atts = Array.isArray(opts.attachments) ? opts.attachments.filter(a => a && a.filename && (a.path || a.content)) : [];
+    // Lien(s) SIGNÉ(s) des pièces jointes → ajoutés au texte SMS / WhatsApp (ces apps ne joignent pas de fichier
+    // via un lien) : le conducteur tape le lien pour OUVRIR le document. Pré-signés À L'OUVERTURE de la modale
+    // (pas au clic) → l'ouverture WhatsApp reste synchrone (un window.open après un await serait bloqué).
+    let _attLinks = [];
+    async function refreshAttLinks() {
+      try {
+        const paths = atts.map(a => a && a.path).filter(Boolean);
+        const signed = await Promise.all(paths.map(p => (FP.signedScanUrl ? FP.signedScanUrl(p, 604800) : Promise.resolve(p))));
+        _attLinks = signed.filter(Boolean);
+      } catch (e) { _attLinks = atts.map(a => a && a.path).filter(Boolean); }
+      const note = q('#fp-msg-chan-note'); if (note) note.style.display = _attLinks.length ? '' : 'none';
+      const sh = q('#fp-msg-share'); if (sh) sh.style.display = (_attLinks.length && navigator && navigator.share) ? '' : 'none';
+    }
+    // Texte enrichi du lien du/des document(s) pour SMS / WhatsApp / Copier (vide si aucun document).
+    const txFull = () => { const base = tx(); if (!_attLinks.length) return base; const lbl = (String(opts.lang) === 'en' ? 'Document(s):' : 'Document(s) :'); return base + '\n\n📄 ' + lbl + '\n' + _attLinks.join('\n'); };
     const attList = () => q('#fp-msg-att-list');
     function renderAtts() {
       const box = attList(); if (!box) return;
@@ -15229,7 +15247,7 @@ FP.msg = {
           const old = attBtn.textContent; attBtn.disabled = true; attBtn.textContent = 'Envoi du fichier…';
           try {
             const url = await FP.uploadScan(f, 'emails', { name: (f.name || 'piece-jointe').replace(/\.[^.]+$/, '') });
-            if (url) { atts.push({ filename: f.name || 'piece-jointe.pdf', path: url }); renderAtts(); }
+            if (url) { atts.push({ filename: f.name || 'piece-jointe.pdf', path: url }); renderAtts(); refreshAttLinks(); }
             else throw new Error('upload vide');
           } catch (err) { if (FP.notifyError) FP.notifyError('Échec de la pièce jointe'); else alert('Échec de la pièce jointe : ' + (err && err.message || err)); }
           attBtn.disabled = false; attBtn.textContent = old;
@@ -15238,15 +15256,32 @@ FP.msg = {
     }
     ov.addEventListener('click', e => { if (e.target === ov) close(); });
     q('#fp-msg-x').addEventListener('click', close);
-    q('#fp-msg-sms').addEventListener('click', () => { window.location.href = FP.msg.smsHref(ph(), tx()); });
+    // SMS / WhatsApp / Copier : on envoie le texte ENRICHI du lien du document (le conducteur l'ouvre d'un tap).
+    q('#fp-msg-sms').addEventListener('click', () => { window.location.href = FP.msg.smsHref(ph(), txFull()); });
     q('#fp-msg-wa').addEventListener('click', () => {
       if (!FP.msg.intl(ph())) { q('#fp-msg-phone').focus(); return; }
-      window.open(FP.msg.waHref(ph(), tx()), '_blank', 'noopener');
+      window.open(FP.msg.waHref(ph(), txFull()), '_blank', 'noopener');
     });
     q('#fp-msg-copy').addEventListener('click', () => {
-      try { if (FP.copy) FP.copy(tx()); else if (navigator.clipboard) navigator.clipboard.writeText(tx()); } catch (_) {}
+      try { if (FP.copy) FP.copy(txFull()); else if (navigator.clipboard) navigator.clipboard.writeText(txFull()); } catch (_) {}
       if (FP.toast) FP.toast('✓ Message copié');
     });
+    // 📤 Partager le FICHIER (mobile) : partage natif (WhatsApp, etc.) avec le document EN PIÈCE JOINTE réelle.
+    { const sh = q('#fp-msg-share'); if (sh) sh.addEventListener('click', async () => {
+      if (!(navigator && navigator.share)) return;
+      const o = sh.textContent; sh.disabled = true; sh.textContent = 'Préparation…';
+      const files = [];
+      for (let i = 0; i < _attLinks.length; i++) {
+        try { const r = await fetch(_attLinks[i]); const b = await r.blob(); const nm = (atts[i] && atts[i].filename) || ('document-' + (i + 1) + (String(b.type).includes('pdf') ? '.pdf' : '')); files.push(new File([b], nm, { type: b.type || 'application/octet-stream' })); } catch (_) {}
+      }
+      sh.disabled = false; sh.textContent = o;
+      try {
+        const shareData = { text: txFull(), title: opts.title || 'Document' };
+        if (files.length && navigator.canShare && navigator.canShare({ files })) shareData.files = files;
+        await navigator.share(shareData);
+      } catch (e) { /* annulé par l'utilisateur ou non supporté : le lien dans le texte reste le repli */ }
+    }); }
+    refreshAttLinks();   // pré-signe les liens du/des document(s) dès l'ouverture (toggle note + bouton Partager)
     // Envoi par e-mail (si opts.email fourni) → e-mail BRANDÉ via FP.sendEmail. opts.emailHtml peut être
     // une chaîne HTML prête, une fonction(text)→html, ou absent (on habille alors le message courant).
     if (opts.email) { const eb = q('#fp-msg-email'); if (eb) eb.addEventListener('click', async () => {
@@ -15263,7 +15298,21 @@ FP.msg = {
         const payload = Object.assign({ to: opts.email, subject: opts.emailSubject || opts.title || 'Message', html: html, text: tx() }, opts.emailOpts || {});
         // Pièces jointes = celles de la modale (PDF garage auto + ajouts) fusionnées avec un éventuel emailOpts.attachments.
         const extra = Array.isArray(payload.attachments) ? payload.attachments : [];
-        const allAtt = atts.concat(extra.filter(a => a && a.filename && (a.path || a.content)));
+        const merged = atts.concat(extra.filter(a => a && a.filename && (a.path || a.content)));
+        // ⚠️⚠️ CAUSE RÉELLE d'un e-mail « failed » chez Resend : une pièce jointe passée en `path` BRUT
+        // (URL publique du bucket « scans » qui est PRIVÉ) → Resend ne peut PAS la télécharger (403) et ÉCHOUE
+        // tout l'envoi. On SIGNE donc chaque `path` avant l'envoi (même correctif que les amendes qui, elles,
+        // marchent). Les pièces en `content` (base64) passent telles quelles.
+        const allAtt = [];
+        for (const a of merged) {
+          if (!a) continue;
+          if (a.content) { allAtt.push(a); }
+          else if (a.path) {
+            let p = a.path;
+            try { if (FP.signedScanUrl && /\/scans\//.test(p)) p = await FP.signedScanUrl(a.path, 604800); } catch (e) {}
+            allAtt.push({ filename: a.filename, path: p });
+          }
+        }
         if (allAtt.length) payload.attachments = allAtt; else delete payload.attachments;
         await FP.sendEmail(payload);
         if (FP.toast) FP.toast('✓ E-mail envoyé à ' + opts.email); close();
