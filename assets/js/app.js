@@ -12716,7 +12716,7 @@ FP.edlSign = {
       const r = await FP.db.select('edl_signatures');   // RLS + filtre société
       const rows = (r && r.data) ? r.data : [];
       this._rows = rows;
-      this._pending = rows
+      const _rawPending = rows
         .filter(x => x && !['signe', 'annule', 'refuse'].includes(x.statut || 'en_attente'))   // ni signé, ni annulé, ni REFUSÉ (plus de relance)
         .map(x => {
           const sgs = Array.isArray(x.signataires) ? x.signataires : [];
@@ -12725,6 +12725,16 @@ FP.edlSign = {
           return { token: x.token || '', id: x.id, plaque: x.plaque || '', modele: x.modele || '', vehiculeId: x.vehiculeId || '', date: x.date || '', sens: x.sens || 'remise', manque, nbTotal: requis.length };
         })
         .filter(x => x.manque.length);   // il reste au moins un signataire à signer
+      // ⚠️ DÉDOUBLONNAGE : un même état des lieux (même véhicule + sens + date) renvoyé plusieurs fois pour
+      // signature créait AUTANT de lignes → l'alerte affichait 9× « HB-733-DE ». On regroupe en UNE ligne,
+      // en gardant TOUS les tokens (`tokens`) pour pouvoir tout annuler d'un coup (cf. cancel).
+      const _byEdl = {};
+      _rawPending.forEach(p => {
+        const key = (p.plaque || '') + '|' + (p.sens || '') + '|' + (p.date || '');
+        if (!_byEdl[key]) _byEdl[key] = Object.assign({}, p, { tokens: [] });
+        if (p.token) _byEdl[key].tokens.push(p.token);
+      });
+      this._pending = Object.keys(_byEdl).map(k => _byEdl[k]);
       // États des lieux REFUSÉS (statut 'refuse') → alerte DANGER avec le MOTIF (le gestionnaire doit agir :
       // corriger + relancer un nouvel état des lieux). On expose qui a refusé et pourquoi.
       this._refused = rows
@@ -12782,11 +12792,24 @@ FP.edlSign = {
       if (!token || !(FP.db && FP.db.update)) return { error: 'indisponible' };
       let rows = this._rows;
       if (!rows) { await this.load(); rows = this._rows || []; }
-      const row = rows.find(x => x && x.token === token);
-      if (!row || !row.id) return { error: 'introuvable' };
-      const res = await FP.db.update('edl_signatures', row.id, { statut: 'annule' });
-      if (!res || !res.error) await this.load();
-      return res || { error: null };
+      const clicked = rows.find(x => x && x.token === token);
+      if (!clicked) return { error: 'introuvable' };
+      // Annuler TOUTES les lignes ENCORE en attente du MÊME état des lieux (même véhicule + sens + date) :
+      // gère les doublons (plusieurs envois) regroupés dans une seule ligne d'alerte.
+      const targets = rows.filter(x => x && !['signe', 'annule', 'refuse'].includes(x.statut || 'en_attente')
+        && (x.plaque || '') === (clicked.plaque || '')
+        && (x.sens || 'remise') === (clicked.sens || 'remise')
+        && (x.date || '') === (clicked.date || ''));
+      const list = targets.length ? targets : [clicked];
+      let err = null;
+      for (const row of list) {
+        // ⚠️ PK de la table edl_signatures = `token` (PAS `id`). Mettre à jour par `row.id` filtrait sur
+        // `token = <id>` → 0 ligne modifiée → l'annulation n'avait AUCUN effet (bug « ça revient toujours »).
+        if (!row.token) continue;
+        try { const res = await FP.db.update('edl_signatures', row.token, { statut: 'annule' }); if (res && res.error) err = res.error; } catch (e) { err = (e && e.message) || String(e); }
+      }
+      await this.load();
+      return { error: err };
     } catch (e) { return { error: (e && e.message) || String(e) }; }
   },
   // Nettoyage AUTOMATIQUE (1 fois / session) : quand un état des lieux est ENTIÈREMENT SIGNÉ, on retire
