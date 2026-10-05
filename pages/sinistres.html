@@ -1243,6 +1243,7 @@
         const doc = { id: 'SDF' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), vehiculeId: immat, type: 'sinistre-doc', label: 'Facture' + (det.fournisseur ? (' ' + det.fournisseur) : ''), url, driveId: null };
         await FP.persist.insert('documents', doc);
         if (typeof sinDocs !== 'undefined' && !sinDocs.some(x => x.url === url)) sinDocs.push(doc);
+        try { if (groupKey) setDocSub(doc.id, 'sin:' + groupKey); } catch (e) {}   // rangé dans CE sinistre (centre de documents)
       } catch (_) {}
       const single = !g || g.lines.length <= 1;
       if (single) {
@@ -1601,6 +1602,8 @@
           sdSource = null;
         }
         sinistres = (data.factures || []).filter(f => f.type === 'sinistre');
+        // Range toutes les photos/pièces de CE sinistre dans son dossier (centre de documents : Sinistres → année → ce sinistre).
+        try { newDocs.forEach(d => { if (d && d.id) setDocSub(d.id, 'sin:' + fact.id); }); } catch (e) {}
         refreshAll();
         // Les docs tout juste insérés sont poussés LOCALEMENT → ils apparaissent IMMÉDIATEMENT dans
         // « Constats, photos & documents » (sans dépendre du délai de propagation en base). loadSinDocs
@@ -1685,7 +1688,14 @@
   let driveDossiers = null; // liste des dossiers créés (plaques), persistée dans settings.sinistreDossiers
   let driveSearch = '';     // filtre de recherche (barre d'outils)
   let driveSort = 'plaque'; // tri : plaque | plaque-desc | modele | fichiers
-  let driveSub = null;      // sous-dossier ouvert (ex. "2026"), ou null (racine du dossier véhicule)
+  let driveSub = null;      // (ancien modèle, conservé pour compat des helpers ; nav réelle = drivePath)
+  // Navigation À L'INTÉRIEUR d'un dossier véhicule (chemin) :
+  //  []                       = racine : années (factures normales) + 📁 Sinistres
+  //  ['2026']                 = factures normales de 2026 (lecture seule, viennent de l'onglet Factures)
+  //  ['sin']                  = Sinistres : les années qui ont des sinistres
+  //  ['sin','2026']           = les sinistres de 2026 (un dossier par incident)
+  //  ['sin','2026', <clé>]    = UN sinistre : ses factures sinistre + ses photos/constats (+ ajout)
+  let drivePath = [];
   // Sous-dossiers : gérés dans les réglages (aucune colonne SQL). Liste par véhicule +
   // rattachement de chaque fichier (docId → sous-dossier). Persisté par société.
   function getSubs(pl){ try { return ((FP.settings.get().sinistreSous) || {})[normPl(pl)] || []; } catch (e) { return []; } }
@@ -1826,43 +1836,86 @@
     } else {
       const pl = driveFolder;
       const veh = (data.vehicules || []).find(v => normPl(v.immat) === normPl(pl));
-      const vehLbl = veh ? ' · ' + escapeHtml(veh.marque + ' ' + veh.modele) : '';
-      const allFiles = sinDocs.filter(d => normPl(d.vehiculeId) === normPl(pl));
-      const fileTile = d => {
-        const u = escapeHtml(d.url || '');
-        // ⚠️ Bucket « scans » PRIVÉ : l'URL publique brute ne charge NI la miniature NI l'ouverture (403).
-        // → miniature via lien SIGNÉ (data-sign, signé après rendu) ; clic = FP.openScan (signe DANS le geste).
-        return `<div class="drive-file" draggable="true" data-file-id="${escapeHtml(d.id)}" title="Glisser vers un sous-dossier pour ranger ce fichier">
-          <a href="#" draggable="false" class="drive-file-preview" data-drive-open="${u}" title="Voir ${escapeHtml(d.label || 'le fichier')}">${isImg(d.url) ? `<img data-sign="${u}" loading="lazy" draggable="false" alt="">` : `<i data-lucide="file-text"></i>`}</a>
+      const vehLbl = veh ? ' · ' + escapeHtml((veh.marque || '') + ' ' + (veh.modele || '')) : '';
+      const yearOf = (s) => String(s || '').slice(0, 4);
+      const factDocUrl = (f) => { if (!f) return ''; if (f.url) return f.url; const id = f.fileId; if (!id || /^IMP-/.test(String(id))) return ''; return /^https?:\/\//.test(String(id)) ? id : ('https://drive.google.com/file/d/' + id + '/view'); };
+      // Factures NORMALES du véhicule (hors sinistre) qui ont un document → rangées par année (lecture seule).
+      const normFact = (data.factures || []).filter(f => f && f.type !== 'sinistre' && FP.immatEq(f.vehiculeImmat, pl) && factDocUrl(f));
+      // Sinistres du véhicule, regroupés en incidents (même moteur que la liste des sinistres).
+      const sinGroups = (typeof buildGroups === 'function' ? buildGroups(sinistres) : []).filter(g => g && g.rep && FP.immatEq(g.rep.vehiculeImmat, pl));
+      const vehPhotos = sinDocs.filter(d => normPl(d.vehiculeId) === normPl(pl));   // photos/constats (keyés véhicule)
+      const _dossAssur = () => { try { return FP.settings.get().sinistreAssurance || {}; } catch (e) { return {}; } };
+      const incLabel = (g) => { const d = g.rep && g.rep.date ? (FP.date ? FP.date(g.rep.date) : g.rep.date) : ''; const dv = _dossAssur()[g.key] || {}; const t = dv.tiersPlaque ? ' — ' + dv.tiersPlaque : ''; return (d ? ('du ' + d) : 'Sinistre') + t; };
+      // Tuile fichier (photo/constat sinistre — éditable : ouverture + suppression).
+      const fileTile = (d) => { const u = escapeHtml(d.url || ''); return `<div class="drive-file" data-file-id="${escapeHtml(d.id)}">
+          <a href="#" class="drive-file-preview" data-drive-open="${u}" title="Voir ${escapeHtml(d.label || 'le fichier')}">${isImg(d.url) ? `<img data-sign="${u}" loading="lazy" alt="">` : `<i data-lucide="file-text"></i>`}</a>
           <div class="drive-file-name" title="${escapeHtml(d.label || '')}">${escapeHtml(d.label || 'fichier')}</div>
           <button type="button" class="drive-file-del" data-drive-del="${escapeHtml(d.id)}" title="Supprimer">✕</button>
-        </div>`;
-      };
-      const uploadTile = `<button type="button" class="drive-upload" id="drive-add"><i data-lucide="upload-cloud"></i><span>Ajouter des fichiers</span></button>`;
+        </div>`; };
+      // Tuile facture (lecture seule : vient de l'onglet Factures, pas de suppression ici).
+      const factTile = (f) => { const u = factDocUrl(f); return `<div class="drive-file">
+          <a href="#" class="drive-file-preview" data-drive-open="${escapeHtml(u)}" title="Voir la facture">${isImg(u) ? `<img data-sign="${escapeHtml(u)}" loading="lazy" alt="">` : `<i data-lucide="file-text"></i>`}</a>
+          <div class="drive-file-name" title="${escapeHtml((f.description || '') + ' ' + (f.fournisseur || ''))}">🧾 ${escapeHtml(f.description || f.fournisseur || 'Facture')}${f.montantTTC ? (' · ' + FP.euroPrecis(f.montantTTC)) : ''}</div>
+        </div>`; };
+      const folderTile = (name, sub, nav, col) => `<div class="drive-folder" data-nav="${escapeHtml(nav)}" style="position:relative${col ? (';background:' + col) : ''}"><i data-lucide="folder" class="drive-folder-ic"></i><div class="drive-folder-name">${escapeHtml(name)}</div><div class="drive-folder-count">${escapeHtml(sub)}</div></div>`;
+      const uploadTile = `<button type="button" class="drive-upload" id="drive-add"><i data-lucide="upload-cloud"></i><span>Ajouter des photos / constats</span></button>`;
       const fileInput = '<input type="file" id="drive-file-input" accept="image/*,application/pdf" multiple class="hidden">';
-      if (!driveSub){
-        // Racine du dossier véhicule : sous-dossiers (années) + fichiers non classés
-        crumb.innerHTML = `<button type="button" id="drive-back" class="hover:underline" style="color:var(--fp-accent);background:none;border:none;cursor:pointer;font:inherit">📁 Dossiers</button> › <b data-drop-root title="Déposer ici = ranger à la racine du dossier">${escapeHtml(pl)}</b>${vehLbl}`;
-        const subs = getSubs(pl).slice().sort((a, b) => b.localeCompare(a)); // années récentes d'abord
-        const subTiles = subs.map(name => {
-          const n = allFiles.filter(d => docSub(d.id) === name).length;
-          return `<div class="drive-folder" data-sub="${escapeHtml(name)}" style="position:relative">
-            <button type="button" class="drive-folder-ren" data-sub-ren="${escapeHtml(name)}" title="Renommer">✎</button>
-            <button type="button" class="drive-folder-del" data-sub-del="${escapeHtml(name)}" title="Supprimer le sous-dossier">✕</button>
-            <i data-lucide="folder" class="drive-folder-ic"></i>
-            <div class="drive-folder-name" style="font-family:inherit">${escapeHtml(name)}</div>
-            <div class="drive-folder-count">${n} fichier${n > 1 ? 's' : ''}</div>
-          </div>`;
-        }).join('');
-        const rootFiles = allFiles.filter(d => !docSub(d.id));
-        view.innerHTML = `<div class="flex items-center gap-2 mb-4"><button type="button" id="drive-new-sub" class="fp-btn-sm"><i data-lucide="folder-plus" class="w-4 h-4"></i> Nouveau sous-dossier</button></div>`
-          + '<div class="drive-grid fp-gallery">' + subTiles + uploadTile + rootFiles.map(fileTile).join('') + '</div>'
-          + fileInput;
+      const p = drivePath;
+      // ----- Fil d'Ariane (chemin cliquable) -----
+      const crumbBtn = (txt, idx) => `<button type="button" class="hover:underline" data-crumb="${idx}" style="color:var(--fp-accent);background:none;border:none;cursor:pointer;font:inherit">${escapeHtml(txt)}</button>`;
+      let crumbH = `<button type="button" id="drive-back" class="hover:underline" style="color:var(--fp-accent);background:none;border:none;cursor:pointer;font:inherit">📁 Dossiers</button> › ` + (p.length ? crumbBtn(pl, -1) : `<b>${escapeHtml(pl)}</b>`) + vehLbl;
+      p.forEach((seg, i) => {
+        let label = seg;
+        if (seg === 'sin') label = '🔧 Sinistres';
+        else if (p[0] === 'sin' && i === 2) { const g = sinGroups.find(x => String(x.key) === String(seg)); label = '💥 ' + (g ? incLabel(g) : 'Sinistre'); }
+        crumbH += ' › ' + (i === p.length - 1 ? `<b>${escapeHtml(label)}</b>` : crumbBtn(label, i));
+      });
+      crumb.innerHTML = crumbH;
+      // ----- Contenu selon le chemin -----
+      if (p.length === 0) {
+        // Racine : années (factures normales) + 📁 Sinistres
+        let years = [...new Set(normFact.map(f => yearOf(f.date)).filter(Boolean))].sort((a, b) => b.localeCompare(a));
+        if (!years.length) years = [String(new Date().getFullYear())];
+        const yearTiles = years.map(y => { const n = normFact.filter(f => yearOf(f.date) === y).length; return folderTile('📅 ' + y, n + ' facture' + (n > 1 ? 's' : ''), y); }).join('');
+        const sinTile = folderTile('🔧 Sinistres', sinGroups.length + ' sinistre' + (sinGroups.length > 1 ? 's' : ''), 'sin', 'color-mix(in srgb,#EF4444 10%, var(--fp-surface))');
+        view.innerHTML = '<div class="drive-grid fp-gallery">' + yearTiles + sinTile + '</div>';
+      } else if (p[0] !== 'sin') {
+        // Une année de factures NORMALES (lecture seule)
+        const y = p[0];
+        const fs = normFact.filter(f => yearOf(f.date) === y);
+        view.innerHTML = '<div class="text-xs text-slate-500 mb-3">🧾 Factures de ' + escapeHtml(y) + ' — gérées dans l\'onglet <b>Factures</b> (lecture seule ici).</div>'
+          + '<div class="drive-grid fp-gallery">' + (fs.length ? fs.map(factTile).join('') : '<div class="text-sm text-slate-400 py-4">Aucune facture pour ' + escapeHtml(y) + '.</div>') + '</div>';
+      } else if (p.length === 1) {
+        // Sinistres : les années qui ont des sinistres
+        let sy = [...new Set(sinGroups.map(g => yearOf(g.rep.date)).filter(Boolean))].sort((a, b) => b.localeCompare(a));
+        // Photos ORPHELINES (sans rangement reconnu : ni "sin:…", ni une année) → affichées ici « à ranger »
+        // pour qu'elles ne soient JAMAIS cachées (ex. anciennes photos QR sans sous-dossier, années multiples).
+        const orphan = vehPhotos.filter(d => { const s = docSub(d.id); return !(s && (/^sin:/.test(s) || (/^\d{4}$/.test(s) && sy.indexOf(s) >= 0 && sinGroups.filter(g => yearOf(g.rep.date) === s).length === 1))); });
+        const yearsHtml = sy.length ? '<div class="drive-grid fp-gallery">' + sy.map(y => { const n = sinGroups.filter(g => yearOf(g.rep.date) === y).length; return folderTile('📅 ' + y, n + ' sinistre' + (n > 1 ? 's' : ''), 'sin|' + y, 'color-mix(in srgb,#EF4444 10%, var(--fp-surface))'); }).join('') + '</div>' : '';
+        const orphanHtml = orphan.length ? ('<div class="text-xs text-slate-500 mt-4 mb-2">📷 Photos &amp; constats à ranger (non rattachés à un sinistre précis)</div><div class="drive-grid fp-gallery">' + orphan.map(fileTile).join('') + '</div>') : '';
+        view.innerHTML = (sy.length || orphan.length) ? (yearsHtml + orphanHtml) : '<div class="text-sm text-slate-400 py-4">Aucun sinistre enregistré pour ce véhicule.</div>';
+      } else if (p.length === 2) {
+        // Sinistres d'une année : un dossier par incident
+        const y = p[1];
+        const gs = sinGroups.filter(g => yearOf(g.rep.date) === y);
+        view.innerHTML = gs.length
+          ? '<div class="drive-grid fp-gallery">' + gs.map(g => folderTile('💥 ' + incLabel(g), g.lines.length + ' doc' + (g.lines.length > 1 ? 's' : ''), 'inc|' + g.key, 'color-mix(in srgb,#EF4444 10%, var(--fp-surface))')).join('') + '</div>'
+          : '<div class="text-sm text-slate-400 py-4">Aucun sinistre en ' + escapeHtml(y) + '.</div>';
       } else {
-        // Dans un sous-dossier
-        crumb.innerHTML = `<button type="button" id="drive-back" class="hover:underline" style="color:var(--fp-accent);background:none;border:none;cursor:pointer;font:inherit">📁 Dossiers</button> › <button type="button" id="drive-back-plate" data-drop-root class="hover:underline" style="color:var(--fp-accent);background:none;border:none;cursor:pointer;font:inherit" title="Déposer ici = sortir du sous-dossier">${escapeHtml(pl)}</button>${vehLbl} › <b>${escapeHtml(driveSub)}</b>`;
-        const files = allFiles.filter(d => docSub(d.id) === driveSub);
-        view.innerHTML = '<div class="drive-grid fp-gallery">' + uploadTile + files.map(fileTile).join('') + '</div>' + fileInput;
+        // UN sinistre : ses factures sinistre + ses photos/constats + ajout
+        const y = p[1], key = p[2];
+        const g = sinGroups.find(x => String(x.key) === String(key));
+        const facts = g ? g.lines.filter(l => factDocUrl(l)) : [];
+        // Photos rattachées à CE sinistre (docSub = "sin:<clé>") ; + repli : si c'est le SEUL sinistre de l'année,
+        // on y montre aussi les anciennes photos rangées par année (docSub = année) pour ne rien perdre.
+        const onlyOne = sinGroups.filter(x => yearOf(x.rep.date) === y).length === 1;
+        // Photos de CE sinistre : rangées "sin:<clé>" (nouvelles) ; + si c'est le SEUL sinistre de l'année,
+        // on y montre aussi les photos rangées par année ET les photos SANS rangement (ex. QR, "Déposer la
+        // facture") pour ne rien perdre.
+        const photos = vehPhotos.filter(d => { const s = docSub(d.id); return s === ('sin:' + key) || (onlyOne && (s === y || !s)); });
+        const rows = facts.map(factTile).join('') + photos.map(fileTile).join('');
+        view.innerHTML = '<div class="text-xs text-slate-500 mb-3">💥 ' + escapeHtml(g ? incLabel(g) : 'Sinistre') + ' — factures &amp; photos. Les factures viennent de la fiche sinistre ; ajoute ici les photos / constats.</div>'
+          + '<div class="drive-grid fp-gallery">' + uploadTile + rows + '</div>' + fileInput;
       }
       signDriveImgs(view);   // miniatures privées → src signé
     }
@@ -1916,11 +1969,9 @@
     const files = Array.from(fileList || []); if (!files.length) return;
     if (!(window.FP && FP.supabase && FP.uploadScan)){ alert("L'ajout de fichiers nécessite d'être connecté à internet."); return; }
     const pl = driveFolder; let ok = 0;
-    // Rangement AUTOMATIQUE par année : si aucun sous-dossier n'est ouvert, on classe les constats /
-    // photos dans le sous-dossier de l'ANNÉE COURANTE (créé au besoin). L'utilisateur peut toujours
-    // déplacer ensuite par glisser-déposer, ou choisir un autre sous-dossier avant d'ajouter.
-    let sub = driveSub;
-    if (!sub) { sub = String(new Date().getFullYear()); try { const arr = getSubs(pl); if (!arr.some(x => (x || '').toLowerCase() === sub.toLowerCase())) saveSubs(pl, arr.concat(sub)); } catch (e) {} }
+    // On n'ajoute des fichiers QUE dans un sinistre précis (vue incident) → rangés sous "sin:<clé>" pour
+    // rester attachés à CE sinistre. (Repli de sécurité : l'année courante.)
+    let sub = (drivePath[0] === 'sin' && drivePath.length === 3) ? ('sin:' + drivePath[2]) : String(new Date().getFullYear());
     const btn = $('drive-add'); if (btn) { btn.style.opacity = '.6'; }
     for (const f of files){
       try {
@@ -1941,15 +1992,21 @@
   }
   $('drive-view').addEventListener('click', async (e) => {
     const delD = e.target.closest('[data-dossier-del]'); if (delD){ e.stopPropagation(); delDossier(delD.dataset.dossierDel); return; }
-    const renS = e.target.closest('[data-sub-ren]'); if (renS){ e.stopPropagation(); const old = renS.dataset.subRen; const nv = await FP.prompt('Renommer le sous-dossier :', old); if (nv != null){ renameSub(driveFolder, old, nv); renderDrive(); } return; }
-    const delS = e.target.closest('[data-sub-del]'); if (delS){ e.stopPropagation(); delSub(driveFolder, delS.dataset.subDel); return; }
-    const sub = e.target.closest('[data-sub]'); if (sub){ driveSub = sub.dataset.sub; renderDrive(); return; }
-    if (e.target.closest('#drive-new-sub')){ const nv = await FP.prompt('Nom du sous-dossier (ex. 2026) :', String(new Date().getFullYear())); if (nv != null && addSub(driveFolder, nv)) renderDrive(); return; }
-    const f = e.target.closest('[data-folder]'); if (f){ driveFolder = f.dataset.folder; driveSub = null; renderDrive(); return; }
+    // Ouvrir un dossier VÉHICULE (vue liste) → on entre dedans à la racine (drivePath vide).
+    const f = e.target.closest('[data-folder]'); if (f){ driveFolder = f.dataset.folder; drivePath = []; renderDrive(); return; }
+    // Navigation DANS un véhicule (année / Sinistres / année de sinistres / incident).
+    const nav = e.target.closest('[data-nav]');
+    if (nav){ const v = nav.dataset.nav;
+      if (v === 'sin') drivePath = ['sin'];
+      else if (v.indexOf('sin|') === 0) drivePath = ['sin', v.slice(4)];
+      else if (v.indexOf('inc|') === 0) drivePath = ['sin', drivePath[1], v.slice(4)];
+      else drivePath = [v];   // une année de factures normales
+      renderDrive(); return;
+    }
     if (e.target.closest('#drive-add')){ const inp = $('drive-file-input'); if (inp) inp.click(); return; }
     const del = e.target.closest('[data-drive-del]'); if (del){ delDriveDoc(del.dataset.driveDel); return; }
-    // Ouvrir un constat / une photo : bucket privé → FP.openScan ouvre l'onglet DANS le geste puis charge
-    // le lien signé (un window.open après await serait bloqué par le navigateur).
+    // Ouvrir un constat / une photo / une facture : bucket privé → FP.openScan ouvre l'onglet DANS le geste
+    // puis charge le lien signé (un window.open après await serait bloqué par le navigateur).
     const openF = e.target.closest('[data-drive-open]');
     if (openF){ e.preventDefault(); const u = openF.getAttribute('data-drive-open'); if (u){ if (window.FP && FP.openScan) FP.openScan(u); else window.open(u, '_blank', 'noopener'); } return; }
   });
@@ -1962,8 +2019,9 @@
     const sel = e.target.closest('#drive-new-veh'); if (sel && sel.value){ addDossier(sel.value); driveFolder = sel.value; renderDrive(); }
   });
   $('drive-crumb').addEventListener('click', (e) => {
-    if (e.target.closest('#drive-back')){ driveFolder = null; driveSub = null; renderDrive(); return; }
-    if (e.target.closest('#drive-back-plate')){ driveSub = null; renderDrive(); return; }
+    if (e.target.closest('#drive-back')){ driveFolder = null; drivePath = []; renderDrive(); return; }
+    const cb = e.target.closest('[data-crumb]');
+    if (cb){ const i = +cb.dataset.crumb; drivePath = (i < 0) ? [] : drivePath.slice(0, i + 1); renderDrive(); return; }
   });
   // --- Glisser-déposer : ranger un fichier dans un sous-dossier (ou le sortir vers la racine) ---
   // On ne change QUE le sous-dossier (réglages `sinistreDocSub`), jamais le véhicule → aucun risque
