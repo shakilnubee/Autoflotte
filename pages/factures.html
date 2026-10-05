@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261005g">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261005h">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20261005g"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20261005h"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20261005g">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20261005h">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -594,8 +594,8 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20261005g"></script>
-<script src="../assets/js/supabase-client.js?v=20261005g"></script>
+<script src="../assets/js/vendor/supabase.js?v=20261005h"></script>
+<script src="../assets/js/supabase-client.js?v=20261005h"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -611,12 +611,12 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261005g"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261005h"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20261005g"></script>
-<script src="../assets/js/fleet-views.min.js?v=20261005g"></script>
+<script src="../assets/js/app.min.js?v=20261005h"></script>
+<script src="../assets/js/fleet-views.min.js?v=20261005h"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -2140,8 +2140,16 @@
       // facture dont la plaque est écrite « HL 724 CD » vs « HL-724-CD » tombait à tort dans « Sans plaque ».
       const nImmat = s => (FP.normImmat ? FP.normImmat(s) : String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, ''));
       const vidByImmat = {}; vehs.forEach(v => { if (v.immat) vidByImmat[nImmat(v.immat)] = v.id; });
+      const vehIds = {}; vehs.forEach(v => { if (v.id) vehIds[v.id] = 1; });
       const byVeh = {};
-      (docs || []).forEach(d => { const vid = d.vehiculeId || '__noplate__'; (byVeh[vid] = byVeh[vid] || { docs: [], facts: [] }).docs.push(d); });
+      (docs || []).forEach(d => {
+        let vid = d.vehiculeId || '__noplate__';
+        // ⚠️ Certains documents (ex. pièces de SINISTRE) sont keyés par PLAQUE, pas par id véhicule.
+        // Sans rattachement, ils créaient un dossier « fantôme » EN DOUBLE à côté du vrai dossier
+        // (même plaque, « — » en marque). On les rattache au bon véhicule via FP.normImmat (tolérant).
+        if (vid !== '__noplate__' && !vehIds[vid]) { const k = nImmat(vid); if (k && vidByImmat[k]) vid = vidByImmat[k]; }
+        (byVeh[vid] = byVeh[vid] || { docs: [], facts: [] }).docs.push(d);
+      });
       ((window.FP_DATA.factures) || []).forEach(f => { const k = nImmat(f.vehiculeImmat); const vid = (k && vidByImmat[k]) || '__noplate__'; (byVeh[vid] = byVeh[vid] || { docs: [], facts: [] }).facts.push(f); });
       return byVeh;
     }
