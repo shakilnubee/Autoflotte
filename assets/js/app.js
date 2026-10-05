@@ -15392,6 +15392,26 @@ FP.msg = {
     ov.querySelectorAll('.fp-msg-tpl').forEach(btn => btn.addEventListener('click', () => {
       const t = tpls[+btn.getAttribute('data-i')]; if (t) { q('#fp-msg-text').value = t.text || ''; q('#fp-msg-text').focus(); }
     }));
+    // ⚠️ RÈGLE PERMANENTE « pas de lien géant dans un message » : on RACCOURCIT toute URL longue
+    // présente dans le TEXTE du message (message initial ET modèles), pas seulement les pièces jointes.
+    // Source unique = FP.shortenUrl (caché). Fait dès l'ouverture (async) pour que l'ouverture WhatsApp/SMS
+    // reste synchrone au clic (un window.open après un await serait bloqué par le navigateur).
+    async function _shortenLinksIn(s) {
+      if (!s || !FP.shortenUrl) return s;
+      const urls = Array.from(new Set((String(s).match(/https?:\/\/[^\s<]+/g) || []).filter(u => u.length > 30)));
+      if (!urls.length) return s;
+      const map = {};
+      await Promise.all(urls.map(async u => { try { const sh = await FP.shortenUrl(u); if (sh && sh !== u) map[u] = sh; } catch (e) {} }));
+      let out = String(s); Object.keys(map).forEach(u => { out = out.split(u).join(map[u]); });
+      return out;
+    }
+    (async () => {
+      try {
+        const cur = q('#fp-msg-text');
+        if (cur) { const sh = await _shortenLinksIn(cur.value); if (sh !== cur.value && cur.value === (opts.text || '')) cur.value = sh; }
+        await Promise.all(tpls.map(async t => { if (t && t.text) { try { t.text = await _shortenLinksIn(t.text); } catch (e) {} } }));
+      } catch (e) {}
+    })();
     try { if (!opts.phone) q('#fp-msg-phone').focus(); } catch (e) {}
   }
 };
