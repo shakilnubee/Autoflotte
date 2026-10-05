@@ -4110,7 +4110,7 @@ FP.MAIL_DEFAUT = {
   invitation: `Bonjour,\n\nBienvenue sur Parc Pilot ! 🎉 Ton accès à la plateforme de gestion de flotte est prêt.\n\nChoisis ton mot de passe en un clic (bouton juste en dessous) et tu pourras te connecter tout de suite. Tout est réuni au même endroit, simple et rapide.\n\nTon identifiant : {email}\n\nÀ très vite ! 🚗`,
   // ===== RELANCES (écran « 📣 Relances ») — rappels envoyés au conducteur. TOUS ÉDITABLES. =====
   relanceCt: `Bonjour {prenom},\n🔧 Le contrôle technique du véhicule {immat} approche (échéance le {date}) ⏳ — un petit rendez-vous à caler ! 📅`,
-  relanceEntretien: `Bonjour {prenom},\n🛠️ Le véhicule {immat} a un entretien à prévoir (échéance le {date}) 🚗 — pense à caler un passage au garage.`,
+  relanceEntretien: `Bonjour {prenom},\n🛠️ Le véhicule {immat} : révision {date} 🚗 — pense à caler un passage au garage.`,
   relanceGarage: `Bonjour {prenom},\n🔧 Rendez-vous garage pour le véhicule {immat} ({motif}) : prévu le {date} 📅 — pense à t'organiser.`,
   relanceKm: `Bonjour {prenom},\n📸 Un petit coup d'œil au compteur du véhicule {immat} ? 😊 Ça file en 30 secondes !`,
   relanceAmende: `Bonjour {prenom},\n🎫 Une amende concerne le véhicule {immat} — pense à la régler pour éviter une majoration 💵\nRegarde ta boîte mail 📩`,
@@ -4131,7 +4131,7 @@ FP.MAIL_DEFAUT = {
   invitation_en: `Hello,\n\nWelcome to Parc Pilot! 🎉 Your access to the fleet management platform is ready.\n\nChoose your password in one click (button just below) and you can log in right away. Everything in one place, simple and fast.\n\nYour login: {email}\n\nSee you soon! 🚗`,
   signature_en: `Hello {prenom},\n\nLast step before hitting the road! 🚀 Sign the condition report for your {modele} ({immat}) in seconds, right from this email.`,
   relanceCt_en: `Hello {prenom},\n🔧 The roadworthiness test for vehicle {immat} is coming up (due {date}) ⏳ — time to book a slot! 📅`,
-  relanceEntretien_en: `Hello {prenom},\n🛠️ Vehicle {immat} has maintenance due ({date}) 🚗 — remember to book a garage visit.`,
+  relanceEntretien_en: `Hello {prenom},\n🛠️ Vehicle {immat}: service {date} 🚗 — remember to book a garage visit.`,
   relanceGarage_en: `Hello {prenom},\n🔧 Garage appointment for vehicle {immat} ({motif}): scheduled on {date} 📅 — please plan ahead.`,
   relanceKm_en: `Hello {prenom},\n📸 A quick look at the odometer of vehicle {immat}? 😊 It takes 30 seconds!`,
   relanceAmende_en: `Hello {prenom},\n🎫 A fine concerns vehicle {immat} — remember to settle it to avoid a surcharge 💵\nCheck your inbox 📩`,
@@ -6974,6 +6974,38 @@ FP.revisionInfo = (v) => {
   let niveau = null;
   [lvlKm, lvlDt].forEach(l => { if (l && (niveau === null || rank[l] < rank[niveau])) niveau = l; });
   return { intervalle, prochaineKm, kmRestant, prochaineDate, joursRestant, niveau, hasRev: !!hasRev, pace };
+};
+
+// Phrase d'échéance de RÉVISION qui tient compte du KILOMÈTRE **ET** de la date (le PREMIER des deux arrive) —
+// SOURCE UNIQUE des messages « Prévenir / Relance entretien ». Sinon on n'affichait que la date, alors qu'un
+// véhicule qui a beaucoup roulé doit faire sa révision AVANT la date. S'adapte FR/EN.
+// Ex. FR : « à faire dès maintenant — le kilométrage de révision est dépassé (environ 3 000 km de trop) »,
+//          « à prévoir bientôt — il reste environ 1 200 km avant la révision, soit vers le 12/03/2027 »,
+//          « à prévoir d'ici le 08/06/2027 ».
+FP.revisionEcheanceTexte = (v, lang) => {
+  const en = String(lang) === 'en';
+  const r = FP.revisionInfo ? FP.revisionInfo(v) : null;
+  if (!r) return '';
+  const num = (n) => (FP.num ? FP.num(Math.round(n)) : String(Math.round(n)));
+  const dateStr = r.prochaineDate ? (FP.date ? FP.date(r.prochaineDate.toISOString().slice(0, 10)) : r.prochaineDate.toISOString().slice(0, 10)) : '';
+  const kmR = (r.kmRestant == null) ? null : r.kmRestant;
+  const jR = (r.joursRestant == null) ? null : r.joursRestant;
+  if (kmR != null && kmR <= 0) return en
+    ? ('due now — the service mileage is already passed' + ' (about ' + num(Math.abs(kmR)) + ' km over)')
+    : ('à faire dès maintenant — le kilométrage de révision est dépassé (environ ' + num(Math.abs(kmR)) + ' km de trop)');
+  if (jR != null && jR <= 0) return en
+    ? ('due now — the service date' + (dateStr ? (' (' + dateStr + ')') : '') + ' has passed')
+    : ('à faire dès maintenant — la date' + (dateStr ? (' du ' + dateStr) : '') + ' est dépassée');
+  // Futur : lequel arrive en PREMIER, le kilométrage ou la date ?
+  let kmFirst = false;
+  if (kmR != null && jR != null && r.pace > 0) kmFirst = (kmR / r.pace) < jR;
+  else if (kmR != null && jR == null) kmFirst = true;
+  if (kmFirst) return en
+    ? ('coming up — about ' + num(kmR) + ' km left before the service' + (dateStr ? (' (around ' + dateStr + ')') : ''))
+    : ('à prévoir bientôt — il reste environ ' + num(kmR) + ' km avant la révision' + (dateStr ? (', soit vers le ' + dateStr) : ''));
+  if (dateStr) return en ? ('to plan before ' + dateStr) : ('à prévoir d\'ici le ' + dateStr);
+  if (kmR != null) return en ? ('about ' + num(kmR) + ' km left before the service') : ('il reste environ ' + num(kmR) + ' km avant la révision');
+  return en ? 'to be planned' : 'à prévoir';
 };
 
 // =====================================================================
@@ -16386,6 +16418,9 @@ FP.relances = {
     const _lg = (FP.condLangue && FP.condLangue(item.conducteur) === 'en') ? 'en' : 'fr';
     const _en = (_lg === 'en');
     const _tags = { prenom: p, immat: item.immat, date: this._fdate(item.dueDate), motif: item.motif || '' };
+    // RÉVISION : la balise {date} devient une phrase qui tient compte du KILOMÉTRAGE **et** de la date (le
+    // premier des deux) → si le véhicule a trop roulé, le message dit « à faire dès maintenant », pas la date.
+    try { if (item.type === 'entretien' && item.veh && FP.revisionEcheanceTexte) { const _rp = FP.revisionEcheanceTexte(item.veh, _lg); if (_rp) _tags.date = _rp; } } catch (e) {}
     const _msg = (mkey, dkey) => (FP.mailModeleProfilL && FP.fillTags) ? FP.fillTags(FP.mailModeleProfilL(mkey, dkey, _lg), _tags) : (FP.MAIL_DEFAUT[dkey] || '');
     const _obj = (dkey, fallback) => (FP.mailObjetL ? (FP.mailObjetL(dkey, _tags, _lg) || fallback) : fallback);
     let text = '', subject = '', emailText = '', kmLink = '';
