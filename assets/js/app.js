@@ -14538,10 +14538,22 @@ FP.xlsx = (function () {
     build(columns, rows, opts) {
       opts = opts || {};
       const data = rows || [];
-      // Largeurs auto (selon le contenu le plus long, borné)
-      const widths = columns.map(c => {
+      // Colonne numérique ENTIÈRE ? (ex. km) → format sans décimales ; sinon montant → 2 décimales.
+      // Auto-détection : au moins une valeur, et TOUTES entières. Évite « 90 421,00 » pour des km.
+      const isIntCol = columns.map(c => {
+        if (!c.number) return false;
+        let any = false;
+        for (const r of data) { const v = c.value(r); if (v == null || v === '' || isNaN(v)) continue; any = true; if (!Number.isInteger(Number(v))) return false; }
+        return any;
+      });
+      // Texte RÉELLEMENT affiché d'un nombre (séparateur de milliers + décimales) → sert à la largeur.
+      const fmtNum = (v, isInt) => { const n = Number(v); return isNaN(n) ? '' : n.toLocaleString('fr-FR', isInt ? { maximumFractionDigits: 0 } : { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+      // Largeurs auto : selon le contenu le plus long RÉELLEMENT AFFICHÉ (nombres formatés inclus), borné.
+      // ⚠️ Avant, la largeur d'une colonne numérique venait du nombre BRUT → trop étroite pour la version
+      // formatée (« 90 421,00 ») → Excel affichait « #### ». On mesure maintenant le texte formaté.
+      const widths = columns.map((c, ci) => {
         let w = String(c.label || '').length;
-        data.forEach(r => { const v = c.value(r); const len = (v == null ? 0 : String(c.number ? v : v).length); if (len > w) w = len; });
+        data.forEach(r => { const v = c.value(r); if (v == null || v === '') return; const str = (c.number && !isNaN(v)) ? fmtNum(v, isIntCol[ci]) : String(v); if (str.length > w) w = str.length; });
         return Math.min(Math.max(w + 2, 9), 52);
       });
       const colsXml = '<cols>' + columns.map((c, i) => `<col min="${i + 1}" max="${i + 1}" width="${widths[i]}" customWidth="1"/>`).join('') + '</cols>';
@@ -14564,7 +14576,7 @@ FP.xlsx = (function () {
         const rn = ri + HR + 1;
         body += `<row r="${rn}">` + columns.map((c, i) => {
           const v = c.value(r);
-          return cell(colLetter(i) + rn, v, !!c.number, c.number ? 2 : 0);
+          return cell(colLetter(i) + rn, v, !!c.number, c.number ? (isIntCol[i] ? 4 : 2) : 0);
         }).join('') + '</row>';
       });
       // Ligne TOTAL
@@ -14573,7 +14585,7 @@ FP.xlsx = (function () {
         const sums = columns.map(c => (c.number && !c.noTotal) ? Math.round(data.reduce((s, r) => { const v = c.value(r); return s + (isNaN(v) || v == null ? 0 : Number(v)); }, 0) * 100) / 100 : null);
         const firstNum = columns.findIndex(c => c.number);
         body += `<row r="${rn}">` + columns.map((c, i) => {
-          if (c.number) return cell(colLetter(i) + rn, sums[i], true, 3);
+          if (c.number) return cell(colLetter(i) + rn, sums[i], true, isIntCol[i] ? 5 : 3);
           if (i === Math.max(0, firstNum - 1)) return cell(colLetter(i) + rn, 'TOTAL', false, 1);
           return cell(colLetter(i) + rn, '', false, 1);
         }).join('') + '</row>';
@@ -14582,7 +14594,7 @@ FP.xlsx = (function () {
       const sheet = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheetViews><sheetView workbookViewId="0"><pane ySplit="${HR}" topLeftCell="A${HR + 1}" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft"/></sheetView></sheetViews><sheetFormatPr defaultRowHeight="15"/>${colsXml}<sheetData>${body}</sheetData><autoFilter ref="${ref}"/></worksheet>`;
       const styles = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="4" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="4" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1" applyNumberFormat="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="6"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="4" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="4" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1" applyNumberFormat="1"/><xf numFmtId="3" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="3" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1" applyNumberFormat="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
       const wb = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${escX((opts.sheetName || 'Export').slice(0, 31))}" sheetId="1" r:id="rId1"/></sheets></workbook>`;
       const wbRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
