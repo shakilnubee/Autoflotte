@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261005d">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261005e">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20261005d"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20261005e"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20261005d">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20261005e">
 <style>
   /* Dossier assurance (mobile) : les grilles à 3 colonnes contiennent des champs date/select dont la
      largeur minimale ne rentre pas sur un petit écran → débordement. On autorise le rétrécissement
@@ -423,8 +423,8 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20261005d"></script>
-<script src="../assets/js/supabase-client.js?v=20261005d"></script>
+<script src="../assets/js/vendor/supabase.js?v=20261005e"></script>
+<script src="../assets/js/supabase-client.js?v=20261005e"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -440,11 +440,11 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261005d"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261005e"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20261005d"></script>
+<script src="../assets/js/app.min.js?v=20261005e"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -1736,29 +1736,31 @@
     try { const s = FP.settings.get(); s.sinistreDossiers = (driveDossiers || []).slice(); FP.settings.save(s); } catch (e) {}
   }
   // Charge la liste des dossiers ; à la 1re ouverture, en crée UN PAR VÉHICULE (pré-prêt).
+  // Plaques dont le dossier a été VOLONTAIREMENT supprimé → on ne le recrée pas automatiquement.
+  function dossiersSupprimes(){ try { const d = FP.settings.get().sinistreDossiersSupprimes; return Array.isArray(d) ? d : []; } catch (e) { return []; } }
   function ensureDossiers(){
+    // 1) Charger la liste enregistrée (une seule fois).
     if (driveDossiers === null){
-      let stored = null;
-      try { stored = FP.settings.get().sinistreDossiers; } catch (e) {}
-      if (Array.isArray(stored)) { driveDossiers = stored.slice(); return; }
-    }
-    // Pas encore de liste enregistrée : on attend d'avoir les véhicules pour semer une 1re fois.
-    if (!Array.isArray(driveDossiers)) driveDossiers = [];
-    const vehs = (data.vehicules || []);
-    if (vehs.length){
       let stored = null; try { stored = FP.settings.get().sinistreDossiers; } catch (e) {}
-      if (!Array.isArray(stored)){
-        const set = [];
-        vehs.forEach(v => { if (v.immat) set.push(v.immat); });
-        sinistres.forEach(x => { if (x.vehiculeImmat && !set.some(p => normPl(p) === normPl(x.vehiculeImmat))) set.push(x.vehiculeImmat); });
-        driveDossiers = set;
-        saveDossiers();
-      }
+      driveDossiers = Array.isArray(stored) ? stored.slice() : [];
     }
+    if (!Array.isArray(driveDossiers)) driveDossiers = [];
+    // 2) AUTO : CHAQUE véhicule de la flotte a son dossier — y compris un véhicule tout juste créé (ex. la
+    //    Xpeng). On ajoute automatiquement les plaques manquantes, SAUF celles que l'utilisateur a
+    //    explicitement supprimées (sinon elles réapparaîtraient). → plus besoin de « Nouveau dossier » à la main.
+    const deleted = dossiersSupprimes();
+    const has = (pl) => (driveDossiers || []).some(p => normPl(p) === normPl(pl));
+    const isDeleted = (pl) => deleted.some(p => normPl(p) === normPl(pl));
+    let changed = false;
+    (data.vehicules || []).forEach(v => { if (v.immat && !has(v.immat) && !isDeleted(v.immat)) { driveDossiers.push(v.immat); changed = true; } });
+    (sinistres || []).forEach(x => { if (x.vehiculeImmat && !has(x.vehiculeImmat) && !isDeleted(x.vehiculeImmat)) { driveDossiers.push(x.vehiculeImmat); changed = true; } });
+    if (changed) saveDossiers();
   }
   function addDossier(pl){
     if (!pl) return;
     ensureDossiers();
+    // Re-créer un dossier qu'on avait supprimé → on le retire de la liste des « supprimés ».
+    try { const s = FP.settings.get(); if (Array.isArray(s.sinistreDossiersSupprimes) && s.sinistreDossiersSupprimes.some(p => normPl(p) === normPl(pl))) { s.sinistreDossiersSupprimes = s.sinistreDossiersSupprimes.filter(p => normPl(p) !== normPl(pl)); FP.settings.save(s); } } catch (e) {}
     if (!(driveDossiers || []).some(p => normPl(p) === normPl(pl))){ driveDossiers.push(pl); saveDossiers(); }
   }
   async function delDossier(pl){
@@ -1773,6 +1775,8 @@
       if (!await FP.confirm('Supprimer le dossier « ' + nom + ' » ?')) return;
     }
     driveDossiers = (driveDossiers || []).filter(p => normPl(p) !== normPl(pl));
+    // Mémorise la suppression → le dossier ne sera PAS recréé automatiquement au prochain chargement.
+    try { const s = FP.settings.get(); s.sinistreDossiersSupprimes = Array.isArray(s.sinistreDossiersSupprimes) ? s.sinistreDossiersSupprimes : []; if (!s.sinistreDossiersSupprimes.some(p => normPl(p) === normPl(pl))) { s.sinistreDossiersSupprimes.push(pl); FP.settings.save(s); } } catch (e) {}
     saveDossiers();
     if (driveFolder && normPl(driveFolder) === normPl(pl)) driveFolder = null;
     renderDrive();
