@@ -10830,16 +10830,18 @@ FP._ensureSyncBadge = function () {
   if (!document.getElementById('fp-sync-style')) {
     const st = document.createElement('style'); st.id = 'fp-sync-style';
     st.textContent = [
-      '#fp-sync-badge{position:fixed;bottom:16px;right:16px;z-index:9999;display:none;align-items:center;gap:7px;',
-      'padding:6px 12px;border-radius:9999px;font:600 12px/1.2 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;',
-      'box-shadow:0 4px 16px -4px rgba(2,6,23,.18);border:1px solid rgba(2,6,23,.06);',
+      '#fp-sync-badge{position:fixed;bottom:18px;right:18px;z-index:9999;display:none;align-items:center;gap:8px;',
+      'padding:9px 16px;border-radius:9999px;font:700 13.5px/1.2 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;',
+      'box-shadow:0 8px 24px -6px rgba(2,6,23,.28);border:1px solid rgba(2,6,23,.08);',
       '-webkit-backdrop-filter:saturate(1.4) blur(8px);backdrop-filter:saturate(1.4) blur(8px);',
-      'opacity:0;transform:translateY(6px);transition:opacity .28s ease,transform .28s ease;pointer-events:none;user-select:none}',
-      '#fp-sync-badge.show{opacity:1;transform:translateY(0)}',
+      'opacity:0;transform:translateY(8px) scale(.96);transition:opacity .28s ease,transform .28s cubic-bezier(.34,1.56,.64,1);pointer-events:none;user-select:none}',
+      '#fp-sync-badge.show{opacity:1;transform:translateY(0) scale(1)}',
+      '#fp-sync-badge.fp-sync-ok{animation:fp-sync-pop .32s ease}',
+      '@keyframes fp-sync-pop{0%{transform:translateY(0) scale(.9)}55%{transform:translateY(0) scale(1.06)}100%{transform:translateY(0) scale(1)}}',
       '#fp-sync-badge.clickable{cursor:pointer;pointer-events:auto}',
-      '#fp-sync-badge .fp-sync-dot{width:13px;height:13px;border-radius:50%;border:2px solid currentColor;border-top-color:transparent;animation:fp-sync-spin .7s linear infinite;flex-shrink:0;opacity:.85}',
+      '#fp-sync-badge .fp-sync-dot{width:14px;height:14px;border-radius:50%;border:2px solid currentColor;border-top-color:transparent;animation:fp-sync-spin .7s linear infinite;flex-shrink:0;opacity:.85}',
       '@keyframes fp-sync-spin{to{transform:rotate(360deg)}}',
-      '@media (max-width:640px){#fp-sync-badge{bottom:calc(74px + env(safe-area-inset-bottom,0px));right:12px}}'
+      '@media (max-width:640px){#fp-sync-badge{bottom:calc(76px + env(safe-area-inset-bottom,0px));right:12px;font-size:13px}}'
     ].join('');
     document.head.appendChild(st);
   }
@@ -10901,6 +10903,7 @@ FP._syncBadge = function (justSynced) {
   const set = (html, bg, fg, clickable) => {
     b.innerHTML = html; b.style.background = bg; b.style.color = fg;
     b.classList.toggle('clickable', !!clickable);
+    b.classList.remove('fp-sync-ok');
     b.style.display = 'inline-flex';
     requestAnimationFrame(() => b.classList.add('show'));
   };
@@ -10921,9 +10924,10 @@ FP._syncBadge = function (justSynced) {
   } else if (justSynced || FP._wasSaving) {
     // Tout est confirmé côté base ET on venait d'enregistrer → « ✓ Enregistré » qui s'efface seul.
     FP._wasSaving = false;
-    set(`<span aria-hidden="true">✓</span> Enregistré`, 'rgba(236,253,245,.96)', '#047857', false);
+    set(`<span aria-hidden="true">✓</span> Enregistré`, 'rgba(209,250,229,.98)', '#047857', false);
+    requestAnimationFrame(() => b.classList.add('fp-sync-ok'));   // petit « pop » de confirmation
     b.title = '';
-    FP._syncBadgeT = setTimeout(hide, 1600);
+    FP._syncBadgeT = setTimeout(hide, 2200);
   } else {
     hide();
   }
