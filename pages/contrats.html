@@ -2638,7 +2638,7 @@
           <div class="p-3 rounded-lg border border-slate-200 bg-white" data-cc="${esc(c.id)}" style="margin-top:8px">
             <div style="display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap">
               <div style="flex:1;min-width:200px">
-                <div class="font-semibold text-slate-800 text-sm">${esc(String(c.intitule||'').trim() || FP.contratCadreTypeLabel(c.type))}${c.numero ? ' · <span class="font-normal text-slate-500">n° ' + esc(c.numero) + '</span>' : ''}</div>
+                <div class="font-semibold text-slate-800 text-sm" style="display:flex;align-items:center;gap:6px"><span style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;background:#EEF2FF;color:#3730A3;flex-shrink:0"><i data-lucide="${((FP.CONTRAT_CADRE_TYPES||[]).find(t=>t.key===c.type)||{}).icon||'file-text'}" style="width:15px;height:15px"></i></span><span style="min-width:0">${esc(String(c.intitule||'').trim() || FP.contratCadreTypeLabel(c.type))}${c.numero ? ' · <span class="font-normal text-slate-500">n° ' + esc(c.numero) + '</span>' : ''}</span></div>
                 <div class="text-xs text-slate-400">${esc(FP.contratCadreTypeLabel(c.type))}${(c.statut && c.statut !== 'actif') ? ' · <b>' + (c.statut === 'resilie' ? 'résilié' : 'en renégociation') + '</b>' : ''}${c.garanties ? ' · ' + esc(c.garanties) : ''}</div>
                 <div class="text-xs text-slate-500 mt-0.5">${c.dateDebut ? 'du ' + esc(dnum(c.dateDebut)) + ' ' : ''}${c.dateFin ? 'au ' + esc(dnum(c.dateFin)) : ''}</div>
                 <div class="mt-1">${echBadge(c)}</div>
@@ -2916,6 +2916,7 @@
             <div id="cc-pdf-list" style="display:flex;flex-direction:column;gap:4px;margin-bottom:6px"></div>
             <input id="cc-pdf-file" type="file" accept="application/pdf,image/*" multiple class="hidden">
             <button type="button" id="cc-pdf-btn" class="btn btn-outline text-sm"><i data-lucide="upload" class="w-4 h-4"></i> Joindre un ou plusieurs fichiers</button>
+            <button type="button" id="cc-cv-attach" class="btn btn-outline text-sm" title="Relie chaque carte verte (une par plaque) à la fiche de son véhicule"><i data-lucide="car" class="w-4 h-4"></i> Relier les cartes vertes aux véhicules</button>
             <span id="cc-pdf-st" class="text-xs text-slate-500 ml-2"></span>
           </div>
           <div id="cc-err" style="display:none;color:#B91C1C;font-size:12px;background:#FEF2F2;border:1px solid #FCA5A5;border-radius:8px;padding:8px 10px"></div>
@@ -3013,7 +3014,34 @@
           const sel = ov.querySelector('#cc-veh'); const im = sel && sel.value; if (im && !vehChips.includes(im)) { vehChips.push(im); renderChips(); } return;
         }
         if (e.target.closest('#cc-pdf-btn')) { ov.querySelector('#cc-pdf-file').click(); return; }
+        if (e.target.closest('#cc-cv-attach')) { attachCartesVertes(e.target.closest('#cc-cv-attach')); return; }
       });
+      // Relie chaque CARTE VERTE (une par plaque) à la fiche de SON véhicule (section Documents) → elle
+      // apparaît aussi dans la fiche + le portail conducteur. Non destructif : anti-doublon par URL, et on
+      // n'écrase JAMAIS un document existant (on ajoute seulement ce qui manque). La plaque est lue dans le nom.
+      async function attachCartesVertes(btnEl){
+        const cvs = pdfs.filter(p => (p.cat || '') === 'carte-verte' && p.url);
+        const st = ov.querySelector('#cc-pdf-st');
+        if (!cvs.length) { if (st) st.textContent = 'Aucune carte verte à relier (catégorie « Cartes vertes »).'; return; }
+        if (!(FP.persist && FP.vehByImmat)) { if (st) st.textContent = '⚠️ Indisponible (connexion requise).'; return; }
+        if (btnEl) btnEl.disabled = true; if (st) st.textContent = '⏳ Rattachement…';
+        let existing = new Set();
+        try { if (FP.db && FP.db.select) { const r = await FP.db.select('documents'); (r && r.data || []).forEach(d => { if (d && d.url) existing.add(d.url); }); } } catch (e) {}
+        let ok = 0, noplate = 0, skip = 0;
+        for (const p of cvs) {
+          const m = String(p.name || '').match(/[A-Z]{2}[-\s]?\d{3}[-\s]?[A-Z]{2}/i);
+          const v = m ? FP.vehByImmat(m[0]) : null;
+          if (!v) { noplate++; continue; }
+          if (existing.has(p.url)) { skip++; continue; }
+          try {
+            await FP.persist.insert('documents', { id: 'D' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), vehiculeId: v.id, type: 'assurance', label: 'Carte verte' + (detectDocYear(p.name) ? (' ' + detectDocYear(p.name)) : ''), url: p.url, driveId: null });
+            existing.add(p.url); ok++;
+          } catch (e) { console.warn('[carte verte attach]', e); }
+        }
+        if (btnEl) btnEl.disabled = false;
+        const msg = '✓ ' + ok + ' carte(s) verte(s) reliée(s) à leur fiche' + (skip ? ' · ' + skip + ' déjà reliée(s)' : '') + (noplate ? ' · ' + noplate + ' plaque(s) non reconnue(s)' : '');
+        if (st) st.textContent = msg; if (FP.toast) FP.toast(msg);
+      }
       // Changement de catégorie (dossier) d'un document → on re-range la liste.
       ov.addEventListener('change', (e) => {
         const cs = e.target.closest('[data-pdf-cat]'); if (!cs) return;
