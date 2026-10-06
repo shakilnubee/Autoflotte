@@ -421,6 +421,7 @@
         </div>
         <div><div class="kpi-label">Par mois</div><div class="font-extrabold text-xl" id="assur-mensuel" style="color:var(--fp-primary)">—</div></div>
         <div><div class="kpi-label">Par véhicule / an</div><div class="font-extrabold text-xl" id="assur-parveh" style="color:var(--fp-primary)">—</div></div>
+        <div><div class="kpi-label">Couverture</div><div class="font-extrabold text-xl" id="assur-couverture">—</div><div class="text-xs" id="assur-couverture-sub" style="color:var(--fp-muted)"></div></div>
         <div class="assur-actions flex items-center gap-2 flex-wrap">
           <button id="assur-add-prime" type="button" class="btn btn-dark text-sm"><i data-lucide="plus" class="w-4 h-4"></i> Ajouter une prime</button>
           <button id="assur-import" type="button" class="btn btn-outline text-sm"><i data-lucide="upload" class="w-4 h-4"></i> Importer l'état de parc</button>
@@ -429,6 +430,25 @@
         </div>
       </div>
       <div id="assur-import-status" class="hidden text-sm mb-3" style="padding:10px 12px;border-radius:10px"></div>
+      <!-- Tableau de bord Assurance : répartition par assureur + renouvellements à venir (rempli par renderAssurance) -->
+      <div id="assur-dashboard" class="grid gap-3 mb-4" style="grid-template-columns:1.4fr 1fr;display:none">
+        <div class="p-4 rounded-xl border border-slate-200 bg-white">
+          <div class="font-semibold text-slate-800 text-sm mb-2 flex items-center gap-2"><span style="width:9px;height:9px;border-radius:3px;background:var(--fp-accent);display:inline-block"></span> Répartition par assureur <span id="assur-rep-count" class="text-xs font-normal text-slate-400"></span></div>
+          <div id="assur-repartition"></div>
+        </div>
+        <div class="p-4 rounded-xl border border-slate-200 bg-white">
+          <div class="font-semibold text-slate-800 text-sm mb-2 flex items-center gap-2"><span style="width:9px;height:9px;border-radius:3px;background:#F59E0B;display:inline-block"></span> Renouvellements à venir</div>
+          <div id="assur-echeances"></div>
+        </div>
+      </div>
+      <style>@media (max-width:860px){ #assur-dashboard{ grid-template-columns:1fr !important } }
+        .assur-rep-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--fp-border)}
+        .assur-rep-row:last-child{border-bottom:none}
+        .assur-rep-bar{height:7px;border-radius:999px;background:#EEF2FF;flex:1.2;overflow:hidden;min-width:40px}
+        .assur-rep-bar>i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--fp-accent),#FB923C)}
+        tr.assur-row-none td{background:#FEF2F2}
+        body.fp-dark .assur-rep-bar{background:#1B2740} body.fp-dark tr.assur-row-none td{background:rgba(185,28,28,.14)}
+      </style>
       <div id="assur-filter-wrap" class="flex items-center gap-2 mb-3 flex-wrap" style="display:none">
         <span class="text-xs text-slate-500 font-semibold">Assureur :</span>
         <select id="assur-filter" class="field-input !py-1 !text-sm" style="width:auto;min-width:160px"></select>
@@ -1105,9 +1125,13 @@
   function populateAssurFilter(list){
     const sel = $('assur-filter'); const wrap = $('assur-filter-wrap'); if (!sel) return;
     list = list || getAssureurs();
-    if (wrap) wrap.style.display = (list.length > 1) ? '' : 'none';   // filtre utile seulement si ≥2 assureurs
+    let noneCount = 0; try { noneCount = (list.length ? owned().filter(v => !assureurIdOf(v)).length : 0); } catch (e) {}
+    // Filtre utile dès qu'il y a ≥2 assureurs OU des véhicules sans assureur (pour les repérer vite).
+    if (wrap) wrap.style.display = (list.length > 1 || noneCount > 0) ? '' : 'none';
     const cur = assurFilter;
-    sel.innerHTML = `<option value="all">Tous les assureurs</option>` + list.map(a => `<option value="${escC(a.id)}">${escC(a.nom || a.police || a.id)}</option>`).join('');
+    sel.innerHTML = `<option value="all">Tous les assureurs</option>`
+      + list.map(a => `<option value="${escC(a.id)}">${escC(a.nom || a.police || a.id)}</option>`).join('')
+      + (noneCount ? `<option value="__none__">— Sans assureur (${noneCount}) —</option>` : '');
     sel.value = [...sel.options].some(o => o.value === cur) ? cur : 'all';
     assurFilter = sel.value;
   }
@@ -1168,8 +1192,9 @@
     const assList = getAssureurs(); const flt = assurFilter;
     return owned().filter(v => {
       if (flt === 'all') return true;
+      if (flt === '__none__') return !assureurIdOf(v);   // véhicules sans assureur rattaché
       const id = assureurIdOf(v) || (assList[0] ? assList[0].id : '');
-      return flt === '__none__' ? (!assureurIdOf(v) && !assList.length) : (id === flt);
+      return id === flt;
     }).sort(_assurSortCmp);
   }
   function renderAssurance() {
@@ -1197,11 +1222,12 @@
       const cout = pr && Number.isFinite(pr.ttc) ? FP.euro(pr.ttc)
         : (hasPerVeh ? '<span class="text-amber-600 font-semibold">à compléter</span>' : (parVeh ? FP.euro(parVeh) : '—'));
       const curAid = assureurIdOf(v) || '';
+      const rowNone = (assList.length && !curAid) ? ' class="assur-row-none"' : '';
       const assCell = assList.length
         ? `<select data-assureur-sel="${escC(v.immat || '')}" class="field-input !py-1 !text-xs" style="min-width:120px" onclick="event.stopPropagation()">${assOpts(curAid)}</select>`
         : `<button type="button" class="text-xs" style="background:none;border:none;cursor:pointer;color:var(--fp-accent);font-weight:600;text-decoration:underline" data-assur-cta onclick="event.stopPropagation()" title="Ajouter votre premier assureur">➕ Ajouter un assureur</button>`;
       return `
-      <tr>
+      <tr${rowNone}>
         <td class="font-mono font-semibold">${FP.lienVehicule(v.immat)}</td>
         <td>${FP.esc(v.marque)} ${FP.esc(v.modele)}</td>
         <td>${FP.lienConducteur(v.chauffeur)}</td>
@@ -1247,7 +1273,54 @@
           + `</div>`;
       } else { mz.innerHTML = ''; }
     }
+    try { renderAssurDashboard(assList, hasPerVeh, parVeh); } catch (e) { console.warn('[assur dashboard]', e); }
     renderAssurInfo();
+  }
+
+  // Tableau de bord Assurance : tuile « Couverture », répartition par assureur, renouvellements à venir.
+  function renderAssurDashboard(assList, hasPerVeh, parVeh){
+    const vehs = owned(); const total = vehs.length;
+    const hasAss = assList.length > 0;
+    const sansAss = hasAss ? vehs.filter(v => !assureurIdOf(v)) : [];
+    const couvert = total - sansAss.length;
+    const cv = $('assur-couverture'), cvs = $('assur-couverture-sub');
+    if (cv) cv.textContent = total ? (hasAss ? (couvert + ' / ' + total) : String(total)) : '—';
+    if (cvs) cvs.innerHTML = !total ? '' : (hasAss
+      ? (sansAss.length ? `<span style="color:#B91C1C;font-weight:700">${sansAss.length} sans assureur</span>` : '✓ tous rattachés')
+      : 'police flotte unique');
+    // Répartition par assureur
+    const rep = $('assur-repartition'), repCount = $('assur-rep-count');
+    if (rep) {
+      const byAss = {};
+      vehs.forEach(v => { const id = assureurIdOf(v) || '__none__'; const o = byAss[id] || (byAss[id] = { n: 0, ttc: 0 }); o.n++; const pr = vehPrime(v); if (pr && Number.isFinite(pr.ttc)) o.ttc += pr.ttc; });
+      const nameOf = (id) => id === '__none__' ? 'Sans assureur' : (((assList.find(a => a.id === id) || {}).nom) || 'Assureur');
+      const ids = Object.keys(byAss).sort((a, b) => byAss[b].n - byAss[a].n);
+      const maxN = ids.length ? Math.max.apply(null, ids.map(id => byAss[id].n)) : 1;
+      if (repCount) repCount.textContent = hasAss ? ('· ' + assList.length + ' assureur' + (assList.length > 1 ? 's' : '')) : '';
+      rep.innerHTML = ids.length ? ids.map(id => { const o = byAss[id], none = id === '__none__';
+        return `<div class="assur-rep-row"><span style="flex:1;min-width:0;font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis${none ? ';color:#B91C1C' : ''}">${FP.esc(nameOf(id))}</span>`
+          + `<span class="assur-rep-bar"><i style="width:${Math.max(6, Math.round(o.n / maxN * 100))}%${none ? ';background:#EF4444' : ''}"></i></span>`
+          + `<span style="font-size:12px;color:var(--fp-muted);min-width:52px;text-align:right">${o.n} véh.</span>`
+          + `<span style="font-weight:700;font-size:12.5px;min-width:70px;text-align:right">${o.ttc ? FP.euro(o.ttc) : '—'}</span></div>`;
+      }).join('') : '<div class="text-xs text-slate-400">Aucun véhicule.</div>';
+    }
+    // Renouvellements à venir (échéance d'assurance lue sur attestation / carte verte — source unique).
+    const ech = $('assur-echeances');
+    if (ech) {
+      const items = [];
+      vehs.forEach(v => { const e = FP.assuranceEcheanceOf ? FP.assuranceEcheanceOf(v) : null; const fin = e && String(e.fin || '').trim(); if (!fin) return; const j = FP.joursRestants ? FP.joursRestants(fin) : null; items.push({ v, fin, j }); });
+      items.sort((a, b) => String(a.fin).localeCompare(String(b.fin)));
+      const soon = items.filter(x => x.j != null && x.j <= 120);
+      if (!items.length) ech.innerHTML = '<div class="text-xs text-slate-400">Aucune échéance connue. Elle se renseigne en scannant une attestation / carte verte dans la fiche véhicule.</div>';
+      else if (!soon.length) ech.innerHTML = '<div class="text-xs" style="color:#047857">✓ Aucun renouvellement dans les 4 prochains mois.</div>';
+      else ech.innerHTML = soon.slice(0, 6).map(x => { const danger = x.j < 30;
+        const pill = danger ? 'background:#FEF2F2;color:#B91C1C' : 'background:#FEF3C7;color:#B45309';
+        const lab = x.j < 0 ? ('en retard ' + (-x.j) + ' j') : ('dans ' + x.j + ' j');
+        const an = ((assList.find(a => a.id === assureurIdOf(x.v)) || {}).nom) || '';
+        return `<div class="flex items-center gap-2" style="padding:6px 0;border-bottom:1px solid var(--fp-border)"><span class="font-mono text-xs font-semibold">${FP.esc(x.v.immat || '')}</span><span class="text-xs text-slate-500" style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${FP.esc(an)}</span><span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;white-space:nowrap;${pill}">${lab}</span></div>`;
+      }).join('');
+    }
+    const dash = $('assur-dashboard'); if (dash) dash.style.display = total ? 'grid' : 'none';
   }
 
   // ----- Import de l'état de parc (assureur) : plaque → prime annuelle HT/TTC -----
