@@ -76,6 +76,13 @@
     #contrats-header-actions #assur-add-quick,
     #contrats-header-actions #cadre-add-quick { width: 100%; justify-content: center; }
   }
+  /* Dossiers de documents (archive contrat cadre) */
+  .cc-folder-chip { display:inline-flex; align-items:center; gap:4px; background:#EEF2F7; border:1px solid #e2e8f0; border-radius:9999px; padding:3px 10px; font-size:11px; font-weight:600; color:#334155; cursor:pointer; transition:background .12s, border-color .12s; }
+  .cc-folder-chip:hover { background:#E0E7FF; border-color:#c7d2fe; }
+  .cc-folder-chip.cc-folder-open { background:#0F1E3D; border-color:#0F1E3D; color:#fff; }
+  .cc-folder-panel { margin-top:6px; padding:7px 11px; background:#F8FAFC; border:1px solid #eef2f7; border-radius:10px; }
+  .cc-folder-panel a { display:block; font-size:12px; color:#0e7490; font-weight:600; padding:3px 0; text-decoration:none; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .cc-folder-panel a:hover { text-decoration:underline; }
 </style>
 <script>
 (function(){
@@ -2637,12 +2644,12 @@
               <div style="text-align:right">
                 <div class="font-bold text-slate-900">${c.montant ? euro(c.montant) + '<span class="text-xs font-normal text-slate-400">/' + (c.periode === 'mois' ? 'mois' : 'an') + '</span>' : '<span class="text-xs text-slate-400">—</span>'}</div>
                 <div class="mt-2 flex gap-1 justify-end flex-wrap">
-                  ${(Array.isArray(c.pdf) ? c.pdf : []).filter(p=>p&&p.url).map(p => `<a href="${esc(p.url)}" target="_blank" rel="noopener" class="btn btn-outline !py-1 !px-2 text-xs"><i data-lucide="eye" class="w-3.5 h-3.5"></i> PDF</a>`).join('')}
                   <button type="button" class="btn btn-outline !py-1 !px-2 text-xs" data-cc-edit="${esc(c.id)}"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
                   <button type="button" class="p-1.5 hover:bg-red-50 rounded text-slate-300 hover:text-red-600" data-cc-del="${esc(c.id)}" title="Supprimer"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
                 </div>
               </div>
             </div>
+            ${docFoldersHtml(c)}
           </div>`).join('');
         return `<div class="p-4 rounded-xl border border-slate-200 bg-slate-50 mb-3">
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
@@ -2658,6 +2665,41 @@
       if (window.lucide) lucide.createIcons();
     }
     window.renderCadre = render;
+
+    // ---- Catégories de documents (archivage « façon Drive » : un contrat cadre = un mini-dossier) ----
+    const DOC_CATS = [
+      { key: 'contrat',     label: 'Contrat',             icon: 'file-signature' },
+      { key: 'appel-prime', label: 'Appels de prime',     icon: 'receipt' },
+      { key: 'cg',          label: 'Conditions générales', icon: 'book-open' },
+      { key: 'carte-verte', label: 'Cartes vertes',       icon: 'shield-check' },
+      { key: 'etat-parc',   label: 'État de parc',        icon: 'clipboard-list' },
+      { key: 'autre',       label: 'Autres documents',    icon: 'file' },
+    ];
+    const docCatLabel = (k) => { const c = DOC_CATS.find(x => x.key === k); return c ? c.label : 'Autres documents'; };
+    const docCatIcon = (k) => { const c = DOC_CATS.find(x => x.key === k); return c ? c.icon : 'file'; };
+    // Devine la catégorie d'un document d'après son NOM (règle : on s'ancre sur des mots-clés, pas au hasard).
+    function detectDocCat(name) {
+      const s = String(name || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+      if (/carte\s*verte|attestation\s*d.?assurance|green\s*card/.test(s)) return 'carte-verte';
+      if (/appel|cotisation|echeance|prime|avis\s*d|quittance/.test(s)) return 'appel-prime';
+      if (/etat\s*de?\s*parc|etat.?parc|parc\s*auto/.test(s)) return 'etat-parc';
+      if (/\bcg\b|condition|notice|ipid|clause|garantie|formule|dispositions?\s*gen/.test(s)) return 'cg';
+      if (/contrat|police|dp\s*flotte|^0?1\.|\bcp\b|convention|accord/.test(s)) return 'contrat';
+      return 'autre';
+    }
+    // Normalise une entrée document (rétro-compatible : anciens { name, url } sans catégorie → devinée).
+    const normDoc = (p) => (p && p.url) ? { name: p.name || 'Document', url: p.url, cat: p.cat || detectDocCat(p.name) } : null;
+    // Dossiers de documents (façon Drive) affichés sur une carte de contrat : une puce par catégorie
+    // présente, qui déplie la liste des documents de cette catégorie au clic (cf. handler data-cc-folder).
+    function docFoldersHtml(c){
+      const docs = (Array.isArray(c.pdf) ? c.pdf : []).map(normDoc).filter(Boolean);
+      if (!docs.length) return '';
+      const byCat = {}; docs.forEach(p => { const k = p.cat || 'autre'; (byCat[k] = byCat[k] || []).push(p); });
+      const order = DOC_CATS.map(x => x.key).filter(k => byCat[k]);
+      const chips = order.map(k => `<button type="button" class="cc-folder-chip" data-cc-folder="${esc(c.id)}:${k}" title="Voir les documents : ${esc(docCatLabel(k))}"><i data-lucide="${docCatIcon(k)}" style="width:12px;height:12px"></i> ${esc(docCatLabel(k))} <span style="color:#94a3b8">${byCat[k].length}</span></button>`).join('');
+      const panels = order.map(k => `<div class="cc-folder-panel" data-cc-panel="${esc(c.id)}:${k}" hidden>${byCat[k].map(p => `<a href="${esc(p.url)}" target="_blank" rel="noopener">📄 ${esc(p.name || 'Document')}</a>`).join('')}</div>`).join('');
+      return `<div class="cc-folders" style="margin-top:8px"><div style="display:flex;flex-wrap:wrap;gap:5px">${chips}</div>${panels}</div>`;
+    }
 
     // ---- Scan IA d'un contrat → pré-remplit le pop-up (même moteur que la lecture des offres leasing) ----
     const CADRE_PROMPT = [
@@ -2832,10 +2874,10 @@
           <label class="text-xs font-semibold text-slate-600">Notes
             <textarea id="cc-notes" rows="2" class="field-input !py-2 mt-1" style="width:100%" placeholder="conditions, remise, interlocuteur…">${esc(c.notes||'')}</textarea></label>
           <div>
-            <div class="text-xs font-semibold text-slate-600 mb-1">Document (PDF / photo)</div>
+            <div class="text-xs font-semibold text-slate-600 mb-1">Documents (PDF / photos) — rangés par dossier</div>
             <div id="cc-pdf-list" style="display:flex;flex-direction:column;gap:4px;margin-bottom:6px"></div>
-            <input id="cc-pdf-file" type="file" accept="application/pdf,image/*" class="hidden">
-            <button type="button" id="cc-pdf-btn" class="btn btn-outline text-sm"><i data-lucide="upload" class="w-4 h-4"></i> Joindre un fichier</button>
+            <input id="cc-pdf-file" type="file" accept="application/pdf,image/*" multiple class="hidden">
+            <button type="button" id="cc-pdf-btn" class="btn btn-outline text-sm"><i data-lucide="upload" class="w-4 h-4"></i> Joindre un ou plusieurs fichiers</button>
             <span id="cc-pdf-st" class="text-xs text-slate-500 ml-2"></span>
           </div>
           <div id="cc-err" style="display:none;color:#B91C1C;font-size:12px;background:#FEF2F2;border:1px solid #FCA5A5;border-radius:8px;padding:8px 10px"></div>
@@ -2848,15 +2890,62 @@
       document.body.appendChild(ov);
       if (window.lucide) lucide.createIcons();
       try { if (FP.searchSelect) FP.searchSelect(ov.querySelector('#cc-veh'), { placeholder: 'Rechercher un véhicule…' }); } catch (e) {}
-      const pdfs = (Array.isArray(c.pdf) ? c.pdf.slice() : []).filter(p => p && p.url);
+      const pdfs = (Array.isArray(c.pdf) ? c.pdf : []).map(normDoc).filter(Boolean);
       const close = () => ov.remove();
+      // Remplit les champs ENCORE VIDES du formulaire à partir d'un scan (ne JAMAIS écraser une saisie).
+      const fillEmptyFromScan = (fields) => {
+        if (!fields) return 0;
+        const pf = mapScan(fields); let n = 0;
+        const setIf = (sel, v) => { const el = ov.querySelector(sel); if (el && v != null && String(v).trim() !== '' && !String(el.value || '').trim()) { el.value = v; n++; } };
+        if (pf.type && pf.type !== 'autre') { const el = ov.querySelector('#cc-type'); if (el && (!el.value || el.value === 'autre')) { el.value = pf.type; n++; } }
+        setIf('#cc-intitule', pf.intitule); setIf('#cc-prest', pf.prestataire); setIf('#cc-num', pf.numero);
+        setIf('#cc-debut', pf.dateDebut); setIf('#cc-fin', pf.dateFin);
+        setIf('#cc-montant', pf.montant != null ? pf.montant : ''); if (pf.periode) { const el = ov.querySelector('#cc-periode'); if (el && !el.value) { el.value = pf.periode; } }
+        setIf('#cc-factu', pf.periodiciteFacturation); setIf('#cc-recond', pf.reconductionTacite);
+        setIf('#cc-preavis', pf.preavisMois != null ? pf.preavisMois : ''); setIf('#cc-garanties', pf.garanties);
+        setIf('#cc-franchise', pf.franchise != null ? pf.franchise : ''); setIf('#cc-plafond', pf.plafond != null ? pf.plafond : '');
+        setIf('#cc-zone', pf.paysEntite); setIf('#cc-int-nom', pf.interlocuteurNom); setIf('#cc-int-email', pf.interlocuteurEmail); setIf('#cc-int-tel', pf.interlocuteurTel);
+        setIf('#cc-signe', pf.dateSignature);
+        try { updateLimite(); } catch (e) {}
+        return n;
+      };
+      // « 🔍 Lire » sur un document déjà joint : télécharge le fichier, lit sa couche texte + IA, remplit les vides.
+      const lireDoc = async (p, btnEl) => {
+        if (!(p && p.url)) return;
+        const old = btnEl ? btnEl.innerHTML : ''; if (btnEl) { btnEl.disabled = true; btnEl.innerHTML = '⏳'; }
+        try {
+          const u = (FP.signedScanUrl ? (await FP.signedScanUrl(p.url).catch(() => p.url)) : p.url) || p.url;
+          const resp = await fetch(u); const blob = await resp.blob();
+          const isPdf = /pdf/i.test(blob.type || '') || /\.pdf($|\?)/i.test(p.url);
+          const file = new File([blob], p.name || (isPdf ? 'doc.pdf' : 'doc.jpg'), { type: blob.type || (isPdf ? 'application/pdf' : 'image/jpeg') });
+          let pdfText = ''; try { pdfText = await contratPdfText(file); } catch (e) {}
+          const prompt = (pdfText && pdfText.length > 40) ? CADRE_PROMPT.concat(['', 'TEXTE EXTRAIT DU DOCUMENT (fait FOI — lis-le en priorité) :', pdfText.slice(0, 16000)]) : CADRE_PROMPT;
+          const fields = FP.scanIA ? await FP.scanIA(file, 'contrat-cadre', prompt, { maxTokens: 8192 }) : null;
+          const n = fillEmptyFromScan(fields);
+          if (FP.toast) FP.toast(n > 0 ? ('✓ ' + n + ' champ(s) rempli(s) depuis « ' + (p.name || 'document') + ' »') : "Rien de nouveau à lire sur ce document (champs déjà remplis ou information absente).");
+        } catch (e) { console.warn('[cadre lire doc]', e); if (FP.toast) FP.toast("Lecture impossible de ce document."); }
+        if (btnEl) { btnEl.disabled = false; btnEl.innerHTML = old; }
+      };
       const renderChips = () => {
         const box = ov.querySelector('#cc-veh-chips');
         box.innerHTML = vehChips.map((im,i) => `<span style="background:#EEF2F7;border-radius:9999px;padding:2px 8px;font-size:12px;display:inline-flex;align-items:center;gap:5px">${esc(im)}<button type="button" data-chip="${i}" style="border:none;background:none;color:#94A3B8;cursor:pointer;font-size:13px;line-height:1">×</button></span>`).join('');
       };
       const renderPdfs = () => {
-        const box = ov.querySelector('#cc-pdf-list');
-        box.innerHTML = pdfs.map((p,i) => `<div style="display:flex;align-items:center;gap:8px;font-size:12px"><a href="${esc(p.url)}" target="_blank" rel="noopener" style="color:#0e7490;font-weight:600">📄 ${esc(p.name||'Document')}</a><button type="button" data-pdf-rm="${i}" style="border:none;background:none;color:#EF4444;cursor:pointer">retirer</button></div>`).join('');
+        const box = ov.querySelector('#cc-pdf-list'); if (!box) return;
+        if (!pdfs.length) { box.innerHTML = '<div class="text-xs text-slate-400">Aucun document joint pour l\'instant.</div>'; return; }
+        const byCat = {}; pdfs.forEach((p, i) => { const k = p.cat || 'autre'; (byCat[k] = byCat[k] || []).push(i); });
+        const order = DOC_CATS.map(c => c.key).filter(k => byCat[k]);
+        const catSelect = (i, cur) => `<select data-pdf-cat="${i}" title="Catégorie (dossier)" style="font-size:11px;border:1px solid #e2e8f0;border-radius:6px;padding:1px 4px;background:#fff;color:#64748b">${DOC_CATS.map(cc => `<option value="${cc.key}" ${cc.key === cur ? 'selected' : ''}>${esc(cc.label)}</option>`).join('')}</select>`;
+        box.innerHTML = order.map(k => {
+          const rows = byCat[k].map(i => { const p = pdfs[i]; return `<div style="display:flex;align-items:center;gap:6px;font-size:12px;padding:2px 0 2px 16px">
+            <a href="${esc(p.url)}" target="_blank" rel="noopener" style="color:#0e7490;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📄 ${esc(p.name || 'Document')}</a>
+            ${catSelect(i, k)}
+            <button type="button" data-pdf-lire="${i}" title="Lire ce document pour remplir les champs encore vides" style="border:1px solid #e2e8f0;background:#fff;border-radius:6px;cursor:pointer;font-size:11px;padding:1px 6px;white-space:nowrap">🔍 Lire</button>
+            <button type="button" data-pdf-rm="${i}" style="border:none;background:none;color:#EF4444;cursor:pointer">retirer</button>
+          </div>`; }).join('');
+          return `<div style="margin-bottom:5px"><div style="font-size:11px;font-weight:700;color:#475569;display:flex;align-items:center;gap:5px"><i data-lucide="${docCatIcon(k)}" style="width:13px;height:13px"></i> ${esc(docCatLabel(k))} <span style="color:#94a3b8;font-weight:500">(${byCat[k].length})</span></div>${rows}</div>`;
+        }).join('');
+        if (window.lucide) lucide.createIcons();
       };
       renderChips(); renderPdfs();
       // Aperçu LIVE de la date limite de résiliation (date de fin − préavis) — l'alerte se cale dessus.
@@ -2876,17 +2965,30 @@
         if (e.target === ov || e.target.closest('[data-cc-x]')) { close(); return; }
         const rm = e.target.closest('[data-chip]'); if (rm) { vehChips.splice(+rm.getAttribute('data-chip'), 1); renderChips(); return; }
         const prm = e.target.closest('[data-pdf-rm]'); if (prm) { pdfs.splice(+prm.getAttribute('data-pdf-rm'), 1); renderPdfs(); return; }
+        const lire = e.target.closest('[data-pdf-lire]'); if (lire) { lireDoc(pdfs[+lire.getAttribute('data-pdf-lire')], lire); return; }
         if (e.target.closest('#cc-veh-add')) {
           const sel = ov.querySelector('#cc-veh'); const im = sel && sel.value; if (im && !vehChips.includes(im)) { vehChips.push(im); renderChips(); } return;
         }
         if (e.target.closest('#cc-pdf-btn')) { ov.querySelector('#cc-pdf-file').click(); return; }
       });
+      // Changement de catégorie (dossier) d'un document → on re-range la liste.
+      ov.addEventListener('change', (e) => {
+        const cs = e.target.closest('[data-pdf-cat]'); if (!cs) return;
+        const i = +cs.getAttribute('data-pdf-cat'); if (pdfs[i]) { pdfs[i].cat = cs.value; renderPdfs(); }
+      });
+      // Import GROUPÉ : on peut déposer PLUSIEURS fichiers d'un coup → chacun est rangé automatiquement
+      // dans la bonne catégorie (devinée d'après son nom), et téléversé avec retente auto (FP.uploadScan).
       ov.querySelector('#cc-pdf-file').addEventListener('change', async (e) => {
-        const f = e.target.files && e.target.files[0]; e.target.value = ''; if (!f) return;
-        const st = ov.querySelector('#cc-pdf-st'); st.textContent = '⏳ Envoi…';
+        const files = Array.from(e.target.files || []); e.target.value = ''; if (!files.length) return;
+        const st = ov.querySelector('#cc-pdf-st');
         if (!FP.uploadScan) { st.textContent = '⚠️ Stockage indisponible.'; return; }
-        try { const url = await FP.uploadScan(f, 'contrats-cadre'); if (url) { pdfs.push({ name: f.name || 'Document', url }); renderPdfs(); st.textContent = '✓ Ajouté'; } else { st.textContent = '⚠️ Échec.'; } }
-        catch (err) { console.error('[cadre pdf]', err); st.textContent = '⚠️ Échec de l\'envoi.'; }
+        let ok = 0, ko = 0;
+        for (let k = 0; k < files.length; k++) {
+          const f = files[k]; st.textContent = '⏳ Envoi… ' + (k + 1) + '/' + files.length;
+          try { const url = await FP.uploadScan(f, 'contrats-cadre'); if (url) { pdfs.push({ name: f.name || 'Document', url, cat: detectDocCat(f.name) }); ok++; renderPdfs(); } else ko++; }
+          catch (err) { console.error('[cadre pdf]', err); ko++; }
+        }
+        st.textContent = ok ? ('✓ ' + ok + ' document(s) ajouté(s)' + (ko ? ' · ' + ko + ' échec(s)' : '') + ' — rangés par catégorie') : '⚠️ Échec de l\'envoi.';
       });
       ov.querySelector('#cc-save').addEventListener('click', () => {
         const val = (id2) => { const el = ov.querySelector(id2); return el ? el.value.trim() : ''; };
@@ -2942,6 +3044,14 @@
       const listBox = document.getElementById('cadre-list');
       if (listBox) listBox.addEventListener('click', async (e) => {
         const ed = e.target.closest('[data-cc-edit]'); if (ed) { openModal(ed.getAttribute('data-cc-edit')); return; }
+        // Ouvre / referme un « dossier » de documents (catégorie) sur une carte de contrat.
+        const fb = e.target.closest('[data-cc-folder]');
+        if (fb) {
+          const key = fb.getAttribute('data-cc-folder');
+          const panel = listBox.querySelector('[data-cc-panel="' + key + '"]');
+          if (panel) { panel.hidden = !panel.hidden; fb.classList.toggle('cc-folder-open', !panel.hidden); }
+          return;
+        }
         // Renommer un DOSSIER (prestataire ou pays/entité) → renomme la valeur sur TOUS ses contrats.
         const rn = e.target.closest('[data-cc-rename]');
         if (rn) {
