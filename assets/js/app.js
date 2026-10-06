@@ -5530,7 +5530,7 @@ FP.settings = {
       'checklistModeles', 'checklistDone',
       // — Contrats cadre (archivage accords prestataires : carte carburant, péage, maintenance, assurance/entité…) :
       //   tableau d'objets à id → fusion fine multi-appareils (jamais écrasé en bloc par un cache en retard).
-      'contratsCadre',
+      'contratsCadre', 'contratCadreIgnore',
       // — Rattachement GARAGE ↔ véhicule : règle par marque (garageParMarque = { marque → prestId }) et
       //   exception par véhicule (vehGarage = { vehId → prestId }). Maps de données → fusion fine.
       'garageParMarque', 'vehGarage',
@@ -8333,6 +8333,44 @@ FP.contratCadreEcheance = (c) => {
     if (jours < 0) niveau = 'danger'; else if (jours < D) niveau = 'danger'; else if (jours < W) niveau = 'warn'; else if (jours < I) niveau = 'info';
     return { jours, niveau, surResiliation: !!lim, ref };
   } catch (e) { return { jours: null, niveau: null, surResiliation: false, ref: null }; }
+};
+// ---- Complétude d'un contrat cadre (champs importants à renseigner) — SOURCE UNIQUE (pastille + « À compléter ») ----
+FP.CONTRAT_CADRE_FIELDS = [
+  { key: 'prestataire', label: 'Prestataire / assureur' },
+  { key: 'numero',      label: 'N° de contrat / police' },
+  { key: 'dateDebut',   label: 'Date de début' },
+  { key: 'dateFin',     label: 'Date de fin / échéance' },
+  { key: 'montant',     label: 'Montant' },
+  { key: 'pdf',         label: 'Document (PDF)' },
+];
+FP.contratCadreIgnored = () => { try { const o = FP.settings.get().contratCadreIgnore; return (o && typeof o === 'object') ? o : {}; } catch (e) { return {}; } };
+// Marque / démarque un champ « non concerné » pour un contrat (persisté + synchronisé).
+FP.contratCadreSetIgnore = (id, key, on) => {
+  try {
+    if (!id || !key) return;
+    const s = FP.settings.get(); s.contratCadreIgnore = (s.contratCadreIgnore && typeof s.contratCadreIgnore === 'object') ? s.contratCadreIgnore : {};
+    const cur = Array.isArray(s.contratCadreIgnore[id]) ? s.contratCadreIgnore[id].slice() : [];
+    const i = cur.indexOf(key);
+    if (on && i < 0) cur.push(key); else if (!on && i >= 0) cur.splice(i, 1);
+    if (cur.length) s.contratCadreIgnore[id] = cur; else delete s.contratCadreIgnore[id];
+    FP.settings.save(s);
+  } catch (e) {}
+};
+// Renvoie les champs MANQUANTS d'un contrat (hors champs « non concerné »). [] = complet.
+FP.contratCadreMissing = (c) => {
+  if (!c || !c.id) return [];
+  const ign = (FP.contratCadreIgnored()[c.id]) || [];
+  const empty = (v) => v == null || String(v).trim() === '';
+  const out = [];
+  FP.CONTRAT_CADRE_FIELDS.forEach(f => {
+    if (ign.includes(f.key)) return;
+    if (f.key === 'montant') { if (!(Number(c.montant) > 0)) out.push(f); return; }
+    if (f.key === 'pdf') { const has = Array.isArray(c.pdf) && c.pdf.some(p => p && p.url); if (!has) out.push(f); return; }
+    if (empty(c[f.key])) out.push(f);
+  });
+  // Préavis de résiliation : requis seulement si reconduction tacite = oui.
+  if (String(c.reconductionTacite) === 'oui' && !ign.includes('preavisMois') && !(Number(c.preavisMois) > 0)) out.push({ key: 'preavisMois', label: 'Préavis de résiliation (mois)' });
+  return out;
 };
 
 FP.buildAlertes = (data) => {
