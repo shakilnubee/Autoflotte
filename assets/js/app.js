@@ -8438,6 +8438,23 @@ FP.buildAlertes = (data) => {
     });
   } catch (e) {}
 
+  // --- Appel de prime d'assurance de l'ANNÉE EN COURS pas encore reçu (on a les années passées, pas la nouvelle) ---
+  //     Précis et peu bruyant : on n'alerte QUE si le contrat a DÉJÀ reçu des appels de prime les années d'avant.
+  try {
+    const yNow = new Date().getFullYear();
+    (FP.contratsCadre ? FP.contratsCadre.list() : []).forEach(c => {
+      if (!c || c.type !== 'assurance') return;
+      const ap = (Array.isArray(c.pdf) ? c.pdf : []).filter(p => p && p.url && String(p.cat || '') === 'appel-prime');
+      if (!ap.length) return;
+      const years = ap.map(p => { const m = String(p.name || '').match(/\b(20\d{2})\b/); return m ? +m[1] : 0; }).filter(Boolean);
+      if (!years.length) return;
+      const maxY = Math.max.apply(null, years);
+      if (maxY >= yNow) return;   // déjà reçu pour l'année en cours (ou à venir)
+      const nom = String(c.prestataire || FP.contratCadreTypeLabel(c.type) || 'Assurance').trim();
+      out.push({ niveau: 'warn', categorie: 'Contrats', message: `Appel de prime ${yNow} pas encore reçu — ${nom}`, detail: `Dernier appel reçu : ${maxY}. Dépose l'appel de cotisation ${yNow} dans le contrat cadre.`, sort: 300, target: 'contrats.html?tab=cadre', muteKey: 'primecadre|' + c.id + '|' + yNow });
+    });
+  } catch (e) {}
+
   // --- Contrôle anti-pollution (utilitaires / camions diesel) ---
   (data.vehicules || []).forEach(v => {
     if (horsFlotte(v)) return;
