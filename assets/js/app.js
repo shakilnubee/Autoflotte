@@ -2140,7 +2140,8 @@ FP.searchSelect = function (select, opts) {
     wrap.appendChild(input);
     const menu = document.createElement('div');
     menu.className = 'fp-jsmenu';
-    menu.style.cssText = 'position:fixed;z-index:9999;background:#fff;border:1px solid var(--fp-border,#E3E8F0);border-radius:.55rem;box-shadow:0 16px 40px -12px rgba(15,30,61,.3);max-height:260px;overflow:auto;display:none';
+    // Menu déroulé — modèle unifié Style C (tokens → correct en thème sombre ; liseré orange en haut).
+    menu.style.cssText = 'position:fixed;z-index:9999;background:var(--fp-surface,#fff);color:var(--fp-text,#111A2B);border:1px solid var(--fp-border,#E3E8F0);border-top:3px solid var(--fp-accent,#F97316);border-radius:12px;box-shadow:0 18px 44px -16px rgba(11,18,32,.34);max-height:280px;overflow:auto;display:none;padding:5px';
     document.body.appendChild(menu);
     const norm = s => (window.FP && FP.norm) ? FP.norm(s) : String(s || '').toLowerCase();
     const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -2259,10 +2260,10 @@ FP.filterResetButton = function (bar, opts) {
     if (!mount || mount.querySelector('.fp-filter-reset')) return null;
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'fp-filter-reset';
+    // Modèle unifié Style C (pilule orange clair) : le look vit dans styles.css (.fp-reset/.fp-filter-reset).
+    btn.className = 'fp-filter-reset fp-reset';
     btn.title = 'Réinitialiser les filtres';
     btn.innerHTML = '<i data-lucide="rotate-ccw" style="width:14px;height:14px"></i><span>Réinitialiser</span>';
-    btn.style.cssText = 'display:inline-flex;align-items:center;gap:.35rem;padding:.5rem .8rem;border:1px solid var(--fp-border,#E3E8F0);border-radius:9999px;background:var(--fp-surface,#fff);color:var(--fp-muted,#5A6577);font-size:.82rem;font-weight:600;cursor:pointer;white-space:nowrap';
     btn.addEventListener('click', () => {
       if (typeof opts.onReset === 'function') { try { opts.onReset(); } catch (e) {} }
       else if (barEl) {
@@ -3875,7 +3876,8 @@ FP.conducteurPicker = function (input, opts) {
     const norm = s => (FP.norm ? FP.norm(s) : String(s || '').toLowerCase());
     const menu = document.createElement('div');
     menu.className = 'fp-jsmenu';
-    menu.style.cssText = 'position:fixed;z-index:10000;background:#fff;border:1px solid var(--fp-border,#E3E8F0);border-radius:.55rem;box-shadow:0 16px 40px -12px rgba(15,30,61,.3);max-height:260px;overflow:auto;display:none';
+    // Menu déroulé — modèle unifié Style C (tokens → correct en thème sombre ; liseré orange en haut).
+    menu.style.cssText = 'position:fixed;z-index:10000;background:var(--fp-surface,#fff);color:var(--fp-text,#111A2B);border:1px solid var(--fp-border,#E3E8F0);border-top:3px solid var(--fp-accent,#F97316);border-radius:12px;box-shadow:0 18px 44px -16px rgba(11,18,32,.34);max-height:280px;overflow:auto;display:none;padding:5px';
     document.body.appendChild(menu);
     const place = () => { const r = input.getBoundingClientRect(); menu.style.left = r.left + 'px'; menu.style.top = (r.bottom + 3) + 'px'; menu.style.width = r.width + 'px'; };
     const close = () => { menu.style.display = 'none'; };
