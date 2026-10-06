@@ -223,6 +223,27 @@
     return row;
   }
 
+  // ⚠️ ANTI-PERTE — écriture RÉSILIENTE à une colonne inconnue (schéma en retard sur le code).
+  // Bug vécu : le code enregistrait `immatriculation` dans `amendes`, mais la colonne n'existait pas
+  // → PostgREST renvoyait « Could not find the 'immatriculation' column of 'amendes' in the schema
+  // cache » et TOUTE l'amende était PERDUE. Désormais, plutôt que de perdre la ligne entière à cause
+  // d'un seul champ en trop, on RETIRE automatiquement la colonne fautive et on réécrit la ligne sans
+  // elle (la donnée principale est sauvée ; le champ manquant est juste ignoré + signalé en console).
+  // Marche pour insert / upsert / update. Borné (12 passes) pour ne jamais boucler.
+  async function writeResilient(table, snake, run) {
+    let payload = Object.assign({}, snake), res, guard = 0;
+    while (guard++ < 12) {
+      res = await run(payload);
+      if (!res || !res.error) return res;
+      const m = String(res.error.message || '').match(/could not find the '([^']+)' column/i);
+      if (!m || !(m[1] in payload)) return res;          // autre erreur, ou colonne déjà absente → on rend la main
+      delete payload[m[1]];
+      try { console.warn(`[FP.db ${table}] colonne inconnue « ${m[1]} » ignorée (schéma en retard sur le code) — la ligne est quand même enregistrée.`); } catch (e) {}
+      if (!Object.keys(payload).length) return res;        // plus rien à écrire → on arrête
+    }
+    return res;
+  }
+
   // Clé primaire par table : la table "conducteurs" est indexée par "key" (pas de colonne "id").
   // Clé primaire réelle par table (sinon 'id'). ⚠️ edl_signatures a pour PK `token` (PAS d'`id`) →
   // sans ça, le tri par `id` renvoyait un 400 « column id does not exist » à CHAQUE lecture (spam
@@ -300,7 +321,7 @@
     /** Met à jour partiellement une ligne. Renvoie { error } si échec. */
     async update(table, id, fields) {
       const snake = toDb(fields);
-      const res = await client.from(table).update(snake).eq(pkColumn(table), id);
+      const res = await writeResilient(table, snake, p => client.from(table).update(p).eq(pkColumn(table), id));
       if (res.error) console.error(`[FP.db.update ${table}#${id}]`, res.error);
       return res;
     },
@@ -308,7 +329,7 @@
     /** Insère une nouvelle ligne. */
     async insert(table, row) {
       const snake = toDb(table === 'app_settings' ? row : stampSociete(row));
-      const res = await client.from(table).insert(snake);
+      const res = await writeResilient(table, snake, p => client.from(table).insert(p));
       if (res.error) console.error(`[FP.db.insert ${table}]`, res.error);
       return res;
     },
@@ -330,7 +351,7 @@
     async upsert(table, row) {
       const snake = toDb(table === 'app_settings' ? row : stampSociete(row));
       // Conflit sur la VRAIE clé primaire (ex. conducteurs → 'key', sinon 'id')
-      const res = await client.from(table).upsert(snake, { onConflict: pkColumn(table) });
+      const res = await writeResilient(table, snake, p => client.from(table).upsert(p, { onConflict: pkColumn(table) }));
       if (res.error) console.error(`[FP.db.upsert ${table}]`, res.error);
       return res;
     },
