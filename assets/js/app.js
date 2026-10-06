@@ -11161,6 +11161,26 @@ FP.courrierAssureurPrompt = function (plaque) {
     'clairement. Ne DEVINE JAMAIS : en cas de doute, réponds "inconnu".',
   ].join('\n');
 };
+// Extrait la COUCHE TEXTE d'un PDF (reconstruite PAR POSITION, comme ulysPdfToText) → '' si PDF scanné
+// (pas de couche texte) ou pdf.js indisponible. Helper central réutilisé par FP.scanIA (toutes les pages).
+FP._pdfTextLayer = async function (file) {
+  try {
+    if (!file || !(FP.ocr && FP.ocr.loadScript)) return '';
+    await FP.ocr.loadScript(FP.ocr.PDFJS_CDN);
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = FP.ocr.PDFJS_WORKER;
+    const pdf = await window.pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
+    const MAXP = Math.min(pdf.numPages, 15); let out = '';
+    for (let p = 1; p <= MAXP; p++) {
+      const page = await pdf.getPage(p); const tc = await page.getTextContent();
+      const items = tc.items.map(it => ({ s: it.str, x: it.transform[4], y: it.transform[5] })).filter(i => i.s && i.s.trim() !== '');
+      items.sort((a, b) => Math.abs(b.y - a.y) > 2 ? b.y - a.y : a.x - b.x);
+      let cy = null, line = [];
+      items.forEach(it => { if (cy === null || Math.abs(it.y - cy) > 3) { if (line.length) out += line.join(' ') + '\n'; line = []; cy = it.y; } line.push(it.s); });
+      if (line.length) out += line.join(' ') + '\n'; out += '\n';
+    }
+    return out.trim();
+  } catch (e) { console.warn('[pdf text layer]', e); return ''; }
+};
 FP.scanIA = async function (file, docType, promptOverride, opts) {
   opts = opts || {};
   try {
@@ -11190,7 +11210,23 @@ FP.scanIA = async function (file, docType, promptOverride, opts) {
       r.readAsDataURL(f);
     });
     const mediaType = f.type || (/\.pdf$/i.test(f.name || '') ? 'application/pdf' : 'image/jpeg');
-    const payload = { fileBase64: b64, mediaType, docType: docType || 'facture', prompt: promptOverride || FP.SCAN_PROMPT };
+    // ⚠️ COUCHE TEXTE D'ABORD (règle projet, globale) : si c'est un PDF avec une vraie couche texte, on
+    // l'extrait (pdf.js, par POSITION) et on l'ajoute au prompt → l'IA LIT le texte réel au lieu de deviner
+    // « à l'image » (bien plus fiable sur un multipage). Repli vision si pas de couche texte (scan/photo).
+    // Bénéficie à TOUTES les pages qui scannent (factures, amendes, contrats, état de parc…), sans y toucher.
+    let promptToSend = promptOverride || FP.SCAN_PROMPT;
+    try {
+      const isPdf = /pdf/i.test(mediaType) || /\.pdf$/i.test(f.name || '');
+      const already = (Array.isArray(promptToSend) ? promptToSend.join('\n') : String(promptToSend)).includes('TEXTE EXTRAIT DU DOCUMENT');
+      if (isPdf && !already && FP._pdfTextLayer) {
+        const _txt = await FP._pdfTextLayer(f);
+        if (_txt && _txt.length > 40) {
+          const extra = ['', 'TEXTE EXTRAIT DU DOCUMENT (couche texte — fait FOI, lis-le en priorité ; le fichier est joint en complément) :', _txt.slice(0, 16000)];
+          promptToSend = Array.isArray(promptToSend) ? promptToSend.concat(extra) : (String(promptToSend) + '\n' + extra.join('\n'));
+        }
+      }
+    } catch (e) {}
+    const payload = { fileBase64: b64, mediaType, docType: docType || 'facture', prompt: promptToSend };
     // Jetons de sortie : défaut RELEVÉ à 2048 (le repli serveur était 1024 → un JSON un peu long,
     // ou un modèle qui ajoute du texte, était TRONQUÉ → JSON invalide → « lecture impossible »).
     // Les grandes extractions (tableaux) peuvent demander plus via opts.maxTokens (plafonné à 8192).
