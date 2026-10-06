@@ -450,7 +450,7 @@
     const moisLabel = (m) => { const [y, mo] = (m || '').split('-'); const N = ['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre']; return mo ? `${N[+mo]} ${y}` : m; };
     // Clé canonique par PERSONNE (dédoublonne « Charles » ⇄ « Charles LENNON », sépare 2 homonymes).
     const _np = (s) => (FP.condGroupKey ? FP.condGroupKey(s) : (FP.normPrenom ? FP.normPrenom(s) : String(s || '').trim().toLowerCase()));
-    const _nomUnif = (raw) => (FP.conducteurNomUnifie ? (FP.conducteurNomUnifie(raw) || raw) : raw);
+    const _nomUnif = (raw) => (FP.prenomAffiche ? (FP.prenomAffiche(raw) || raw) : raw);   // AFFICHAGE = prénom seul (règle globale) ; le regroupement reste par clé canonique (_np)
     // ⚠️ SOURCE UNIQUE du regroupement conso (table ET exports CSV/PDF) : dédoublonne une même personne
     // stockée sous 2 orthographes (prénom seul + nom complet = mêmes chiffres en double), puis regroupe
     // par PERSONNE (et par MOIS si byMonth). Avant, seule la TABLE dédoublonnait → l'export comptait DOUBLE.
@@ -874,8 +874,9 @@
       rows.forEach(c => { const n = resolveName(c); if (n) nameCount[n] = (nameCount[n] || 0) + 1; });
       const who = (c) => {
         const brut = resolveName(c);
-        // Nom AFFICHÉ = fiche conducteur (unifié : « ROMUALD » et « Romuald LAMARQUE-BRUNET » → 1 seul nom).
-        const nom = brut && FP.conducteurNomUnifie ? (FP.conducteurNomUnifie(brut) || brut) : brut;
+        // Nom AFFICHÉ = PRÉNOM SEUL (règle globale) ; la clé de regroupement reste le nom complet (`brut`),
+        // et la plaque est ajoutée en cas d'homonymes (nameCount[brut] > 1) pour lever l'ambiguïté.
+        const nom = brut ? (FP.prenomAffiche ? FP.prenomAffiche(brut) : brut) : brut;
         if (nom) {
           if (c.plaque && nameCount[brut] > 1) {
             return `<span class="font-semibold">${esc(nom)}</span> <span class="font-mono text-slate-400 text-xs">${esc(c.plaque)}</span>`;
