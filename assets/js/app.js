@@ -11548,11 +11548,28 @@ FP.uploadScan = async function (file, folder, opts) {
   const slug = opts.name ? String(opts.name).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) : '';
   if (slug) { path = `${folder || 'divers'}/${slug}${ext}`; named = true; }
   else { const rand = Math.random().toString(36).slice(2, 8); path = `${folder || 'divers'}/${Date.now()}-${rand}${ext}`; }
-  const { error } = await FP.supabase.storage.from(FP.SCAN_BUCKET).upload(path, file, {
-    upsert: named, // un fichier nommé (n° d'avis) remplace l'ancien ; un aléatoire ne doit jamais écraser
-    contentType: file.type || 'application/octet-stream',
-  });
-  if (error) throw error;
+  // ⚠️ RETENTE AUTOMATIQUE (jusqu'à 3 essais) sur erreur TRANSITOIRE (réseau coupé, serveur occupé,
+  // jeton d'auth en cours de rafraîchissement) : un échec passager ne doit PLUS obliger l'utilisateur à
+  // recommencer son téléversement (bug vécu : permis qui « ne part pas au 1er coup »). Le MÊME `path` est
+  // réutilisé à chaque essai → on passe `upsert` sur les retentes (fichier identique, écrasement sûr),
+  // et une erreur « déjà existe » (le fichier EST bien monté, seule la réponse a raté) = SUCCÈS.
+  const _sc = (e) => Number(e && (e.statusCode || e.status || (e.originalError && e.originalError.status)));
+  const _msg = (e) => String((e && (e.message || e.error)) || e || '').toLowerCase();
+  const _transient = (e) => { const s = _sc(e), m = _msg(e); return /failed to fetch|networkerror|network error|load failed|timeout|connection|gateway|temporar/.test(m) || s === 429 || (s >= 500 && s <= 599); };
+  const _alreadyThere = (e) => { const s = _sc(e), m = _msg(e); return s === 409 || /exist|duplicate|resource already/.test(m); };
+  let lastErr = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const { error } = await FP.supabase.storage.from(FP.SCAN_BUCKET).upload(path, file, {
+      upsert: named || attempt > 0, // 1er essai d'un fichier aléatoire = jamais d'écrasement ; retentes = même chemin → upsert sûr
+      contentType: file.type || 'application/octet-stream',
+    });
+    if (!error) { lastErr = null; break; }
+    if (_alreadyThere(error)) { lastErr = null; break; }   // le fichier est bien en ligne
+    lastErr = error;
+    if (!_transient(error) || attempt === 2) break;          // erreur définitive, ou dernier essai
+    await new Promise(r => setTimeout(r, 500 * Math.pow(2, attempt)));   // 0,5 s puis 1 s
+  }
+  if (lastErr) throw lastErr;
   const { data } = FP.supabase.storage.from(FP.SCAN_BUCKET).getPublicUrl(path);
   return (data && data.publicUrl) || null;
 };
