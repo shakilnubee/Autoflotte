@@ -2186,6 +2186,39 @@ FP.searchSelect = function (select, opts) {
   } catch (e) { /* en cas de souci, on garde le <select> natif */ }
 };
 
+// ===== ✕ « Vider la recherche » — ajouté AUTOMATIQUEMENT à tous les champs de recherche =====
+// Modèle unifié Style C : tout champ .fp-search-field ou .fp-searchbox>input reçoit une petite croix
+// qui apparaît dès qu'il contient du texte et le vide en un clic (puis re-filtre). Marche aussi sur
+// les champs créés dynamiquement (onglets/modales) grâce à un MutationObserver débounced.
+(function () {
+  function wireOne(inp) {
+    try {
+      if (!inp || inp.dataset.fpClr === '1') return;
+      const wrap = inp.closest('.fp-searchbox') || (inp.classList.contains('fp-search-field') ? inp.parentElement : null);
+      if (!wrap) return;
+      inp.dataset.fpClr = '1';
+      try { if (getComputedStyle(wrap).position === 'static') wrap.style.position = 'relative'; } catch (e) {}
+      let btn = wrap.querySelector(':scope > .fp-sb-clear');
+      if (!btn) { btn = document.createElement('button'); btn.type = 'button'; btn.className = 'fp-sb-clear'; btn.setAttribute('aria-label', 'Effacer la recherche'); btn.tabIndex = -1; btn.textContent = '✕'; wrap.appendChild(btn); }
+      const upd = () => inp.classList.toggle('has-val', !!inp.value);
+      inp.addEventListener('input', upd); inp.addEventListener('change', upd);
+      btn.addEventListener('mousedown', e => e.preventDefault()); // ne pas voler le focus avant le clic
+      btn.addEventListener('click', () => { inp.value = ''; inp.classList.remove('has-val'); inp.dispatchEvent(new Event('input', { bubbles: true })); inp.dispatchEvent(new Event('change', { bubbles: true })); inp.focus(); });
+      upd();
+    } catch (e) {}
+  }
+  FP.wireSearchClear = function (root) { try { (root || document).querySelectorAll('input.fp-search-field, .fp-searchbox > input').forEach(wireOne); } catch (e) {} };
+  function init() {
+    FP.wireSearchClear();
+    try {
+      let t = 0;
+      const mo = new MutationObserver(() => { clearTimeout(t); t = setTimeout(() => FP.wireSearchClear(), 180); });
+      mo.observe(document.body, { childList: true, subtree: true });
+    } catch (e) {}
+  }
+  if (document.readyState !== 'loading') init(); else document.addEventListener('DOMContentLoaded', init);
+})();
+
 // ⚠️ RÈGLE PROJET — un bouton « Réinitialiser » par barre de filtres (partout sur le site).
 // FP.filterResetButton(bar, { onReset, mount, after }) : ajoute un bouton « ↺ Réinitialiser » qui
 // remet les filtres de la page à zéro. `onReset` (recommandé) = fonction de la page qui remet son
