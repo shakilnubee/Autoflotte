@@ -200,27 +200,29 @@
       </div>
     </div>
 
-    <!-- KPIs -->
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-      <div class="kpi">
-        <div class="kpi-label">Véhicules assurés</div>
-        <div class="kpi-value" id="kpi-assur">—</div>
-        <div class="kpi-delta" id="kpi-assur-sub">—</div>
+    <!-- KPIs CONTEXTUELS : chaque sous-onglet (Leasing / Assurance / Contrats cadre) affiche SES propres
+         indicateurs. switchContratTab n'en montre qu'un à la fois → plus d'info « leasing » sur une page
+         qui n'est pas le leasing. -->
+    <div id="contrat-topkpis" class="mb-6">
+      <!-- Leasing -->
+      <div id="topkpi-leasing" class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="kpi"><div class="kpi-label">Véhicules en leasing</div><div class="kpi-value" id="kpi-leasing">—</div><div class="kpi-delta">tous loueurs</div></div>
+        <div class="kpi"><div class="kpi-label">Coût mensuel leasing</div><div class="kpi-value" id="kpi-mens-leasing" style="color: var(--fp-primary)">—</div><div class="kpi-delta">loyers en cours</div></div>
+        <div class="kpi"><div class="kpi-label">Coût annuel leasing</div><div class="kpi-value" id="kpi-leasing-an" style="color: var(--fp-primary)">—</div><div class="kpi-delta">loyers × 12 + malus</div></div>
+        <div class="kpi"><div class="kpi-label">Loyer moyen / mois</div><div class="kpi-value" id="kpi-leasing-moy">—</div><div class="kpi-delta">par véhicule</div></div>
       </div>
-      <div class="kpi">
-        <div class="kpi-label">Véhicules en leasing</div>
-        <div class="kpi-value" id="kpi-leasing">—</div>
-        <div class="kpi-delta">tous loueurs</div>
+      <!-- Assurance -->
+      <div id="topkpi-assurance" class="grid grid-cols-2 md:grid-cols-4 gap-4" style="display:none">
+        <div class="kpi"><div class="kpi-label">Véhicules assurés</div><div class="kpi-value" id="kpi-assur">—</div><div class="kpi-delta" id="kpi-assur-sub">—</div></div>
+        <div class="kpi"><div class="kpi-label">Prime annuelle flotte</div><div class="kpi-value" id="kpi-assur-an" style="color: var(--fp-primary)">—</div><div class="kpi-delta">toutes primes</div></div>
+        <div class="kpi"><div class="kpi-label">Par mois</div><div class="kpi-value" id="kpi-assur-mois" style="color: var(--fp-primary)">—</div><div class="kpi-delta">prime / 12</div></div>
+        <div class="kpi"><div class="kpi-label">Par véhicule / an</div><div class="kpi-value" id="kpi-assur-veh" style="color: var(--fp-primary)">—</div><div class="kpi-delta">prime / véhicule</div></div>
       </div>
-      <div class="kpi">
-        <div class="kpi-label">Coût mensuel leasing</div>
-        <div class="kpi-value" id="kpi-mens-leasing" style="color: var(--fp-primary)">—</div>
-        <div class="kpi-delta">moyenne mensualités</div>
-      </div>
-      <div class="kpi">
-        <div class="kpi-label">Coût annuel total</div>
-        <div class="kpi-value" id="kpi-annuel" style="color: var(--fp-primary)">—</div>
-        <div class="kpi-delta">leasing + assurance + TVS</div>
+      <!-- Contrats cadre -->
+      <div id="topkpi-cadre" class="grid grid-cols-2 md:grid-cols-3 gap-4" style="display:none">
+        <div class="kpi"><div class="kpi-label">Contrats enregistrés</div><div class="kpi-value" id="kpi-cadre-nb-top">—</div><div class="kpi-delta">tous prestataires</div></div>
+        <div class="kpi"><div class="kpi-label">Coût annuel cumulé</div><div class="kpi-value" id="kpi-cadre-cout-top" style="color: var(--fp-primary)">—</div><div class="kpi-delta">tous les contrats</div></div>
+        <div class="kpi"><div class="kpi-label">À renouveler bientôt</div><div class="kpi-value" id="kpi-cadre-ech-top" style="color: var(--fp-accent)">—</div><div class="kpi-delta">échéance proche</div></div>
       </div>
     </div>
 
@@ -1073,12 +1075,26 @@
     }, 0);
     mensTotal += locMens;
 
-    $('kpi-leasing').textContent = bpceCount + loc.length;
-    $('kpi-mens-leasing').textContent = FP.euro(mensTotal);
-    // Coût annuel RÉEL = leasing (BPCE + Localease) + malus amorti (coût unique réparti sur la durée)
-    // + primes d'assurance + TVS annuelle de la flotte. Malus via le helper canonique (même règle partout).
+    const setK = (id, v) => { const el = $(id); if (el) el.textContent = v; };
+    const leaseCount = bpceCount + loc.length;
     const malusAnnuel = (FP.leasingMalusAnnuelFlotte) ? FP.leasingMalusAnnuelFlotte(data) : 0;
-    $('kpi-annuel').textContent = FP.euro(mensTotal * 12 + malusAnnuel + assurPrime() + fleetTVS());
+    // --- KPIs LEASING (propres à l'onglet Leasing) ---
+    setK('kpi-leasing', leaseCount);
+    setK('kpi-mens-leasing', FP.euro(mensTotal));
+    setK('kpi-leasing-an', FP.euro(mensTotal * 12 + malusAnnuel));
+    setK('kpi-leasing-moy', leaseCount ? FP.euro(Math.round(mensTotal / leaseCount)) : '—');
+    // --- KPIs ASSURANCE (propres à l'onglet Assurance) ---
+    const nAss = owned().length, pr = assurPrime();
+    setK('kpi-assur-an', pr ? FP.euro(pr) : '—');
+    setK('kpi-assur-mois', pr ? FP.euro(Math.round(pr / 12)) : '—');
+    setK('kpi-assur-veh', (pr && nAss) ? FP.euro(Math.round(pr / nAss)) : '—');
+    // --- KPIs CONTRATS CADRE (propres à l'onglet Contrats cadre) ---
+    try {
+      const cl = (FP.contratsCadre ? FP.contratsCadre.list() : []);
+      const cCout = cl.reduce((s, c) => s + (FP.contratCadreCoutAnnuel ? FP.contratCadreCoutAnnuel(c) : 0), 0);
+      const cEch = cl.filter(c => { const n = FP.contratCadreEcheance ? (FP.contratCadreEcheance(c) || {}).niveau : null; return n === 'danger' || n === 'warn'; }).length;
+      setK('kpi-cadre-nb-top', cl.length); setK('kpi-cadre-cout-top', FP.euro(cCout)); setK('kpi-cadre-ech-top', cEch);
+    } catch (e) {}
   }
   // TVS annuelle totale de la flotte (même barème central que Statistiques / fiche véhicule).
   function fleetTVS(){ try { return FP.tvsAnnuelleFlotte ? FP.tvsAnnuelleFlotte(data.vehicules) : owned().reduce((s, v) => { const d = FP.tvsDetail ? FP.tvsDetail(v) : null; return s + (d && d.applicable && d.total != null ? d.total : 0); }, 0); } catch (e) { return 0; } }
@@ -2510,6 +2526,9 @@
     // de rendu (renderLocalease/renderAssurance…) remettent `section.style.display=''` à chaque
     // rafraîchissement — un toggle inline se ferait donc écraser. La règle CSS, elle, tient bon.
     const host = $('contrat-sections'); if (host) host.setAttribute('data-ctab', name);
+    // KPIs contextuels : on n'affiche que le jeu d'indicateurs du sous-onglet actif.
+    { const showTop = (id, on) => { const el = document.getElementById(id); if (el) el.style.display = on ? '' : 'none'; };
+      showTop('topkpi-leasing', name === 'leasing'); showTop('topkpi-assurance', name === 'assurance'); showTop('topkpi-cadre', name === 'cadre'); }
     const bl = document.getElementById('ctab-leasing'), ba = document.getElementById('ctab-assurance'), bc = document.getElementById('ctab-cadre');
     if (bl) bl.classList.toggle('active', name === 'leasing');
     if (ba) ba.classList.toggle('active', name === 'assurance');
@@ -2617,6 +2636,14 @@
       set('cadre-kpi-nb', String(list.length));
       set('cadre-kpi-cout', euro(cout) + ' /an');
       set('cadre-kpi-ech', String(nEch));
+      // KPIs du HAUT (barre contextuelle de l'onglet) = TOTAL de TOUS les contrats (non filtré) → tenus à
+      // jour dès qu'on ajoute/supprime un contrat, sans attendre un rechargement complet.
+      try {
+        const all = FP.contratsCadre.list();
+        const allCout = all.reduce((s, c) => s + FP.contratCadreCoutAnnuel(c), 0);
+        const allEch = all.filter(c => { const n = (FP.contratCadreEcheance(c) || {}).niveau; return n === 'danger' || n === 'warn'; }).length;
+        set('kpi-cadre-nb-top', String(all.length)); set('kpi-cadre-cout-top', euro(allCout)); set('kpi-cadre-ech-top', String(allEch));
+      } catch (e) {}
       // Liste GROUPÉE PAR PRESTATAIRE (chaque prestataire = un dossier)
       const box = document.getElementById('cadre-list'); if (!box) return;
       if (!FP.contratsCadre.list().length) {
