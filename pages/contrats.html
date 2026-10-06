@@ -83,6 +83,10 @@
   .cc-folder-panel { margin-top:6px; padding:7px 11px; background:#F8FAFC; border:1px solid #eef2f7; border-radius:10px; }
   .cc-folder-panel a { display:block; font-size:12px; color:#0e7490; font-weight:600; padding:3px 0; text-decoration:none; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .cc-folder-panel a:hover { text-decoration:underline; }
+  .cc-subfolder { margin:2px 0 4px 6px; padding-left:9px; border-left:2px solid #e2e8f0; }
+  .cc-subfolder-h { font-size:11px; font-weight:700; color:#64748b; padding:2px 0; }
+  .cc-dropzone { border:1px dashed transparent; border-radius:10px; transition:border-color .12s, background .12s; }
+  .cc-dropzone-over { border-color:#0EA5A0; background:#ECFEFF; }
 </style>
 <script>
 (function(){
@@ -2689,15 +2693,49 @@
     }
     // Normalise une entrée document (rétro-compatible : anciens { name, url } sans catégorie → devinée).
     const normDoc = (p) => (p && p.url) ? { name: p.name || 'Document', url: p.url, cat: p.cat || detectDocCat(p.name) } : null;
+    // Sous-classement « façon Drive » : ANNÉE (20xx dans le nom) + ENTITÉ (pour les appels de prime :
+    // TJMAX, PXPRETAIL…). On s'ancre sur le nom du fichier, jamais au hasard.
+    const _ENTITE_STOP = new Set(['APPEL','COTISATION','FLOTTE','PERIODE','PRIME','PRIMES','AVIS','ECHEANCE','DECHEANCE','CARTE','VERTE','CONTRAT','CONTRATS','ETAT','PARC','ASSISTANCE','NOTICE','CLAUSE','FORMULE','EQUILIBRE','PRIVILEGE','FACTURE','DOCUMENT','SCAN','COPIE','FINAL','SIGNE','VOITURE','ASSURANCE','POLICE','RGPD','IPID','AUTO','AUTOS','FLEET','EASYFLEET']);
+    function detectDocYear(name){ const m = String(name || '').match(/\b(20\d{2})\b/); return m ? m[1] : ''; }
+    function detectDocEntite(name){
+      const toks = String(name || '').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '').split(/[^A-Z0-9]+/).filter(Boolean);
+      for (const t of toks){ if (t.length >= 4 && /[A-Z]/.test(t) && !/^\d+$/.test(t) && !/^20\d{2}$/.test(t) && !_ENTITE_STOP.has(t)) return t; }
+      return '';
+    }
+    // Sous-dossier d'un document dans sa catégorie : '' = pas de sous-dossier (rangé directement).
+    //  • appels de prime → « Année · Entité »   • cartes vertes / état de parc / CG → « Année »   • reste → ''
+    function docSubLabel(p){
+      const y = detectDocYear(p.name);
+      if (p.cat === 'appel-prime') { const e = detectDocEntite(p.name); return [y, e].filter(Boolean).join(' · '); }
+      if (p.cat === 'carte-verte' || p.cat === 'etat-parc' || p.cat === 'cg') return y || '';
+      return '';
+    }
+    // Groupe une liste de documents : { cat → { subLabel → [docs] } }, dans l'ordre DOC_CATS puis sous-label décroissant.
+    function groupDocs(docs){
+      const byCat = {}; docs.forEach(p => { const k = p.cat || 'autre'; (byCat[k] = byCat[k] || []).push(p); });
+      const cats = DOC_CATS.map(x => x.key).filter(k => byCat[k]);
+      return cats.map(k => {
+        const subs = {}; byCat[k].forEach(p => { const sl = docSubLabel(p); (subs[sl] = subs[sl] || []).push(p); });
+        // Ordre des sous-dossiers : '' d'abord (rangés direct), puis année décroissante / alpha.
+        const subKeys = Object.keys(subs).sort((a, b) => (a === '') - (b === '') || b.localeCompare(a, 'fr'));
+        return { cat: k, n: byCat[k].length, subs: subKeys.map(sl => ({ label: sl, docs: subs[sl] })) };
+      });
+    }
     // Dossiers de documents (façon Drive) affichés sur une carte de contrat : une puce par catégorie
     // présente, qui déplie la liste des documents de cette catégorie au clic (cf. handler data-cc-folder).
     function docFoldersHtml(c){
       const docs = (Array.isArray(c.pdf) ? c.pdf : []).map(normDoc).filter(Boolean);
       if (!docs.length) return '';
-      const byCat = {}; docs.forEach(p => { const k = p.cat || 'autre'; (byCat[k] = byCat[k] || []).push(p); });
-      const order = DOC_CATS.map(x => x.key).filter(k => byCat[k]);
-      const chips = order.map(k => `<button type="button" class="cc-folder-chip" data-cc-folder="${esc(c.id)}:${k}" title="Voir les documents : ${esc(docCatLabel(k))}"><i data-lucide="${docCatIcon(k)}" style="width:12px;height:12px"></i> ${esc(docCatLabel(k))} <span style="color:#94a3b8">${byCat[k].length}</span></button>`).join('');
-      const panels = order.map(k => `<div class="cc-folder-panel" data-cc-panel="${esc(c.id)}:${k}" hidden>${byCat[k].map(p => `<a href="${esc(p.url)}" target="_blank" rel="noopener">📄 ${esc(p.name || 'Document')}</a>`).join('')}</div>`).join('');
+      const groups = groupDocs(docs);
+      const chips = groups.map(g => `<button type="button" class="cc-folder-chip" data-cc-folder="${esc(c.id)}:${g.cat}" title="Voir les documents : ${esc(docCatLabel(g.cat))}"><i data-lucide="${docCatIcon(g.cat)}" style="width:12px;height:12px"></i> ${esc(docCatLabel(g.cat))} <span style="color:#94a3b8">${g.n}</span></button>`).join('');
+      const docLink = (p) => `<a href="${esc(p.url)}" target="_blank" rel="noopener">📄 ${esc(p.name || 'Document')}</a>`;
+      const panels = groups.map(g => {
+        const body = g.subs.map(s => s.label
+          ? `<div class="cc-subfolder"><div class="cc-subfolder-h">📁 ${esc(s.label)}</div>${s.docs.map(docLink).join('')}</div>`
+          : s.docs.map(docLink).join('')
+        ).join('');
+        return `<div class="cc-folder-panel" data-cc-panel="${esc(c.id)}:${g.cat}" hidden>${body}</div>`;
+      }).join('');
       return `<div class="cc-folders" style="margin-top:8px"><div style="display:flex;flex-wrap:wrap;gap:5px">${chips}</div>${panels}</div>`;
     }
 
@@ -2873,8 +2911,8 @@
           </div>
           <label class="text-xs font-semibold text-slate-600">Notes
             <textarea id="cc-notes" rows="2" class="field-input !py-2 mt-1" style="width:100%" placeholder="conditions, remise, interlocuteur…">${esc(c.notes||'')}</textarea></label>
-          <div>
-            <div class="text-xs font-semibold text-slate-600 mb-1">Documents (PDF / photos) — rangés par dossier</div>
+          <div id="cc-dropzone" class="cc-dropzone">
+            <div class="text-xs font-semibold text-slate-600 mb-1">Documents (PDF / photos) — rangés par dossier <span class="text-slate-400 font-normal">· glisse tes fichiers ici</span></div>
             <div id="cc-pdf-list" style="display:flex;flex-direction:column;gap:4px;margin-bottom:6px"></div>
             <input id="cc-pdf-file" type="file" accept="application/pdf,image/*" multiple class="hidden">
             <button type="button" id="cc-pdf-btn" class="btn btn-outline text-sm"><i data-lucide="upload" class="w-4 h-4"></i> Joindre un ou plusieurs fichiers</button>
@@ -2932,18 +2970,21 @@
       };
       const renderPdfs = () => {
         const box = ov.querySelector('#cc-pdf-list'); if (!box) return;
-        if (!pdfs.length) { box.innerHTML = '<div class="text-xs text-slate-400">Aucun document joint pour l\'instant.</div>'; return; }
-        const byCat = {}; pdfs.forEach((p, i) => { const k = p.cat || 'autre'; (byCat[k] = byCat[k] || []).push(i); });
-        const order = DOC_CATS.map(c => c.key).filter(k => byCat[k]);
+        if (!pdfs.length) { box.innerHTML = '<div class="text-xs text-slate-400">Aucun document joint pour l\'instant — glisse tes fichiers ici ou clique « Joindre ».</div>'; return; }
         const catSelect = (i, cur) => `<select data-pdf-cat="${i}" title="Catégorie (dossier)" style="font-size:11px;border:1px solid #e2e8f0;border-radius:6px;padding:1px 4px;background:#fff;color:#64748b">${DOC_CATS.map(cc => `<option value="${cc.key}" ${cc.key === cur ? 'selected' : ''}>${esc(cc.label)}</option>`).join('')}</select>`;
-        box.innerHTML = order.map(k => {
-          const rows = byCat[k].map(i => { const p = pdfs[i]; return `<div style="display:flex;align-items:center;gap:6px;font-size:12px;padding:2px 0 2px 16px">
-            <a href="${esc(p.url)}" target="_blank" rel="noopener" style="color:#0e7490;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📄 ${esc(p.name || 'Document')}</a>
-            ${catSelect(i, k)}
-            <button type="button" data-pdf-lire="${i}" title="Lire ce document pour remplir les champs encore vides" style="border:1px solid #e2e8f0;background:#fff;border-radius:6px;cursor:pointer;font-size:11px;padding:1px 6px;white-space:nowrap">🔍 Lire</button>
-            <button type="button" data-pdf-rm="${i}" style="border:none;background:none;color:#EF4444;cursor:pointer">retirer</button>
-          </div>`; }).join('');
-          return `<div style="margin-bottom:5px"><div style="font-size:11px;font-weight:700;color:#475569;display:flex;align-items:center;gap:5px"><i data-lucide="${docCatIcon(k)}" style="width:13px;height:13px"></i> ${esc(docCatLabel(k))} <span style="color:#94a3b8;font-weight:500">(${byCat[k].length})</span></div>${rows}</div>`;
+        const row = (p) => { const i = pdfs.indexOf(p); return `<div style="display:flex;align-items:center;gap:6px;font-size:12px;padding:2px 0 2px 14px">
+          <a href="${esc(p.url)}" target="_blank" rel="noopener" style="color:#0e7490;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📄 ${esc(p.name || 'Document')}</a>
+          ${catSelect(i, p.cat || 'autre')}
+          <button type="button" data-pdf-rename="${i}" title="Renommer le document" style="border:none;background:none;cursor:pointer;color:#64748b;font-size:12px">✏️</button>
+          <button type="button" data-pdf-lire="${i}" title="Lire ce document pour remplir les champs encore vides" style="border:1px solid #e2e8f0;background:#fff;border-radius:6px;cursor:pointer;font-size:11px;padding:1px 6px;white-space:nowrap">🔍 Lire</button>
+          <button type="button" data-pdf-rm="${i}" style="border:none;background:none;color:#EF4444;cursor:pointer">retirer</button>
+        </div>`; };
+        box.innerHTML = groupDocs(pdfs).map(g => {
+          const body = g.subs.map(s => s.label
+            ? `<div style="margin:2px 0 2px 10px"><div style="font-size:10.5px;font-weight:700;color:#64748b;padding:1px 0">📁 ${esc(s.label)}</div>${s.docs.map(row).join('')}</div>`
+            : s.docs.map(row).join('')
+          ).join('');
+          return `<div style="margin-bottom:5px"><div style="font-size:11px;font-weight:700;color:#475569;display:flex;align-items:center;gap:5px"><i data-lucide="${docCatIcon(g.cat)}" style="width:13px;height:13px"></i> ${esc(docCatLabel(g.cat))} <span style="color:#94a3b8;font-weight:500">(${g.n})</span></div>${body}</div>`;
         }).join('');
         if (window.lucide) lucide.createIcons();
       };
@@ -2966,6 +3007,8 @@
         const rm = e.target.closest('[data-chip]'); if (rm) { vehChips.splice(+rm.getAttribute('data-chip'), 1); renderChips(); return; }
         const prm = e.target.closest('[data-pdf-rm]'); if (prm) { pdfs.splice(+prm.getAttribute('data-pdf-rm'), 1); renderPdfs(); return; }
         const lire = e.target.closest('[data-pdf-lire]'); if (lire) { lireDoc(pdfs[+lire.getAttribute('data-pdf-lire')], lire); return; }
+        const ren = e.target.closest('[data-pdf-rename]');
+        if (ren) { const i = +ren.getAttribute('data-pdf-rename'); const p = pdfs[i]; if (p) { const nv = window.prompt('Renommer le document :', p.name || ''); if (nv != null && nv.trim()) { p.name = nv.trim(); renderPdfs(); } } return; }
         if (e.target.closest('#cc-veh-add')) {
           const sel = ov.querySelector('#cc-veh'); const im = sel && sel.value; if (im && !vehChips.includes(im)) { vehChips.push(im); renderChips(); } return;
         }
@@ -2976,20 +3019,29 @@
         const cs = e.target.closest('[data-pdf-cat]'); if (!cs) return;
         const i = +cs.getAttribute('data-pdf-cat'); if (pdfs[i]) { pdfs[i].cat = cs.value; renderPdfs(); }
       });
-      // Import GROUPÉ : on peut déposer PLUSIEURS fichiers d'un coup → chacun est rangé automatiquement
-      // dans la bonne catégorie (devinée d'après son nom), et téléversé avec retente auto (FP.uploadScan).
-      ov.querySelector('#cc-pdf-file').addEventListener('change', async (e) => {
-        const files = Array.from(e.target.files || []); e.target.value = ''; if (!files.length) return;
-        const st = ov.querySelector('#cc-pdf-st');
-        if (!FP.uploadScan) { st.textContent = '⚠️ Stockage indisponible.'; return; }
+      // Import GROUPÉ (bouton OU glisser-déposer) : plusieurs fichiers d'un coup → chacun rangé
+      // automatiquement dans la bonne catégorie (devinée d'après son nom), téléversé avec retente auto.
+      async function uploadFiles(fileList){
+        const files = Array.from(fileList || []).filter(f => f && (/pdf/i.test(f.type || '') || /^image\//.test(f.type || '') || /\.pdf$/i.test(f.name || '')));
+        const st = ov.querySelector('#cc-pdf-st'); if (!files.length) { if (st) st.textContent = '⚠️ Aucun PDF / image.'; return; }
+        if (!FP.uploadScan) { if (st) st.textContent = '⚠️ Stockage indisponible.'; return; }
         let ok = 0, ko = 0;
         for (let k = 0; k < files.length; k++) {
-          const f = files[k]; st.textContent = '⏳ Envoi… ' + (k + 1) + '/' + files.length;
+          const f = files[k]; if (st) st.textContent = '⏳ Envoi… ' + (k + 1) + '/' + files.length;
           try { const url = await FP.uploadScan(f, 'contrats-cadre'); if (url) { pdfs.push({ name: f.name || 'Document', url, cat: detectDocCat(f.name) }); ok++; renderPdfs(); } else ko++; }
           catch (err) { console.error('[cadre pdf]', err); ko++; }
         }
-        st.textContent = ok ? ('✓ ' + ok + ' document(s) ajouté(s)' + (ko ? ' · ' + ko + ' échec(s)' : '') + ' — rangés par catégorie') : '⚠️ Échec de l\'envoi.';
-      });
+        if (st) st.textContent = ok ? ('✓ ' + ok + ' document(s) ajouté(s)' + (ko ? ' · ' + ko + ' échec(s)' : '') + ' — rangés par catégorie') : '⚠️ Échec de l\'envoi.';
+      }
+      ov.querySelector('#cc-pdf-file').addEventListener('change', (e) => { const fl = e.target.files; e.target.value = ''; uploadFiles(fl); });
+      // Glisser-déposer un (ou plusieurs) fichier(s) directement sur la zone documents.
+      { const dz = ov.querySelector('#cc-dropzone');
+        if (dz) {
+          ['dragenter', 'dragover'].forEach(ev => dz.addEventListener(ev, (e) => { e.preventDefault(); e.stopPropagation(); dz.classList.add('cc-dropzone-over'); }));
+          dz.addEventListener('dragleave', (e) => { e.preventDefault(); e.stopPropagation(); if (dz.contains(e.relatedTarget)) return; dz.classList.remove('cc-dropzone-over'); });
+          dz.addEventListener('drop', (e) => { e.preventDefault(); e.stopPropagation(); dz.classList.remove('cc-dropzone-over'); const dt = e.dataTransfer; if (dt && dt.files && dt.files.length) uploadFiles(dt.files); });
+        }
+      }
       ov.querySelector('#cc-save').addEventListener('click', () => {
         const val = (id2) => { const el = ov.querySelector(id2); return el ? el.value.trim() : ''; };
         const err = ov.querySelector('#cc-err');
