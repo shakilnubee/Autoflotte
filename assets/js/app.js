@@ -10805,6 +10805,10 @@ FP.persist = {
         const q = this._loadQ(); const it = q.find(x => x._uid === uid);
         if (it) { it.failed = true; it.error = (e && (e.message || e)) || 'erreur'; this._saveQ(q); if (FP.notifyError) FP.notifyError(); }
       }
+      // Dans TOUS les cas (définitif OU transitoire), l'écriture reste en file ET on force l'affichage
+      // de la pastille de synchro cliquable (récupération manuelle garantie) — pas seulement un toast
+      // de 5 s qu'on peut rater. Anti-perte : l'utilisateur voit toujours qu'il reste qqc à renvoyer.
+      try { if (FP._syncBadge) FP._syncBadge(); } catch (_) {}
     }
   },
   _err(e) { console.error('[FP.persist] enregistrement différé :', e && (e.message || e)); },
@@ -10814,7 +10818,19 @@ FP.persist = {
   _estPermanente(e) {
     if (!e) return false;
     const msg = (e.message || '').toLowerCase();
+    const code = String(e.code || '').toUpperCase();
+    // Réseau → TRANSITOIRE (on retentera automatiquement).
     if (/failed to fetch|networkerror|network error|load failed|timeout|fetch/.test(msg)) return false;
+    // Erreur STRUCTURELLE de base (colonne absente, contrainte, violation RLS, doublon de clé,
+    // valeur invalide…) → DÉFINITIVE : retenter n'aide pas, on garde en file + pastille (récupérable).
+    if (code === '42501' || code === '23505' || code === '42703'
+        || /row-level security|violates row-level|does not exist|duplicate key|violates .*constraint|invalid input syntax/.test(msg)) return true;
+    // ⚠️ Session / jeton expiré → TRANSITOIRE (anti-perte) : supabase-js rafraîchit le jeton et la
+    // file repart toute seule au prochain flush (online / focus / 30 s). Avant, un simple jeton périmé
+    // marquait l'écriture « définitive » → l'amende semblait PERDUE alors qu'elle attendait en file.
+    // Borné : flush() plafonne à 5 essais puis marque l'échec (pas de boucle infinie).
+    if (e.status === 401 || e.status === 403 || code === 'PGRST301' || code === 'PGRST302' || code === 'PGRST303'
+        || /jwt expired|jwt is expired|invalid jwt|token.*expir|expired.*token|not authenticated|auth session missing|no api key|refresh token/.test(msg)) return false;
     return !!(e.code || e.status >= 400);
   },
   // Résumé lisible des échecs définitifs (pour le message à l'utilisateur)
