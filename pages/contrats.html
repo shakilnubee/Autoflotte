@@ -2703,18 +2703,55 @@
         dateSignature: iso(f.dateSignature), statut: 'actif'
       };
     }
+    // Couche texte du PDF (reconstruite PAR POSITION, comme ulysPdfToText/etatParcPdfText). '' si PDF scanné
+    // (pas de couche texte) → on retombe alors sur la vision IA. Lire le TEXTE est bien plus fiable qu'une
+    // lecture « à l'image » sur un contrat multipage (règle projet « couche texte d'abord »).
+    async function contratPdfText(file){
+      try {
+        if (!file) return '';
+        const isPdf = /pdf/i.test(file.type || '') || /\.pdf$/i.test(file.name || '');
+        if (!isPdf || !(FP.ocr && FP.ocr.loadScript)) return '';
+        await FP.ocr.loadScript(FP.ocr.PDFJS_CDN);
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = FP.ocr.PDFJS_WORKER;
+        const pdf = await window.pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
+        const MAXP = Math.min(pdf.numPages, 15);   // assez pour un contrat ; borne un doc très long
+        let out = '';
+        for (let p = 1; p <= MAXP; p++) {
+          const page = await pdf.getPage(p); const tc = await page.getTextContent();
+          const items = tc.items.map(it => ({ s: it.str, x: it.transform[4], y: it.transform[5] })).filter(i => i.s && i.s.trim() !== '');
+          items.sort((a, b) => Math.abs(b.y - a.y) > 2 ? b.y - a.y : a.x - b.x);
+          let cy = null, line = [];
+          items.forEach(it => { if (cy === null || Math.abs(it.y - cy) > 3) { if (line.length) out += line.join(' ') + '\n'; line = []; cy = it.y; } line.push(it.s); });
+          if (line.length) out += line.join(' ') + '\n';
+          out += '\n';
+        }
+        return out.trim();
+      } catch (e) { console.warn('[contrat pdf text]', e); return ''; }
+    }
     async function scanContrat(file){
       if (!file) return;
       const busy = FP.busy ? FP.busy("Lecture du contrat par l'IA…") : null;
+      // 1) COUCHE TEXTE d'abord (pdf.js) : on l'ajoute au prompt → l'IA lit le vrai texte du contrat
+      //    (prestataire, n° de police, dates, montant de prime, garanties…) au lieu de deviner à l'image.
+      let pdfText = '';
+      try { pdfText = await contratPdfText(file); } catch (e) {}
+      const prompt = (pdfText && pdfText.length > 40)
+        ? CADRE_PROMPT.concat(['', 'TEXTE EXTRAIT DU DOCUMENT (il fait FOI — lis-le en PRIORITÉ pour retrouver chaque valeur ; le fichier est joint en complément) :', pdfText.slice(0, 16000)])
+        : CADRE_PROMPT;
       let fields = null;
-      try { fields = (FP.scanIA) ? await FP.scanIA(file, 'contrat-cadre', CADRE_PROMPT, { maxTokens: 8192 }) : null; }
+      try { fields = (FP.scanIA) ? await FP.scanIA(file, 'contrat-cadre', prompt, { maxTokens: 8192 }) : null; }
       catch (e) { console.warn('[cadre scan IA]', e); }
       let pdfArr = [];
       try { const url = FP.uploadScan ? await FP.uploadScan(file, 'contrats-cadre') : ''; if (url) pdfArr = [{ name: file.name || 'Contrat', url }]; } catch (e) { console.warn('[cadre pdf join]', e); }
-      if (busy) { if (fields) busy.done('✓ Contrat lu — vérifie les champs'); else busy.fail('Lecture partielle — complète à la main'); }
+      // « Lu » = au moins un champ non vide (un objet {} tout à null = échec réel, pas un succès).
+      const got = !!(fields && Object.keys(fields).some(k => { const v = fields[k]; return v != null && String(v).trim() !== ''; }));
+      if (busy) { if (got) busy.done('✓ Contrat lu — vérifie les champs'); else busy.fail('Lecture impossible — complète à la main'); }
       const pf = mapScan(fields || {}); pf.pdf = pdfArr;
       openModal(null, pf);
-      if (!fields && FP.toast) FP.toast("L'IA n'a pas pu tout lire — vérifie/complète les champs.");
+      if (!got && FP.toast) {
+        const why = (FP._scanLastErr && String(FP._scanLastErr).trim()) ? ' (' + String(FP._scanLastErr).replace(/\s+/g, ' ').slice(0, 160) + ')' : '';
+        FP.toast("L'IA n'a pas pu lire ce document" + why + " — le fichier est joint, complète les champs à la main.");
+      }
     }
 
     // ---- Modale Ajouter / Modifier ----
