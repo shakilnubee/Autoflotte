@@ -2675,16 +2675,16 @@
       { key: 'contrat',     label: 'Contrat',             icon: 'file-signature' },
       { key: 'appel-prime', label: 'Appels de prime',     icon: 'receipt' },
       { key: 'cg',          label: 'Conditions générales', icon: 'book-open' },
-      { key: 'carte-verte', label: 'Cartes vertes',       icon: 'shield-check' },
       { key: 'etat-parc',   label: 'État de parc',        icon: 'clipboard-list' },
       { key: 'autre',       label: 'Autres documents',    icon: 'file' },
     ];
+    // ⚠️ Les CARTES VERTES ne sont PAS gérées ici : elles vivent dans la fiche véhicule → section Documents.
+    const KNOWN_DOC_CATS = new Set(DOC_CATS.map(c => c.key));
     const docCatLabel = (k) => { const c = DOC_CATS.find(x => x.key === k); return c ? c.label : 'Autres documents'; };
     const docCatIcon = (k) => { const c = DOC_CATS.find(x => x.key === k); return c ? c.icon : 'file'; };
     // Devine la catégorie d'un document d'après son NOM (règle : on s'ancre sur des mots-clés, pas au hasard).
     function detectDocCat(name) {
       const s = String(name || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-      if (/carte\s*verte|attestation\s*d.?assurance|green\s*card/.test(s)) return 'carte-verte';
       if (/appel|cotisation|echeance|prime|avis\s*d|quittance/.test(s)) return 'appel-prime';
       if (/etat\s*de?\s*parc|etat.?parc|parc\s*auto/.test(s)) return 'etat-parc';
       if (/\bcg\b|condition|notice|ipid|clause|garantie|formule|dispositions?\s*gen/.test(s)) return 'cg';
@@ -2692,7 +2692,7 @@
       return 'autre';
     }
     // Normalise une entrée document (rétro-compatible : anciens { name, url } sans catégorie → devinée).
-    const normDoc = (p) => (p && p.url) ? { name: p.name || 'Document', url: p.url, cat: p.cat || detectDocCat(p.name) } : null;
+    const normDoc = (p) => (p && p.url) ? { name: p.name || 'Document', url: p.url, cat: (p.cat && KNOWN_DOC_CATS.has(p.cat)) ? p.cat : detectDocCat(p.name) } : null;
     // Sous-classement « façon Drive » : ANNÉE (20xx dans le nom) + ENTITÉ (pour les appels de prime :
     // TJMAX, PXPRETAIL…). On s'ancre sur le nom du fichier, jamais au hasard.
     const _ENTITE_STOP = new Set(['APPEL','COTISATION','FLOTTE','PERIODE','PRIME','PRIMES','AVIS','ECHEANCE','DECHEANCE','CARTE','VERTE','CONTRAT','CONTRATS','ETAT','PARC','ASSISTANCE','NOTICE','CLAUSE','FORMULE','EQUILIBRE','PRIVILEGE','FACTURE','DOCUMENT','SCAN','COPIE','FINAL','SIGNE','VOITURE','ASSURANCE','POLICE','RGPD','IPID','AUTO','AUTOS','FLEET','EASYFLEET']);
@@ -2707,7 +2707,7 @@
     function docSubLabel(p){
       const y = detectDocYear(p.name);
       if (p.cat === 'appel-prime') { const e = detectDocEntite(p.name); return [y, e].filter(Boolean).join(' · '); }
-      if (p.cat === 'carte-verte' || p.cat === 'etat-parc' || p.cat === 'cg') return y || '';
+      if (p.cat === 'etat-parc' || p.cat === 'cg') return y || '';
       return '';
     }
     // Groupe une liste de documents : { cat → { subLabel → [docs] } }, dans l'ordre DOC_CATS puis sous-label décroissant.
@@ -2916,7 +2916,6 @@
             <div id="cc-pdf-list" style="display:flex;flex-direction:column;gap:4px;margin-bottom:6px"></div>
             <input id="cc-pdf-file" type="file" accept="application/pdf,image/*" multiple class="hidden">
             <button type="button" id="cc-pdf-btn" class="btn btn-outline text-sm"><i data-lucide="upload" class="w-4 h-4"></i> Joindre un ou plusieurs fichiers</button>
-            <button type="button" id="cc-cv-attach" class="btn btn-outline text-sm" title="Relie chaque carte verte (une par plaque) à la fiche de son véhicule"><i data-lucide="car" class="w-4 h-4"></i> Relier les cartes vertes aux véhicules</button>
             <span id="cc-pdf-st" class="text-xs text-slate-500 ml-2"></span>
           </div>
           <div id="cc-err" style="display:none;color:#B91C1C;font-size:12px;background:#FEF2F2;border:1px solid #FCA5A5;border-radius:8px;padding:8px 10px"></div>
@@ -3014,34 +3013,7 @@
           const sel = ov.querySelector('#cc-veh'); const im = sel && sel.value; if (im && !vehChips.includes(im)) { vehChips.push(im); renderChips(); } return;
         }
         if (e.target.closest('#cc-pdf-btn')) { ov.querySelector('#cc-pdf-file').click(); return; }
-        if (e.target.closest('#cc-cv-attach')) { attachCartesVertes(e.target.closest('#cc-cv-attach')); return; }
       });
-      // Relie chaque CARTE VERTE (une par plaque) à la fiche de SON véhicule (section Documents) → elle
-      // apparaît aussi dans la fiche + le portail conducteur. Non destructif : anti-doublon par URL, et on
-      // n'écrase JAMAIS un document existant (on ajoute seulement ce qui manque). La plaque est lue dans le nom.
-      async function attachCartesVertes(btnEl){
-        const cvs = pdfs.filter(p => (p.cat || '') === 'carte-verte' && p.url);
-        const st = ov.querySelector('#cc-pdf-st');
-        if (!cvs.length) { if (st) st.textContent = 'Aucune carte verte à relier (catégorie « Cartes vertes »).'; return; }
-        if (!(FP.persist && FP.vehByImmat)) { if (st) st.textContent = '⚠️ Indisponible (connexion requise).'; return; }
-        if (btnEl) btnEl.disabled = true; if (st) st.textContent = '⏳ Rattachement…';
-        let existing = new Set();
-        try { if (FP.db && FP.db.select) { const r = await FP.db.select('documents'); (r && r.data || []).forEach(d => { if (d && d.url) existing.add(d.url); }); } } catch (e) {}
-        let ok = 0, noplate = 0, skip = 0;
-        for (const p of cvs) {
-          const m = String(p.name || '').match(/[A-Z]{2}[-\s]?\d{3}[-\s]?[A-Z]{2}/i);
-          const v = m ? FP.vehByImmat(m[0]) : null;
-          if (!v) { noplate++; continue; }
-          if (existing.has(p.url)) { skip++; continue; }
-          try {
-            await FP.persist.insert('documents', { id: 'D' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), vehiculeId: v.id, type: 'assurance', label: 'Carte verte' + (detectDocYear(p.name) ? (' ' + detectDocYear(p.name)) : ''), url: p.url, driveId: null });
-            existing.add(p.url); ok++;
-          } catch (e) { console.warn('[carte verte attach]', e); }
-        }
-        if (btnEl) btnEl.disabled = false;
-        const msg = '✓ ' + ok + ' carte(s) verte(s) reliée(s) à leur fiche' + (skip ? ' · ' + skip + ' déjà reliée(s)' : '') + (noplate ? ' · ' + noplate + ' plaque(s) non reconnue(s)' : '');
-        if (st) st.textContent = msg; if (FP.toast) FP.toast(msg);
-      }
       // Changement de catégorie (dossier) d'un document → on re-range la liste.
       ov.addEventListener('change', (e) => {
         const cs = e.target.closest('[data-pdf-cat]'); if (!cs) return;
