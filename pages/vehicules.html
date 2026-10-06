@@ -3456,6 +3456,26 @@
         <div class="font-semibold mb-2 text-slate-900 border-b border-slate-200 pb-1">Administratif & documents</div>
         <div class="text-sm space-y-2 mt-3">
           <div class="flex justify-between items-center"><span class="text-slate-600">Assurance</span><span class="font-medium text-right" data-df="assurance" data-dt="text">${escapeHtml(v.assurance) || (window.FP && FP.assureurLabelVeh && escapeHtml(FP.assureurLabelVeh(v))) || (window.FP && FP.assuranceLabel && FP.assuranceLabel()) || '<span class="text-slate-400">—</span>'}</span></div>
+          ${(function(){
+            // Lien INVERSE : le(s) contrat(s) cadre d'ASSURANCE qui couvre(nt) ce véhicule (page Contrats).
+            // Couvre = la plaque est dans la liste du contrat, OU le contrat vise toute la flotte (liste vide).
+            try {
+              if (!(window.FP && FP.contratsCadre && FP.contratsCadre.list)) return '';
+              const covers = FP.contratsCadre.list().filter(c => {
+                if (!c || c.type !== 'assurance') return false;
+                const vs = Array.isArray(c.vehicules) ? c.vehicules.filter(Boolean) : [];
+                if (!vs.length) return true; // toute la flotte
+                return vs.some(p => FP.immatEq ? FP.immatEq(p, v.immat) : String(p).toUpperCase().replace(/[^A-Z0-9]/g,'') === String(v.immat||'').toUpperCase().replace(/[^A-Z0-9]/g,''));
+              });
+              if (!covers.length) return '';
+              const items = covers.map(c => {
+                const nom = String(c.intitule || '').trim() || (FP.contratCadreTypeLabel ? FP.contratCadreTypeLabel(c.type) : 'Assurance');
+                const sub = [c.prestataire, c.numero ? 'n° ' + c.numero : ''].filter(Boolean).join(' · ');
+                return escapeHtml(nom) + (sub ? ' <span class="text-slate-400">(' + escapeHtml(sub) + ')</span>' : '');
+              }).join('<br>');
+              return `<div class="flex justify-between items-start gap-3"><span class="text-slate-600" style="white-space:nowrap">Contrat d'assurance</span><span class="font-medium text-right" style="max-width:64%">${items} <a href="contrats.html?tab=cadre" style="color:var(--fp-accent);white-space:nowrap">→ voir</a></span></div>`;
+            } catch(e){ return ''; }
+          })()}
           ${(function(){ try { const num = (window.FP && FP.assistanceOf) ? FP.assistanceOf(v) : ''; return num ? `<div class="flex justify-between items-center"><span class="text-slate-600">Assistance 24/7</span><a class="font-medium text-right" href="tel:${escapeHtml(String(num).replace(/\s/g,''))}" style="color:var(--fp-accent)">${escapeHtml(String(num).replace(/\s/g,''))}</a></div>` : ''; } catch(e){ return ''; } })()}
           <div class="flex justify-between items-center"><span class="text-slate-600">Propriétaire</span><span class="font-medium" data-df="proprietaire" data-dt="text">${escapeHtml(v.proprietaire) || '—'}</span></div>
           <div class="flex justify-between items-center"><span class="text-slate-600">Crit'Air</span>${editableCheckboxTxt('critAir', v.critAir, 'Oui', 'Non')}</div>
