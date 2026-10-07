@@ -494,8 +494,42 @@
     });
     return out;
   }
-  function getTaches() { try { const t = FP.settings.get().taches; return _dedupeTaches(Array.isArray(t) ? t : []); } catch { return []; } }
-  function saveTaches(arr) { const s = FP.settings.get(); s.taches = arr; FP.settings.save(s); }
+  function getTaches() {
+    try {
+      const s = FP.settings.get();
+      const base = _dedupeTaches(Array.isArray(s.taches) ? s.taches : []);
+      return _withRdvVirtuels(base, s);
+    } catch { return []; }
+  }
+  // ⚠️ SOURCE UNIQUE « tout RDV apparaît dans Tâches » : un rendez-vous programmé depuis une FICHE
+  //    VÉHICULE vit dans settings.vehRdvGarage (map véhicule→{date,motif}). On le fait apparaître ici
+  //    comme une tâche RDV « virtuelle » — SAUF si une vraie tâche RDV existe déjà pour le même véhicule
+  //    + la même date (pas de doublon). Ces tâches virtuelles ne sont JAMAIS enregistrées dans
+  //    settings.taches (saveTaches les retire) : les cocher/supprimer agit sur le RDV du véhicule.
+  function _withRdvVirtuels(list, s) {
+    try {
+      const map = (s && s.vehRdvGarage && typeof s.vehRdvGarage === 'object') ? s.vehRdvGarage : {};
+      const ids = Object.keys(map); if (!ids.length) return list;
+      const real = new Set(list.filter(t => t && taskType(t) === 'rdv' && t.vehiculeId != null && t.echeance)
+        .map(t => String(t.vehiculeId) + '|' + String(t.echeance).slice(0, 10)));
+      const vehs = (window.FP_DATA && FP_DATA.vehicules) || (window.data && data.vehicules) || [];
+      const out = list.slice();
+      ids.forEach(vehId => {
+        const r = map[vehId]; if (!r || !r.date) return;
+        const date = String(r.date).slice(0, 10);
+        if (real.has(String(vehId) + '|' + date)) return;          // déjà une vraie tâche → pas de doublon
+        const v = vehs.find(x => x && String(x.id) === String(vehId));
+        out.push({ id: 'vrdv-' + vehId, _virtuel: true, titre: (r.motif || 'Rendez-vous'), type: 'rdv', auto: false,
+          vehiculeId: vehId, echeance: date, heure: '', statut: 'todo', fait: false,
+          conducteur: (v && v.chauffeur && v.chauffeur !== '—') ? v.chauffeur : '',
+          etiquettes: ['garage'], sousTaches: [], commentaires: [],
+          note: 'Rendez-vous programmé depuis la fiche du véhicule. Coche-le quand c’est fait.' });
+      });
+      return out;
+    } catch (e) { return list; }
+  }
+  // ⚠️ On ne persiste JAMAIS les tâches virtuelles (RDV véhicule) dans settings.taches.
+  function saveTaches(arr) { const s = FP.settings.get(); s.taches = (Array.isArray(arr) ? arr : []).filter(t => t && !t._virtuel); FP.settings.save(s); }
   const todayIso = () => new Date().toISOString().slice(0, 10);
   function escapeHtml(s){ return (s ?? '').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
@@ -777,6 +811,9 @@
   }
   function openEdit(id) {
     const t = getTaches().find(x => x.id === id); if (!t) return;
+    // RDV virtuel (fiche véhicule) : on ouvre le formulaire pré-rempli → en enregistrant il devient une
+    // vraie tâche (modifiable, avec checklist…), et le doublon virtuel disparaît (même véhicule + date).
+    if (t._virtuel) { openNew({ type: 'rdv', vehiculeId: t.vehiculeId, echeance: t.echeance, conducteur: t.conducteur }); return; }
     editingId = id; editSous = Array.isArray(t.sousTaches) ? t.sousTaches.map(s => ({ txt: s.txt, done: !!s.done })) : [];
     editEtiquettes = taskEtiquettes(t).slice();
     editComments = Array.isArray(t.commentaires) ? t.commentaires.map(c => ({ txt: c.txt, at: c.at })) : [];
@@ -945,6 +982,8 @@
   function logHist(t, txt) { if (!t) return; if (!Array.isArray(t.historique)) t.historique = []; t.historique.push({ txt, at: nowStamp() }); }
   function toggleTask(id) {
     const arr = getTaches(); const t = arr.find(x => x.id === id); if (!t) return;
+    // RDV virtuel (programmé sur la fiche véhicule) : « terminé » = le RDV a eu lieu → on le retire du véhicule.
+    if (t._virtuel) { try { if (FP.rdvGarage) FP.rdvGarage.set(t.vehiculeId, ''); } catch (e) {} render(); if (FP.celebrate) FP.celebrate(); return; }
     const now = !isDone(t);
     t.fait = now; t.statut = now ? 'done' : 'todo'; t.faitLe = now ? todayIso() : null;
     logHist(t, now ? 'Marquée terminée' : 'Remise à faire');
@@ -954,6 +993,8 @@
   }
   function moveTask(id, to) {
     const arr = getTaches(); const t = arr.find(x => x.id === id); if (!t) return;
+    // RDV virtuel : seul « Terminé » a du sens (le RDV a eu lieu → on le retire du véhicule) ; sinon on ignore.
+    if (t._virtuel) { if (to === 'done') { try { if (FP.rdvGarage) FP.rdvGarage.set(t.vehiculeId, ''); } catch (e) {} render(); if (FP.celebrate) FP.celebrate(); } return; }
     const lbl = (KB.find(c => c.k === to) || {}).lbl || to;
     t.statut = to; t.fait = (to === 'done'); t.faitLe = (to === 'done') ? todayIso() : null;
     logHist(t, 'Déplacée en « ' + lbl + ' »');
@@ -967,6 +1008,9 @@
     t.sousTaches[i].done = done; saveTaches(arr); render();
   }
   async function delTask(id) {
+    const t0 = getTaches().find(x => x.id === id);
+    // RDV virtuel : supprimer = annuler le rendez-vous du véhicule (il n'est pas dans settings.taches).
+    if (t0 && t0._virtuel) { if (!await FP.confirm('Annuler ce rendez-vous du véhicule ?')) return; try { if (FP.rdvGarage) FP.rdvGarage.set(t0.vehiculeId, ''); } catch (e) {} render(); return; }
     if (!await FP.confirm('Supprimer cette tâche ?')) return;
     const t = getTaches().find(x => x.id === id); if (t) clearRdvIfMatch(t);
     saveTaches(getTaches().filter(x => x.id !== id)); render();
