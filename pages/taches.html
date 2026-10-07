@@ -521,7 +521,7 @@
         const v = vehs.find(x => x && String(x.id) === String(vehId));
         out.push({ id: 'vrdv-' + vehId, _virtuel: true, titre: (r.motif || 'Rendez-vous'), type: 'rdv', auto: false,
           vehiculeId: vehId, echeance: date, heure: '', statut: 'todo', fait: false,
-          conducteur: (v && v.chauffeur && v.chauffeur !== '—') ? v.chauffeur : '',
+          conducteur: (v && v.chauffeur && v.chauffeur !== '—') ? condFull(v.chauffeur) : '',
           etiquettes: ['garage'], sousTaches: [], commentaires: [],
           note: 'Rendez-vous programmé depuis la fiche du véhicule. Coche-le quand c’est fait.' });
       });
@@ -554,6 +554,23 @@
 
   // ---- Filtrage (source unique) : baseMatch = type + recherche ; filtered() ajoute le filtre statut.
   const condName = (t) => (t.conducteur || '').trim();
+  // Nom COMPLET du conducteur (exception voulue : sur les tâches on montre « Prénom NOM », pas le prénom
+  // seul — comme les écrans leasing). Résolu via la fiche conducteur (source unique).
+  function condFull(nm) {
+    try {
+      if (!nm) return '';
+      if (window.FP && FP.conducteurs && FP.conducteurs.find) {
+        const c = FP.conducteurs.find(nm);
+        if (c) {
+          if (FP.conducteurs.displayName) { const d = FP.conducteurs.displayName(c); if (d) return d; }
+          const d2 = [c.prenom, c.nom].filter(Boolean).join(' ').trim(); if (d2) return d2;
+          if (c.name) return c.name;
+        }
+      }
+      if (window.FP && FP.conducteurNomUnifie) { const u = FP.conducteurNomUnifie(nm); if (u) return u; }
+    } catch (e) {}
+    return nm;
+  }
   const matchType = (t) => state.typeFiltre === 'all' || taskType(t) === state.typeFiltre;
   const matchEti = (t) => state.etiquette === 'all' || taskEtiquettes(t).indexOf(state.etiquette) !== -1;
   function baseMatch(t) {
@@ -601,8 +618,15 @@
     if (sp) h += `<span class="fp-ech ${sp.d === sp.n ? 'ok' : 'info'}">☑ ${sp.d}/${sp.n}</span>`;
     taskEtiquettes(t).forEach(k => { const e2 = ETI_BY[k]; h += `<span class="eti-pill" style="background:${e2.color}1a;color:${e2.color};border:1px solid ${e2.color}66">${escapeHtml(e2.label)}</span>`; });
     if (vl) h += `<a href="vehicules.html?immat=${encodeURIComponent(immat)}" class="text-xs font-semibold" style="color:var(--fp-accent);text-decoration:none">🚗 ${escapeHtml(vl)}</a>`;
-    if (condName(t)) h += `<span class="text-xs font-semibold text-slate-500">👤 ${escapeHtml(condName(t))}</span>`;
-    if (t.responsable) h += `<span class="text-xs text-slate-500">🧑‍🔧 ${escapeHtml(t.responsable)}</span>`;
+    const cNom = condFull(condName(t));
+    if (cNom) {
+      // Nom COMPLET + cliquable vers la fiche conducteur (règle globale : un conducteur se clique partout).
+      const lien = (window.FP && FP.lienConducteur) ? FP.lienConducteur(cNom, cNom) : escapeHtml(cNom);
+      h += `<span class="text-xs font-semibold text-slate-500">👤 ${lien}</span>`;
+    }
+    // Responsable : masqué s'il s'agit de la MÊME personne que le conducteur (évite « Guerric » en double).
+    const _np = s => { try { return (window.FP && FP.normPrenom) ? FP.normPrenom(s) : String(s || '').trim().toLowerCase(); } catch (e) { return String(s || '').trim().toLowerCase(); } };
+    if (t.responsable && _np(t.responsable) !== _np(condName(t))) h += `<span class="text-xs text-slate-500">🧑‍🔧 ${escapeHtml(t.responsable)}</span>`;
     if (t.fournisseur) h += `<span class="text-xs text-slate-500">🏢 ${escapeHtml(t.fournisseur)}</span>`;
     if (t.lieu) h += `<span class="text-xs text-slate-500">📍 ${escapeHtml(t.lieu)}</span>`;
     if (Array.isArray(t.commentaires) && t.commentaires.length) h += `<span class="text-xs text-slate-400">💬 ${t.commentaires.length}</span>`;
@@ -800,6 +824,8 @@
     $('form-task').reset();
     fillVehSelect($('t-vehicule'), '');
     setType((preset && preset.type) || 'rdv');
+    if (preset && preset.titre) $('t-titre').value = preset.titre;
+    if (preset && preset.heure) $('t-heure').value = preset.heure;
     if (preset && preset.echeance) $('t-echeance').value = preset.echeance;
     if (preset && preset.vehiculeId) { $('t-vehicule').value = preset.vehiculeId; try { $('t-vehicule').dispatchEvent(new Event('change')); } catch (e) {} }
     if (preset && preset.conducteur) $('t-conducteur').value = preset.conducteur;
@@ -813,7 +839,7 @@
     const t = getTaches().find(x => x.id === id); if (!t) return;
     // RDV virtuel (fiche véhicule) : on ouvre le formulaire pré-rempli → en enregistrant il devient une
     // vraie tâche (modifiable, avec checklist…), et le doublon virtuel disparaît (même véhicule + date).
-    if (t._virtuel) { openNew({ type: 'rdv', vehiculeId: t.vehiculeId, echeance: t.echeance, conducteur: t.conducteur }); return; }
+    if (t._virtuel) { openNew({ type: 'rdv', titre: t.titre, vehiculeId: t.vehiculeId, echeance: t.echeance, conducteur: t.conducteur }); return; }
     editingId = id; editSous = Array.isArray(t.sousTaches) ? t.sousTaches.map(s => ({ txt: s.txt, done: !!s.done })) : [];
     editEtiquettes = taskEtiquettes(t).slice();
     editComments = Array.isArray(t.commentaires) ? t.commentaires.map(c => ({ txt: c.txt, at: c.at })) : [];
@@ -868,15 +894,21 @@
       arr.push(saved);
     }
     const notify = ty === 'rdv' && $('t-notify') && $('t-notify').checked;
-    saveTaches(arr); closeModal(); render();
+    // ⚠️ ANTI-PERTE : UN SEUL enregistrement pour la tâche ET le rendez-vous véhicule. Avant, on
+    //    appelait saveTaches() PUIS FP.rdvGarage.set() = DEUX FP.settings.save rapprochés → une course
+    //    où le 2e écrasait le 1er côté serveur faisait PERDRE la tâche (elle ne restait que comme RDV
+    //    véhicule « virtuel », sans heure ni détails). On écrit donc taches + vehRdvGarage d'un coup.
+    try {
+      const s = FP.settings.get();
+      s.taches = (Array.isArray(arr) ? arr : []).filter(t => t && !t._virtuel);
+      if (ty === 'rdv' && saved && saved.vehiculeId && saved.echeance) {
+        s.vehRdvGarage = (s.vehRdvGarage && typeof s.vehRdvGarage === 'object') ? s.vehRdvGarage : {};
+        s.vehRdvGarage[saved.vehiculeId] = { date: String(saved.echeance).slice(0, 10), motif: String(titre || '').slice(0, 40) };
+      }
+      FP.settings.save(s);
+    } catch (e) { try { saveTaches(arr); } catch (_) {} }
+    closeModal(); render();
     if (FP.toast) FP.toast('Tâche enregistrée');
-    // RDV avec véhicule + date → on l'enregistre comme RENDEZ-VOUS GARAGE (source unique
-    // FP.rdvGarage / settings.vehRdvGarage). Le RAPPEL AUTOMATIQUE LA VEILLE (edge km-relance,
-    // déjà en place) reprend alors tout seul ce 1er RDV (motif = intitulé, date = échéance) et
-    // l'envoie au conducteur du véhicule + gestionnaire en copie. Idem fiche véhicule (même mécanisme).
-    if (ty === 'rdv' && saved && saved.vehiculeId && saved.echeance && FP.rdvGarage) {
-      try { FP.rdvGarage.set(saved.vehiculeId, saved.echeance, titre); } catch (_) {}
-    }
     // RDV : proposer de PRÉVENIR le conducteur maintenant (annonce avec date + motif) — le rappel
     // de la veille, lui, partira automatiquement (voir ci-dessus).
     if (notify && saved) notifyFromTask(saved);
