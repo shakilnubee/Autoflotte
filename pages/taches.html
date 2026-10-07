@@ -1202,13 +1202,13 @@
   function renderCfg(){
     const arr = getRappels(), box = $('rap-cfg-list');
     if (!arr.length){ box.innerHTML = '<p class="text-sm text-slate-400">Aucun rappel configuré.</p>'; return; }
-    box.innerHTML = arr.map((r, i) => `<div class="flex items-center gap-2 p-2 border rounded-lg flex-wrap" style="border-color:var(--fp-border)">
+    box.innerHTML = arr.map((r) => `<div class="flex items-center gap-2 p-2 border rounded-lg flex-wrap" style="border-color:var(--fp-border)">
       <label class="flex items-center gap-2 flex-1 min-w-0" style="cursor:pointer">
-        <input type="checkbox" class="task-check" data-rap-actif="${i}" ${r.actif !== false ? 'checked' : ''} title="Activer / désactiver">
+        <input type="checkbox" class="task-check" data-rap-actif="${escapeHtml(r.id)}" ${r.actif !== false ? 'checked' : ''} title="Activer / désactiver">
         <span class="min-w-0 truncate"><b>${escapeHtml(r.titre)}</b> <span class="text-xs text-slate-400">· ${escapeHtml(FREQ_LBL[r.freq] || r.freq)}${r.lien ? ' · ' + escapeHtml(r.lien) : ''}</span></span>
       </label>
-      <input type="date" class="field-input" style="max-width:150px;padding:5px 8px" data-rap-date="${i}" value="${escapeHtml(r.dateDebut || '')}" title="Jour du 1er rappel — le rappel reviendra ensuite chaque période sur ce jour. Vide = dès le début de chaque période.">
-      <button class="ta-icon-btn" data-rap-del="${i}" title="Supprimer"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+      <input type="date" class="field-input" style="max-width:150px;padding:5px 8px" data-rap-date="${escapeHtml(r.id)}" value="${escapeHtml(r.dateDebut || '')}" title="Jour du 1er rappel — le rappel reviendra ensuite chaque période sur ce jour. Vide = dès le début de chaque période.">
+      <button class="ta-icon-btn" data-rap-del="${escapeHtml(r.id)}" title="Supprimer"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
     </div>`).join('');
     lucide.createIcons();
   }
@@ -1228,15 +1228,17 @@
     if (c.checked && FP.celebrate) FP.celebrate();
   });
   $('rap-cfg-list').addEventListener('change', e => {
+    // ⚠️ On cible le rappel par son ID (jamais l'index : une resynchro en arrière-plan peut réordonner
+    //    la liste → l'index pointait sur le mauvais rappel, voire aucun → la date « se perdait »).
     const a = e.target.closest('[data-rap-actif]');
-    if (a) { const arr = getRappels(); const i = +a.getAttribute('data-rap-actif'); if (arr[i]) { arr[i].actif = a.checked; saveRappels(arr); renderRappels(); } return; }
+    if (a) { const arr = getRappels(); const r = arr.find(x => x && x.id === a.getAttribute('data-rap-actif')); if (r) { r.actif = a.checked; saveRappels(arr); renderRappels(); } return; }
     const dt = e.target.closest('[data-rap-date]');
-    if (dt) { const arr = getRappels(); const i = +dt.getAttribute('data-rap-date'); if (arr[i]) { arr[i].dateDebut = dt.value || ''; saveRappels(arr); renderRappels(); if (FP.toast) FP.toast(dt.value ? ('Rappel le ' + FP.date(dt.value) + ' puis chaque période') : 'Jour du rappel retiré'); } return; }
+    if (dt) { const arr = getRappels(); const r = arr.find(x => x && x.id === dt.getAttribute('data-rap-date')); if (r) { r.dateDebut = dt.value || ''; saveRappels(arr); renderRappels(); if (FP.toast) FP.toast(dt.value ? ('Rappel le ' + FP.date(dt.value) + ' puis chaque période') : 'Jour du rappel retiré'); } return; }
   });
   $('rap-cfg-list').addEventListener('click', async e => {
     const d = e.target.closest('[data-rap-del]'); if (!d) return;
     if (!await FP.confirm('Supprimer ce rappel récurrent ?')) return;
-    const arr = getRappels(); arr.splice(+d.getAttribute('data-rap-del'), 1); saveRappels(arr); renderCfg(); renderRappels();
+    const arr = getRappels().filter(x => !(x && x.id === d.getAttribute('data-rap-del'))); saveRappels(arr); renderCfg(); renderRappels();
   });
   $('rap-add').addEventListener('click', () => {
     const titre = $('rap-titre').value.trim(); if (!titre) { $('rap-titre').focus(); return; }
@@ -1329,8 +1331,13 @@
         const key = 'ct:' + vehId + ':' + ct;
         if (done[key]) return;                            // déjà créée (ou supprimée par l'utilisateur) pour CETTE date
         if (keptForVeh[vehId]) return;                    // une tâche auto CT existe déjà pour ce véhicule
+        // ⚠️ ANTI-RÉGRESSION « terminé qui revient » : ne JAMAIS recréer une tâche dont l'id existe déjà
+        //    (même TERMINÉE). Sinon la fusion par id écrasait la version « done » par un doublon « todo »
+        //    → la tâche marquée terminée réapparaissait « à faire ».
+        const nidCT = 'act-' + vehId + '-' + ct;
+        if (arr.some(t => t && t.id === nidCT)) { done[key] = done[key] || todayIso(); return; }
         arr.push({
-          id: 'act-' + vehId + '-' + ct, titre: 'Contrôle technique', type: 'rdv',
+          id: nidCT, titre: 'Contrôle technique', type: 'rdv',
           statut: 'todo', fait: false, vehiculeId: vehId, echeance: ct, heure: '', lieu: '',
           conducteur: v.chauffeur || '', responsable: '', fournisseur: '', priorite: (j <= 30 ? 'haute' : 'normale'),
           note: (j < 0 ? 'Créée automatiquement : le contrôle technique est DÉPASSÉ. Prends le rendez-vous au plus vite.' : 'Créée automatiquement : le contrôle technique arrive à échéance. Pense à prendre le rendez-vous.'),
@@ -1365,11 +1372,14 @@
         const anchor = revAnchorDe(v);
         const key = 'rev:' + v.id + ':' + anchor;
         if (done[key]) return;                                     // déjà créée / supprimée pour cette échéance
+        // ⚠️ ANTI-RÉGRESSION « terminé qui revient » (idem CT) : ne pas recréer un id déjà présent (même terminé).
+        const nidRev = 'arev-' + v.id + '-' + String(anchor).replace(/[^0-9a-z]/gi, '');
+        if (arr.some(t => t && t.id === nidRev)) { done[key] = done[key] || todayIso(); return; }
         let ech = todayIso();
         try { if (ri.prochaineDate) { const d = new Date(ri.prochaineDate); if (!isNaN(d)) ech = d.toISOString().slice(0, 10); } } catch (e) {}
         const overdue = (ri.kmRestant != null && ri.kmRestant <= 0) || (ri.joursRestant != null && ri.joursRestant <= 0);
         arr.push({
-          id: 'arev-' + v.id + '-' + String(anchor).replace(/[^0-9a-z]/gi, ''), titre: 'Révision', type: 'rdv',
+          id: nidRev, titre: 'Révision', type: 'rdv',
           statut: 'todo', fait: false, vehiculeId: v.id, echeance: ech, revAnchor: anchor, heure: '', lieu: '',
           conducteur: v.chauffeur || '', responsable: '', fournisseur: '', priorite: (overdue ? 'haute' : 'normale'),
           note: (overdue ? 'Créée automatiquement : la révision est DÉPASSÉE (km/date). Prends le rendez-vous au plus vite.' : 'Créée automatiquement : la révision arrive à échéance. Pense à prendre le rendez-vous.'),
