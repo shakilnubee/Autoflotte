@@ -11388,7 +11388,12 @@ FP.scanIA = async function (file, docType, promptOverride, opts) {
         }
       }
     } catch (e) {}
-    const payload = { fileBase64: b64, mediaType, docType: docType || 'facture', prompt: promptToSend };
+    // ⚠️ Le prompt DOIT partir en CHAÎNE : le serveur (scan-doc) n'accepte que `typeof prompt === 'string'`
+    // et retombe sinon sur SON prompt générique (facture) → les prompts métier passés en TABLEAU
+    // (CADRE_PROMPT contrats, FP.SCAN_PROMPT amendes/FPS/points, leasing, état de parc…) étaient IGNORÉS
+    // et aucun champ spécifique n'était rempli. On joint donc le tableau avant l'envoi.
+    const promptStr = Array.isArray(promptToSend) ? promptToSend.join('\n') : String(promptToSend);
+    const payload = { fileBase64: b64, mediaType, docType: docType || 'facture', prompt: promptStr };
     // Jetons de sortie : défaut RELEVÉ à 2048 (le repli serveur était 1024 → un JSON un peu long,
     // ou un modèle qui ajoute du texte, était TRONQUÉ → JSON invalide → « lecture impossible »).
     // Les grandes extractions (tableaux) peuvent demander plus via opts.maxTokens (plafonné à 8192).
