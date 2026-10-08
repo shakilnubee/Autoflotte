@@ -5571,7 +5571,10 @@ FP.settings = {
       'garageParMarque', 'vehGarage',
       // — Intervalle de révision PERSONNALISÉ par véhicule ({ vehId → { km, mois } }) : donnée de réglage
       //   keyée → fusion fine multi-appareils (jamais écrasée en bloc).
-      'revisionIntervalleVeh']);
+      'revisionIntervalleVeh',
+      // — Lien du DOSSIER DE VENTE par véhicule ({ vehId → URL du dossier Drive }) : rangé le Cerfa de
+      //   cession + documents de vente. Donnée keyée → fusion fine multi-appareils (jamais écrasée en bloc).
+      'vehDossierVente']);
     // Familles DYNAMIQUES keyées par conducteur (n° carte/badge d'un prestataire perso : condNum_<id>).
     const isCollKey = (k) => COLLECTION_KEYS.has(k) || /^condNum_/.test(k);
     const isPlain = x => x && typeof x === 'object' && !Array.isArray(x);
@@ -6304,6 +6307,7 @@ FP.NAV_SUBMENUS = {
     { label: 'Leasing', tab: 'leasing' },
     { label: 'Assurance', tab: 'assurance' },
     { label: 'Contrats cadre', tab: 'cadre' },
+    { label: 'Archive', tab: 'archive' },
   ],
   'factures.html': [
     { label: 'Factures', tab: 'factures' },
@@ -6583,14 +6587,17 @@ FP.refreshDeclCondBadge = async () => {
     // NOUVEAUX scans de QR véhicule depuis la dernière visite de « Suivi & alertes » → pastille aussi.
     let scanUnseen = 0;
     try { if (FP.qrScans && FP.qrScans.load) { await FP.qrScans.load(); scanUnseen = FP.qrScans._unseen || 0; } } catch (e) {}
+    // NOUVELLES demandes d'achat (formulaire acheteur rempli) depuis la dernière visite → pastille aussi.
+    let offreUnseen = 0;
+    try { if (FP.offreAchat && FP.offreAchat.load) { await FP.offreAchat.load(); offreUnseen = FP.offreAchat._unseen || 0; } } catch (e) {}
     // BADGE « Sinistres » = uniquement les déclarations de type sinistre/problème (pas km/état des lieux).
     // BADGE « Suivi & alertes » = demandes conducteur (km, état des lieux, question) + signatures reçues + scans QR.
-    const notifCount = FP.declCondKmCount + FP.declCondEdlCount + FP.declCondQuestionCount + edlUnseen + scanUnseen;
+    const notifCount = FP.declCondKmCount + FP.declCondEdlCount + FP.declCondQuestionCount + edlUnseen + scanUnseen + offreUnseen;
     // Mémorise les valeurs → réappliquées après chaque reconstruction du menu (sinon la pastille
     // « disparaissait » quand la sidebar était rebâtie après le calcul du badge).
     FP._navBadgeVals = {
       'sinistres.html': [FP.declCondSinCount, FP.declCondSinCount + ' déclaration(s) sinistre/problème en attente'],
-      'notifications.html': [notifCount, notifCount + ' nouveauté(s) : demande conducteur, signature ou scan QR'],
+      'notifications.html': [notifCount, notifCount + ' nouveauté(s) : demande conducteur, signature, scan QR ou demande d\'achat'],
     };
     FP.reapplyNavBadges();
   } catch (e) {}
@@ -8621,6 +8628,23 @@ FP.buildAlertes = (data) => {
         target: p.signedUrl || ('vehicules.html?immat=' + encodeURIComponent(p.plaque || '')),
       }));
       out.push({ niveau: 'info', categorie: 'États des lieux', message: `${rsg.length} état${rsg.length > 1 ? 's' : ''} des lieux signé${rsg.length > 1 ? 's' : ''}`, detail: 'Signature terminée par toutes les parties — la version signée est rangée dans la fiche du véhicule (Documents).', sort: 466, muteKey: 'edl-signed-recent', vehicules: items });
+    }
+  } catch (e) {}
+
+  // --- Demandes d'ACHAT reçues (un acheteur a rempli le formulaire acheteur) → à traiter ---
+  // Source = FP.offreAchat._submissions (chargé par FP.offreAchat.load() sur la page). Statut 'recu' =
+  // pas encore classé. Chaque ligne ouvre la demande dans Contrats → Archive.
+  try {
+    const subs = (FP.offreAchat && FP.offreAchat._submissions) || null;
+    if (Array.isArray(subs)) {
+      const nouv = subs.filter(s => s && s.statut === 'recu');
+      if (nouv.length) {
+        const items = nouv.map(s => ({
+          label: `${s.plaque || 'Véhicule'}${s.modele ? ' · ' + s.modele : ''} — demande de ${FP.offreAchat.nomAcheteur(s)}${s.type === 'societe' ? ' (société)' : ''}`,
+          target: 'contrats.html?ctab=archive&offre=' + encodeURIComponent(s.id),
+        }));
+        out.push({ niveau: 'warn', categorie: 'Ventes', message: `${nouv.length} demande${nouv.length > 1 ? 's' : ''} d'achat reçue${nouv.length > 1 ? 's' : ''}`, detail: 'Un acheteur a rempli le formulaire acheteur. Le détail est dans Contrats → Archive — classe la demande une fois traitée.', sort: 210, muteKey: 'offre-achat-recue', vehicules: items });
+      }
     }
   } catch (e) {}
 
@@ -13051,6 +13075,90 @@ FP.edlSign = {
   },
 };
 
+// ================= FORMULAIRE ACHETEUR — offres d'achat d'un véhicule =================
+// Lien PUBLIC (offre-achat.html?t=<token>) envoyé à l'acheteur intéressé → il remplit ses
+// coordonnées (particulier/société). L'Edge Function offre-achat (service_role) enregistre la
+// demande (table offres_achat) et prévient le gestionnaire (push + e-mail). Côté app : on génère
+// le lien (1 ligne 'lien' par véhicule, token stable), on liste les demandes reçues (Contrats →
+// Archive) et on alimente l'alerte « demande d'achat reçue » (buildAlertes). Même modèle que FP.edlSign.
+FP.offreAchat = {
+  BASE: 'https://parc-pilot.fr/offre-achat.html',
+  _rows: null,
+  _submissions: null,   // demandes REMPLIES (statut ≠ 'lien')
+  _unseen: 0,           // nouvelles demandes non vues sur CET appareil (→ pastille)
+  _tokenCache: {},      // vehId → token (cache de session, évite de recréer un lien)
+  _seenKey() { let soc = 'PXP'; try { soc = (FP.activeSociete && FP.activeSociete()) || 'PXP'; } catch (e) {} return 'fp_offreseen_' + soc; },
+  _readSeen() { try { const v = JSON.parse(localStorage.getItem(this._seenKey()) || 'null'); return (v && typeof v === 'object') ? v : {}; } catch (e) { return {}; } },
+  _writeSeen(m) { try { localStorage.setItem(this._seenKey(), JSON.stringify(m || {})); } catch (e) {} },
+  // Lien public du formulaire acheteur pour un véhicule (réutilise la ligne 'lien' si elle existe, sinon la crée).
+  async linkFor(veh) {
+    if (!veh || !veh.id) return '';
+    if (this._tokenCache[veh.id]) return this.BASE + '?t=' + encodeURIComponent(this._tokenCache[veh.id]);
+    let token = '';
+    try {
+      if (FP.db && FP.db.select) {
+        const r = await FP.db.select('offres_achat');
+        const rows = (r && r.data) ? r.data : [];
+        const existing = rows.find(x => x && x.statut === 'lien' && String(x.vehiculeId || '') === String(veh.id));
+        if (existing && existing.token) token = existing.token;
+      }
+    } catch (e) {}
+    if (!token) {
+      token = FP.secureToken('off-');
+      try {
+        const prix = (veh.prixVente || (FP.valeurRevente ? FP.valeurRevente(veh) : null)) || null;
+        const res = await FP.db.insert('offres_achat', {
+          id: 'OFL-' + FP.secureToken(''), token, vehiculeId: veh.id,
+          plaque: veh.immat || '', marque: veh.marque || '', modele: veh.modele || '',
+          prix, statut: 'lien',
+        });
+        if (res && res.error) return '';
+      } catch (e) { return ''; }
+    }
+    this._tokenCache[veh.id] = token;
+    return this.BASE + '?t=' + encodeURIComponent(token);
+  },
+  async load() {
+    try {
+      if (!(FP.db && FP.db.select)) { this._submissions = []; this._unseen = 0; return this._submissions; }
+      const r = await FP.db.select('offres_achat');
+      const rows = (r && r.data) ? r.data : [];
+      this._rows = rows;
+      this._submissions = rows.filter(x => x && x.statut && x.statut !== 'lien')
+        .map(x => ({
+          id: x.id, token: x.token || '', vehiculeId: x.vehiculeId || '', plaque: x.plaque || '',
+          marque: x.marque || '', modele: x.modele || '', prix: x.prix || null,
+          type: x.typeAcheteur || 'particulier', acheteur: (x.acheteur && typeof x.acheteur === 'object') ? x.acheteur : {},
+          statut: x.statut || 'recu', notes: x.notes || '', ip: x.ip || '',
+          receivedAt: x.receivedAt || x.createdAt || '', when: Date.parse(x.receivedAt || x.createdAt || 0) || 0,
+        }))
+        .sort((a, b) => b.when - a.when);
+      const seen = this._readSeen();
+      this._unseen = this._submissions.filter(s => s.statut === 'recu' && !seen[s.id]).length;
+      return this._submissions;
+    } catch (e) { this._submissions = []; this._unseen = 0; return this._submissions; }
+  },
+  // Marque toutes les demandes reçues comme VUES sur cet appareil (éteint la pastille).
+  markSeen() {
+    try { const seen = this._readSeen(); (this._submissions || []).forEach(s => { if (s.statut === 'recu') seen[s.id] = 1; }); this._writeSeen(seen); this._unseen = 0; } catch (e) {}
+  },
+  // Change le statut d'une demande (recu ↔ archive). Persisté (table offres_achat), puis rechargé.
+  async setStatut(id, statut) {
+    try {
+      if (!id || !(FP.db && FP.db.update)) return { error: 'indisponible' };
+      const res = await FP.db.update('offres_achat', id, { statut });
+      await this.load();
+      return { error: (res && res.error) || null };
+    } catch (e) { return { error: (e && e.message) || String(e) }; }
+  },
+  // Libellé court de l'acheteur (nom affiché).
+  nomAcheteur(s) {
+    const a = (s && s.acheteur) || {};
+    if ((s && s.type) === 'societe') return a.raisonSociale || [a.repPrenom, a.repNom].filter(Boolean).join(' ') || 'Société';
+    return [a.prenom, a.nom].filter(Boolean).join(' ') || 'Particulier';
+  },
+};
+
 // ================= FACTURES ULYS (péages VINCI) — lecture précise PARTAGÉE =================
 // SOURCE DE VÉRITÉ UNIQUE pour lire un relevé Ulys (règle « une seule source ») : le PDF a une
 // couche texte, mais une lecture standard MÉLANGE les colonnes → montants/prénoms faux. On
@@ -15495,7 +15603,7 @@ FP.msg = {
         + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:2px">'
           + '<button type="button" id="fp-msg-sms" style="flex:1;min-width:120px;justify-content:center;display:inline-flex;align-items:center;gap:6px;padding:11px;border-radius:10px;border:none;background:#0EA5A0;color:#fff;font-weight:800;cursor:pointer">📱 SMS</button>'
           + '<button type="button" id="fp-msg-wa" style="flex:1;min-width:120px;justify-content:center;display:inline-flex;align-items:center;gap:6px;padding:11px;border-radius:10px;border:none;background:#25D366;color:#0b3d1f;font-weight:800;cursor:pointer">🟢 WhatsApp</button>'
-          + (opts.email ? '<button type="button" id="fp-msg-email" style="flex:1;min-width:120px;justify-content:center;display:inline-flex;align-items:center;gap:6px;padding:11px;border-radius:10px;border:none;background:#0B1220;color:#fff;font-weight:800;cursor:pointer">📧 Email</button>' : '')
+          + ((opts.email || opts.mailto) ? '<button type="button" id="fp-msg-email" style="flex:1;min-width:120px;justify-content:center;display:inline-flex;align-items:center;gap:6px;padding:11px;border-radius:10px;border:none;background:#0B1220;color:#fff;font-weight:800;cursor:pointer">📧 Email</button>' : '')
         + '</div>'
         // Quand un document est joint : il part en PIÈCE JOINTE par e-mail, et en LIEN cliquable par SMS/WhatsApp
         // (ces apps ne permettent pas de joindre un fichier via un lien). Note affichée seulement s'il y a un doc.
@@ -15595,6 +15703,13 @@ FP.msg = {
     refreshAttLinks();   // pré-signe les liens du/des document(s) dès l'ouverture (toggle note + bouton Partager)
     // Envoi par e-mail (si opts.email fourni) → e-mail BRANDÉ via FP.sendEmail. opts.emailHtml peut être
     // une chaîne HTML prête, une fonction(text)→html, ou absent (on habille alors le message courant).
+    // Email vers un destinataire INCONNU (ex. prospect acheteur) : si aucune adresse n'est connue mais
+    // opts.mailto est vrai, le bouton 📧 ouvre le client mail (mailto) avec sujet + corps pré-remplis —
+    // l'utilisateur saisit l'adresse dans son appli. Permet le 3e canal (e-mail) même sans adresse.
+    if (!opts.email && opts.mailto) { const eb = q('#fp-msg-email'); if (eb) eb.addEventListener('click', () => {
+      const subj = opts.emailSubject || opts.mailtoSubject || opts.title || 'Message';
+      window.location.href = 'mailto:?subject=' + encodeURIComponent(subj) + '&body=' + encodeURIComponent(txFull());
+    }); }
     if (opts.email) { const eb = q('#fp-msg-email'); if (eb) eb.addEventListener('click', async () => {
       if (!(window.FP && FP.sendEmail)) { if (FP.toast) FP.toast('Envoi e-mail indisponible'); return; }
       // ⚠️ RÈGLE : dans un E-MAIL, jamais d'URL brute → on la remplace par un lien « cliquez ici ».

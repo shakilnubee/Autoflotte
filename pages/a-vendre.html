@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261006k">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261008a">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20261006k"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20261008a"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20261006k">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20261008a">
 <style>
   .pipeline { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; }
   .pipeline-col { background: #F8FAFC; border-radius: .85rem; padding: 1rem; min-height: 200px; }
@@ -44,6 +44,16 @@
   .qr-vente .qrv-overlay a, .qr-vente .qrv-overlay button { font-size: .68rem; font-weight: 700; color: #fff; background: rgba(255,255,255,.16); border: none; border-radius: .35rem; padding: .22rem .55rem; cursor: pointer; text-decoration: none; }
   .qr-vente .qrv-overlay a:hover, .qr-vente .qrv-overlay button:hover { background: var(--fp-accent); }
   .qr-vente-cap { font-size: .62rem; color: var(--fp-muted); margin-top: .18rem; }
+  /* Boutons d'action sur la carte (formulaire acheteur / dossier de vente) */
+  .av-actions { display: flex; gap: .35rem; flex-wrap: wrap; margin-top: .55rem; }
+  .av-btn { display: inline-flex; align-items: center; gap: .3rem; font-size: .7rem; font-weight: 700; padding: .3rem .6rem; border-radius: .4rem; border: 1px solid var(--fp-border); background: #fff; color: var(--fp-primary); cursor: pointer; text-decoration: none; transition: all .12s; }
+  .av-btn:hover { border-color: var(--fp-accent); background: #FFF3EA; }
+  .av-btn.primary { background: var(--fp-primary); color: #fff; border-color: var(--fp-primary); }
+  .av-btn.primary:hover { filter: brightness(1.08); background: var(--fp-primary); }
+  .av-btn:disabled { opacity: .55; cursor: not-allowed; }
+  .dossier-qr img { width: 72px; height: 72px; border: 1px solid var(--fp-border); border-radius: .4rem; background: #fff; margin-top: .45rem; display: block; }
+  body.fp-dark .av-btn { background: #0f1b30; color: #cbd5e1; }
+  body.fp-dark .av-btn:hover { background: rgba(249,115,22,.14); }
 </style>
 <script>
 (function(){
@@ -163,8 +173,8 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20261006k"></script>
-<script src="../assets/js/supabase-client.js?v=20261006k"></script>
+<script src="../assets/js/vendor/supabase.js?v=20261008a"></script>
+<script src="../assets/js/supabase-client.js?v=20261008a"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -180,16 +190,28 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261006k"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261008a"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
-<script src="../assets/js/app.min.js?v=20261006k"></script>
+<script src="../assets/js/app.min.js?v=20261008a"></script>
 <script>
   lucide.createIcons();
   FP.loadVehicleOverrides();
 
   const data = window.FP_DATA;
   const $ = (id) => document.getElementById(id);
+
+  // ---- Dossier de vente (lien Drive par véhicule, synchronisé via app_settings.vehDossierVente) ----
+  // Source UNIQUE partagée avec Contrats → Archive. C'est le dossier où l'utilisateur range le Cerfa de
+  // cession et les documents de vente ; un QR permet de l'ouvrir d'un scan sur un véhicule vendu.
+  function dossierOf(id) { try { const m = (FP.settings.get().vehDossierVente) || {}; return (id && m[id]) ? String(m[id]) : ''; } catch (e) { return ''; } }
+  function setDossier(id, url) {
+    if (!id) return;
+    const s = FP.settings.get(); s.vehDossierVente = (s.vehDossierVente && typeof s.vehDossierVente === 'object') ? s.vehDossierVente : {};
+    const u = String(url || '').trim();
+    if (u) s.vehDossierVente[id] = u; else delete s.vehDossierVente[id];
+    FP.settings.save(s);
+  }
 
   // Statuts du pipeline (séparés du statut véhicule global)
   const PIPELINE = [
@@ -258,6 +280,14 @@
               <select class="status-select" data-field="pipelineStatut" data-id="${v.id}">
                 ${PIPELINE.map(p => `<option value="${p.key}" ${pipelineOf(v) === p.key ? 'selected' : ''}>${p.label}</option>`).join('')}
               </select>
+              <div class="av-actions">
+                <button type="button" class="av-btn primary" data-buyer="${FP.esc(v.id)}" title="Envoyer le formulaire acheteur par SMS, WhatsApp ou e-mail">📨 Formulaire acheteur</button>
+                ${dossierOf(v.id)
+                  ? `<a class="av-btn" href="${FP.esc(dossierOf(v.id))}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Ouvrir le dossier de vente (Cerfa, documents)">📁 Dossier</a>
+                     <button type="button" class="av-btn" data-dossier="${FP.esc(v.id)}" title="Modifier le lien du dossier">✏️</button>`
+                  : `<button type="button" class="av-btn" data-dossier="${FP.esc(v.id)}" title="Lier le dossier de vente (Google Drive) où ranger le Cerfa">📁 Lier le dossier</button>`}
+              </div>
+              ${dossierOf(v.id) ? `<div class="dossier-qr" data-dqr="${FP.esc(v.id)}"></div>` : ''}
             </div>
           `;
         }).join('')}
@@ -265,6 +295,7 @@
       </div>
     `).join('');
     renderVenteQRs();
+    renderDossierQRs();
   }
 
   // QR de l'annonce de vente (lien portail + « &vue=vente ») : photo sur chaque carte ;
@@ -311,6 +342,30 @@
     }
   }
 
+  // QR du DOSSIER DE VENTE (lien Drive) : un petit QR sur chaque véhicule qui a un dossier (surtout les
+  // vendus) → scanner ouvre le dossier (Cerfa de cession, documents de vente). Source QR = FP.qr (unique).
+  async function renderDossierQRs() {
+    if (!(window.FP && FP.qr)) return;
+    const slots = document.querySelectorAll('.dossier-qr[data-dqr]:not([data-done])');
+    if (!slots.length) return;
+    let okLib = !!window.qrcode;
+    if (!okLib) { try { okLib = await FP.qr.ensureLib(); } catch (e) {} }
+    if (!okLib) return;
+    slots.forEach(slot => {
+      if (slot.dataset.done) return;
+      const v = data.vehicules.find(x => x.id === slot.dataset.dqr);
+      const url = v ? dossierOf(v.id) : '';
+      if (!url) { slot.style.display = 'none'; return; }
+      slot.dataset.done = '1';
+      let cnv; try { cnv = FP.qr.buildCanvas(url, 4, 2); } catch (e) { slot.style.display = 'none'; return; }
+      const img = document.createElement('img');
+      img.src = cnv.toDataURL('image/png');
+      img.alt = 'QR dossier de vente'; img.title = 'Dossier de vente — scannez pour l\'ouvrir';
+      const cap = document.createElement('div'); cap.className = 'qr-vente-cap'; cap.textContent = '📁 QR du dossier';
+      slot.appendChild(img); slot.appendChild(cap);
+    });
+  }
+
   // Sauvegarde directe au changement
   document.addEventListener('change', async e => {
     const el = e.target.closest('[data-id][data-field]');
@@ -347,6 +402,39 @@
     }
     renderKPIs();
     renderPipeline();
+  });
+
+  // ---- Formulaire acheteur (lien public) + Dossier de vente ----
+  document.addEventListener('click', async e => {
+    // 📨 Envoyer le formulaire acheteur (SMS + WhatsApp + E-mail) — lien public par véhicule.
+    const bb = e.target.closest('[data-buyer]');
+    if (bb) {
+      e.preventDefault(); e.stopPropagation();
+      const v = data.vehicules.find(x => x.id === bb.getAttribute('data-buyer')); if (!v) return;
+      if (!(window.FP && FP.offreAchat && FP.msg)) { alert('Fonction indisponible (connexion requise).'); return; }
+      const old = bb.textContent; bb.disabled = true; bb.textContent = '… lien';
+      let link = ''; try { link = await FP.offreAchat.linkFor(v); } catch (err) {}
+      bb.disabled = false; bb.textContent = old;
+      if (!link) { if (FP.notifyError) FP.notifyError('Impossible de générer le lien — réessaie.'); else alert('Impossible de générer le lien.'); return; }
+      const veh = [v.marque, v.modele].filter(Boolean).join(' ') || 'ce véhicule';
+      const texte = 'Bonjour,\n\nVous êtes intéressé(e) par ' + veh + (v.immat ? ' (' + v.immat + ')' : '') + ' ?\n'
+        + 'Merci de remplir ce court formulaire (particulier ou société) — cela nous permettra de préparer la vente :\n' + link;
+      FP.msg.open({ title: 'Envoyer le formulaire acheteur', text: texte, mailto: true, emailSubject: 'Formulaire acheteur — ' + veh });
+      return;
+    }
+    // 📁 Lier / modifier le dossier de vente (lien Drive).
+    const db = e.target.closest('[data-dossier]');
+    if (db) {
+      e.preventDefault(); e.stopPropagation();
+      const id = db.getAttribute('data-dossier');
+      const cur = dossierOf(id);
+      const url = window.prompt('Colle le lien du DOSSIER DE VENTE (Google Drive…) où tu ranges le Cerfa de cession et les documents :', cur || '');
+      if (url === null) return; // annulé
+      setDossier(id, url.trim());
+      if (FP.toast) FP.toast(url.trim() ? '✓ Dossier lié' : 'Dossier retiré');
+      renderPipeline();
+      return;
+    }
   });
 
   renderKPIs();
