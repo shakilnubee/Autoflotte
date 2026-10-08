@@ -2755,10 +2755,13 @@
       if (parsed.numeroAvis && !$('am-avis').value)    { $('am-avis').value    = parsed.numeroAvis; filled.push('n° d\'avis'); }
       if (parsed.numeroTelepaiement && !$('am-telepaiement').value) { $('am-telepaiement').value = fmtTel(parsed.numeroTelepaiement); filled.push('n° télépaiement'); }
       if (parsed.cle && !$('am-cle').value) { $('am-cle').value = parsed.cle; filled.push('clé'); }
-      // Si le n° de télépaiement n'a PAS 14 chiffres (un chiffre sauté) → relecture CIBLÉE de ce seul numéro.
+      // Si le n° de télépaiement est TROP COURT (un chiffre sauté → < 14) → relecture CIBLÉE de ce seul
+      // numéro. ⚠️ On ne déclenche QUE si c'est trop court : un FPS a un n° de télépaiement LONG
+      // (préfixe 14 ch. + n° d'avis 12 ch. = 26 ch., recomposé plus haut) — il ne faut PAS l'écraser par
+      // une relecture 14 chiffres (bug vécu : « 21890024900010 26 1 273 026 023 » tronqué à 14).
       try {
         const _tpCur = String($('am-telepaiement').value || '').replace(/\D/g, '');
-        if (window.FP && FP.scanIA && _avisFile && _tpCur.length !== 14 && !parsed.isMajoration) {
+        if (window.FP && FP.scanIA && _avisFile && _tpCur.length < 14 && !parsed.isMajoration) {
           avWorking && avWorking('🔁 Relecture du n° de télépaiement…');
           const better = await relireTelepaiement(_avisFile);
           if (better && better.tel && better.tel.length === 14) {
