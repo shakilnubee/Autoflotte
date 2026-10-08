@@ -12285,9 +12285,9 @@ FP.edl = {
     const km = FP.kmActuel ? FP.kmActuel(veh) : (veh.km || 0);
     const today = new Date().toISOString().slice(0, 10);
     const modele = ((veh.marque || '') + ' ' + (veh.modele || '')).trim();
-    const inp = (id, val, ph) => `<input id="${id}" value="${esc(val)}" placeholder="${esc(ph || '')}" style="flex:1;border:1px solid #e2e8f0;border-radius:8px;padding:6px 9px;font-size:13px">`;
-    const infoRow = (lbl, field) => `<label style="display:flex;gap:10px;align-items:center;margin-bottom:7px"><span style="flex:0 0 165px;font-size:13px;color:#64748b">${lbl}</span>${field}</label>`;
-    const rowInput = (grp, label) => `<label style="display:flex;gap:10px;align-items:center;padding:5px 0;border-bottom:1px solid #f1f5f9"><span style="flex:0 0 205px;font-size:12.5px;color:#334155">${esc(label)}</span><input data-edl="${grp}" data-lbl="${esc(label)}" placeholder="RAS — ou précisez (rayure, impact…)" style="flex:1;border:1px solid #e2e8f0;border-radius:8px;padding:5px 9px;font-size:12.5px"></label>`;
+    const inp = (id, val, ph) => `<input id="${id}" value="${esc(val)}" placeholder="${esc(ph || '')}" style="flex:1 1 180px;min-width:0;max-width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:6px 9px;font-size:13px">`;
+    const infoRow = (lbl, field) => `<label style="display:flex;gap:10px 12px;align-items:center;flex-wrap:wrap;margin-bottom:7px"><span style="flex:0 0 155px;min-width:120px;font-size:13px;color:#64748b">${lbl}</span>${field}</label>`;
+    const rowInput = (grp, label) => `<label style="display:flex;gap:8px 12px;align-items:center;flex-wrap:wrap;padding:5px 0;border-bottom:1px solid #f1f5f9"><span style="flex:0 0 180px;min-width:140px;font-size:12.5px;color:#334155">${esc(label)}</span><input data-edl="${grp}" data-lbl="${esc(label)}" placeholder="RAS — ou précisez (rayure, impact…)" style="flex:1 1 150px;min-width:0;border:1px solid #e2e8f0;border-radius:8px;padding:5px 9px;font-size:12.5px"></label>`;
     const accRow = (label) => `<label style="display:inline-flex;gap:7px;align-items:center;font-size:12.5px;color:#334155;margin:3px 14px 3px 0"><input type="checkbox" data-acc="${esc(label)}" checked> ${esc(label)}</label>`;
     const sec = t => `<div style="font-weight:800;color:#0f1e3d;margin:16px 0 6px;padding-bottom:3px;border-bottom:2px solid #f1f5f9">${esc(t)}</div>`;
     const ta = (id, ph) => `<textarea id="${id}" rows="2" placeholder="${esc(ph || 'Commentaires…')}" style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:6px 9px;font-size:12.5px;margin-top:4px"></textarea>`;
@@ -12298,7 +12298,7 @@ FP.edl = {
         <div style="font-size:16px;font-weight:800;color:#0f1e3d">📋 État des lieux du véhicule</div>
         <button type="button" data-edl-x style="margin-left:auto;border:none;background:none;font-size:22px;line-height:1;cursor:pointer;color:#64748b">×</button>
       </div>
-      <div style="padding:16px 18px;overflow:auto;flex:1">
+      <div style="padding:16px 18px;overflow:auto;overflow-x:hidden;flex:1">
         <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:12px;padding:8px 10px;background:#f8fafc;border-radius:10px;font-size:13px">
           <span style="color:#64748b;font-weight:700">Type :</span>
           <label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer"><input type="radio" name="edl-sens" value="remise" ${sens !== 'restitution' ? 'checked' : ''}> 📥 Remise (entrée)</label>
@@ -12336,7 +12336,7 @@ FP.edl = {
           <option value="yousign">Yousign (si ton compte est activé)</option>
         </select>
         <div style="font-size:11.5px;color:#94a3b8;margin-top:3px"><b>Signer sur place</b> : à la remise, le conducteur signe au doigt sur ton téléphone, puis toi pour la société — le PDF signé est généré <b>tout de suite</b>. <b>Envoyer un lien</b> : l'employé (et le signataire société) reçoivent un lien pour signer à distance ; le PDF signé revient ensuite dans la fiche.</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;margin-top:8px">
           ${infoRow('Signataire société (nom)', inp('edl-soc-nom', prof.edlSignataireNom || socNom, 'Nom du signataire société'))}
           ${infoRow('E-mail signataire société', inp('edl-soc-email', prof.edlSignataireEmail || effMail || '', 'signataire@societe.fr'))}
         </div>
@@ -12344,10 +12344,10 @@ FP.edl = {
         <div data-edl-err style="display:none;margin-top:10px;padding:10px 12px;border:1px solid #fca5a5;background:#fef2f2;border-radius:10px;font-size:12px;color:#991b1b;white-space:pre-wrap;word-break:break-word"></div>
         <div style="font-size:11.5px;color:#94a3b8;margin-top:6px">Le PDF sera enregistré dans les Documents du véhicule et envoyé à l'employé${prof.mailCopie ? ' (copie ' + esc(prof.mailCopie) + ')' : ''}. Le logo de ta société est repris automatiquement.</div>
       </div>
-      <div style="padding:12px 18px;border-top:1px solid #eef2f7;display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap">
-        <button type="button" data-edl-x class="btn btn-outline">Annuler</button>
-        <button type="button" data-edl-dl class="btn btn-outline"><i data-lucide="download" class="w-4 h-4"></i> Télécharger le PDF</button>
-        <button type="button" data-edl-send class="btn btn-dark"><i data-lucide="send" class="w-4 h-4"></i> Enregistrer + envoyer</button>
+      <div style="padding:12px 18px;border-top:1px solid #eef2f7;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+        <button type="button" data-edl-x class="btn btn-outline" style="white-space:nowrap">Annuler</button>
+        <button type="button" data-edl-dl class="btn btn-outline" style="white-space:nowrap;flex:1 1 auto;justify-content:center"><i data-lucide="download" class="w-4 h-4"></i> Télécharger le PDF</button>
+        <button type="button" data-edl-send class="btn btn-dark" style="white-space:nowrap;flex:1 1 auto;justify-content:center"><i data-lucide="send" class="w-4 h-4"></i> Enregistrer + envoyer</button>
       </div>
     </div>`;
     document.body.appendChild(ov);
@@ -12501,6 +12501,21 @@ FP.edl = {
           if (FP.affectations && FP.affectations.ensureInspection) {
             FP.affectations.ensureInspection(veh.id, { sens: data.sens, date: data.date, km: data.km });
             if (FP.affectations.reanchorCurrent) FP.affectations.reanchorCurrent(veh.id);
+          }
+        } catch (e) {}
+        // Le km de l'état des lieux = relevé odomètre réel → met à jour le KM du véhicule s'il MONTE
+        // (même règle que partout : le km ne peut que croître). Déterministe + persisté (source unique du km) :
+        // ainsi la fiche affiche le bon km après une remise / restitution, sans double saisie.
+        try {
+          const kmNum = parseInt(String(data.km == null ? '' : data.km).replace(/[^\d]/g, ''), 10);
+          if (Number.isFinite(kmNum) && kmNum > (Number(veh.km) || 0)) {
+            veh.km = kmNum;
+            if (FP.saveVehicleOverride) FP.saveVehicleOverride(veh.id, { km: kmNum });
+            if (FP.db && FP.db.update && FP.supabase) {
+              FP.db.update('vehicules', veh.id, { km: kmNum })
+                .then(() => { if (FP.removeVehicleOverride) FP.removeVehicleOverride(veh.id, 'km'); if (FP.refreshDataCache) FP.refreshDataCache(); })
+                .catch(() => {});
+            }
           }
         } catch (e) {}
         if (mode === 'dl') { doc.save(fname); btn.disabled = false; btn.innerHTML = old; return; }
