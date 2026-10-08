@@ -862,6 +862,24 @@
     const conds = (data.conducteurs || []).filter(c => c && c.masque !== true && (c.manuel === true || !isEmptyV(c.nom) || !isEmptyV(c.prenom) || !isEmptyV(c.name)));
     const condItems = []; conds.forEach(c => { const pfx = 'complet:cond:' + (c.key || '') + ':'; const m = missOf(c, COND_FIELDS, pfx); if (m.length) { const nom = [c.prenom, c.nom].filter(x => !isEmptyV(x)).join(' ') || c.name || c.key || 'Conducteur'; condItems.push(compItem(nom, m, `conducteurs.html?cond=${encodeURIComponent(c.key || '')}`, pfx, 'cond', c.key || '')); } });
     const amItems = []; (data.amendes || []).forEach(a => { const pfx = 'complet:am:' + (a.id || '') + ':'; const m = missOf(a, AMENDE_FIELDS, pfx); if (m.length) amItems.push(compItem(`${(a.motif || 'Amende')} · ${a.date ? FP.date(a.date) : 'date ?'}`, m, `amendes.html?amende=${encodeURIComponent(a.id || '')}`, pfx, 'am', a.id || '')); });
+    // Checklists COMMENCÉES mais pas terminées (remise / reprise / cession / entrée flotte) — règle
+    // utilisateur : « si j'ai pas encore coché toute la liste ». On ne montre QUE les checklists déjà
+    // ENTAMÉES (au moins une case cochée) et non finies → pas de bruit sur les véhicules jamais touchés.
+    const clItems = [];
+    try {
+      if (window.FP && FP.checklist && FP.CHECKLIST_CATS) {
+        actifs.forEach(v => {
+          const miss = [];
+          FP.CHECKLIST_CATS.forEach(c => {
+            const prog = FP.checklist.progress(v.id, c.key);
+            if (prog && prog.total && prog.done > 0 && prog.done < prog.total) {
+              miss.push({ k: c.key, label: `${c.label} (${prog.done}/${prog.total})`, target: `vehicules.html?checklist=${encodeURIComponent(c.key)}&clveh=${encodeURIComponent(v.id)}` });
+            }
+          });
+          if (miss.length) clItems.push(compItem(`${v.immat || '?'} · ${(v.marque || '')} ${(v.modele || '')}`.trim(), miss, `vehicules.html?veh=${encodeURIComponent(v.id)}`, '', 'checklist', v.id));
+        });
+      }
+    } catch (e) {}
     const cfg = [];
     try {
       const prof = FP.societeProfil ? FP.societeProfil() : {}; const soc = (FP.settings.get().societe) || {};
@@ -889,7 +907,7 @@
     const leaseItems = leasingChampsManquants(actifs);
     const cadreItems = contratsCadreItems();
     const dupG = dupDocGroups();
-    const total = vehItems.length + condItems.length + amItems.length + cfg.length + dupG.length + pdfItems.length + leaseItems.length + cadreItems.length;
+    const total = vehItems.length + condItems.length + amItems.length + cfg.length + dupG.length + pdfItems.length + leaseItems.length + cadreItems.length + clItems.length;
     // Pastille sur l'onglet « 📝 À compléter » (comme « 📣 Relances ») → l'utilisateur voit qu'il reste des
     // infos à saisir sans avoir à ouvrir l'onglet. Mise à jour à chaque rendu (source unique = ce total).
     try { const _tc = document.getElementById('tab-complet'); if (_tc) _tc.innerHTML = '📝 À compléter' + (total ? ' <span style="background:#EF4444;color:#fff;border-radius:9999px;padding:1px 7px;font-size:11px;font-weight:800">' + total + '</span>' : ''); } catch (e) {}
@@ -932,6 +950,7 @@
       + sectionCompHTML('Véhicules à compléter', 'car', vehItems)
       + sectionCompHTML('Conducteurs à compléter', 'users', condItems)
       + sectionCompHTML('Amendes à compléter', 'ticket', amItems)
+      + sectionCompHTML('Checklists à terminer', 'clipboard-check', clItems)
       + sectionCompHTML('Contrats de leasing à compléter', 'file-check', leaseItems)
       + sectionCompHTML('Contrats cadre à compléter', 'file-text', cadreItems)
       + sectionCompHTML('Documents / PDF à compléter', 'file-text', pdfItems)
