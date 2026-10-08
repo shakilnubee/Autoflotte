@@ -110,7 +110,7 @@ for (const h of htmlFiles()) {
 const dataPath = join(ROOT, 'assets/js/data.js');
 if (existsSync(dataPath)) {
   const d = readFileSync(dataPath, 'utf8');
-  const re = /"(email|adresse|dateNaissance|tel|nom|prenom|name|poste|permisNumero|permisUrl|permisFileId|chauffeur|vin)"\s*:\s*"[^"]+"/g;
+  const re = /"(email|adresse|dateNaissance|tel|nom|prenom|name|poste|permisNumero|permisUrl|permisFileId|chauffeur|vin|cgUrl|avisUrl|justifUrl)"\s*:\s*"[^"]+"/g;
   const hits = (d.match(re) || []).filter(s => !/:\s*""/.test(s));
   if (hits.length) errors.push(`RGPD : ${hits.length} champ(s) personnel(s) NON vidé(s) dans data.js (ex. ${hits[0].slice(0, 60)}…). Strippe l'identité avant commit.`);
 }
