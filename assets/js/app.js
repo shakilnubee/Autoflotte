@@ -254,7 +254,7 @@ const FP = {
       'sinistre':     { cls: 'badge-danger', label: 'Sinistre', pulse: true },
       'hors service': { cls: 'badge-danger', label: 'Hors service', pulse: true },
     };
-    const m = map[statut] || { cls: 'badge-info', label: statut };
+    const m = map[statut] || { cls: 'badge-info', label: (FP.esc ? FP.esc(statut) : statut) };
     return `<span class="badge ${m.cls}">${m.pulse ? '<span class="badge-dot"></span>' : ''}${m.label}</span>`;
   },
   // Anime un nombre de 0 → valeur finale (compteur), en gardant préfixe/suffixe (€, km…).
@@ -1771,6 +1771,32 @@ FP.coutExploitAnnee = (v, annee, factures) => {
 // révision (le véhicule ne peut pas rouler moins que son dernier relevé). À utiliser partout où on AFFICHE
 // « km actuel », pour que même des données non réconciliées (data.js figé) montrent la bonne valeur.
 FP.kmActuel = (v) => Math.max(Number(v && v.km) || 0, Number(v && v.kmDernierReleve) || 0);
+// ⚠️ ÉCRIVAIN CANONIQUE DU KILOMÉTRAGE — source UNIQUE (règle « une règle = une implémentation »).
+// La garde « le km ne peut que MONTER » se compare TOUJOURS à FP.kmActuel(v) (= max(km, kmDernierReleve)),
+// JAMAIS à v.km brut (sinon un relevé plus récent est écrasé → bug vécu : EDL/remise qui baissent le km).
+// opts.force = correction MANUELLE assumée (gestionnaire) : autorise la baisse ET recale kmDernierReleve.
+// Persiste (override local + Supabase) et renvoie true si le km a changé. À utiliser PARTOUT où l'on écrit un km.
+FP.setVehKm = function (v, newKm, opts) {
+  try {
+    opts = opts || {};
+    if (!v || v.id == null) return false;
+    const n = parseInt(String(newKm == null ? '' : newKm).replace(/[^\d]/g, ''), 10);
+    if (!Number.isFinite(n) || n < 0) return false;
+    const cur = FP.kmActuel(v);
+    if (!opts.force && !(n > cur)) return false;   // ne monte pas → on ne touche à rien
+    const patch = { km: n };
+    v.km = n;
+    // Correction forcée VERS LE BAS : il faut aussi redescendre kmDernierReleve, sinon FP.kmActuel garde l'ancien max.
+    if (opts.force && (Number(v.kmDernierReleve) || 0) > n) { v.kmDernierReleve = n; patch.kmDernierReleve = n; }
+    if (FP.saveVehicleOverride) FP.saveVehicleOverride(v.id, patch);
+    if (FP.db && FP.db.update && FP.supabase) {
+      FP.db.update('vehicules', v.id, patch)
+        .then((res) => { if (res && res.error) { if (FP.notifyError) FP.notifyError('Km : échec serveur — réessaie.'); return; } if (FP.removeVehicleOverride) Object.keys(patch).forEach(k => FP.removeVehicleOverride(v.id, k)); if (FP.refreshDataCache) FP.refreshDataCache(); })
+        .catch(() => { if (FP.notifyError) FP.notifyError('Km : échec serveur — réessaie.'); });
+    }
+    return true;
+  } catch (e) { return false; }
+};
 // ⚠️ HELPER CANONIQUE — STATUT D'ÉCHÉANCE (libellé + couleur) UNIFIÉ pour CT, permis, assurance, entretien.
 // Le décompte en jours vient de FP.joursRestants (minuit→minuit) ; les SEUILS bientôt/urgent sont
 // CENTRALISÉS ici → tous les écrans colorent pareil (avant : CT 30/60 ici, 90 là ; permis 183 vs 60…).
@@ -2657,8 +2683,9 @@ FP.kmCollecte = {
     };
     try {
       const { error } = await FP.supabase.from('km_requests').insert(row); if (error) throw error;
-      // Met à jour la fiche véhicule (le gestionnaire fait autorité, correction possible à la hausse OU à la baisse).
-      try { const { error: e2 } = await FP.supabase.from('vehicules').update({ km }).eq('id', v.id); if (!e2) v.km = km; } catch (e) {}
+      // Met à jour la fiche via l'écrivain CANONIQUE (le gestionnaire fait autorité → force = correction
+      // à la hausse OU à la baisse, en recalant kmDernierReleve pour que la baisse ne soit pas annulée).
+      try { if (FP.setVehKm) FP.setVehKm(v, km, { force: true }); else { const { error: e2 } = await FP.supabase.from('vehicules').update({ km }).eq('id', v.id); if (!e2) v.km = km; } } catch (e) {}
       try { if (Array.isArray(this._cache)) this._cache.unshift(row); this._byVeh[v.id] = row; } catch (e) {}
       this._reconcileKmDates();
       return { ok: true, km };
@@ -11517,7 +11544,7 @@ FP.aiContext = function (data) {
 
   const vehs = (data.vehicules || []);
   const actifs = vehs.filter(v => !FP.estVendu(v));
-  const kmTotal = actifs.reduce((s, v) => s + (Number(v.km) || 0), 0);
+  const kmTotal = actifs.reduce((s, v) => s + (FP.kmActuel ? FP.kmActuel(v) : (Number(v.km) || 0)), 0);
   const valeur = actifs.reduce((s, v) => s + (Number(v.valeurAchat) || Number(v.prix) || 0), 0);
   lines.push('');
   lines.push('=== PARC ===');
@@ -12367,7 +12394,9 @@ FP.edl = {
       } catch (e) {}
     }
     const close = () => ov.remove();
-    ov.addEventListener('click', e => { if (e.target === ov || e.target.closest('[data-edl-x]')) close(); });
+    // ⚠️ Pendant un enregistrement/signature en cours (ov._busy), on NE ferme PAS la modale (sinon le run()
+    // continue sur des nœuds détachés : message d'erreur invisible, voire EDL enregistré en double).
+    ov.addEventListener('click', e => { if (ov._busy) return; if (e.target === ov || e.target.closest('[data-edl-x]')) close(); });
     // --- Photos (jointes au PDF + enregistrées dans la fiche « État des lieux ») ---
     const edlPhotos = [];
     const edlPhotoSrc = []; // parallèle à edlPhotos : URL d'origine si la photo a été « reprise » (déjà un doc), sinon null
@@ -12465,6 +12494,8 @@ FP.edl = {
     const showErr = (msg) => { const b = ov.querySelector('[data-edl-err]'); if (b) { b.style.display = ''; b.textContent = msg || ''; try { b.scrollIntoView({ block: 'nearest' }); } catch (e) {} } };
     const hideErr = () => { const b = ov.querySelector('[data-edl-err]'); if (b) b.style.display = 'none'; };
     const run = async (mode) => {
+      if (ov._busy) return;   // anti double-action (double-clic / ré-entrance) → jamais 2 EDL
+      ov._busy = true;
       hideErr();
       const data = collect();
       // SIGNATURE « SUR PLACE » : on recueille les signatures (conducteur + société) AVANT de générer le
@@ -12472,9 +12503,9 @@ FP.edl = {
       const _smode0 = data.signMode || 'integree';
       let surSigs = null;
       if (mode === 'send' && _smode0 === 'surplace') {
-        if (!data.employe) { showErr('Renseigne le nom / prénom de l\'employé avant de signer.'); return; }
+        if (!data.employe) { ov._busy = false; showErr('Renseigne le nom / prénom de l\'employé avant de signer.'); return; }
         surSigs = await FP.edl._collectSurplace(data);
-        if (!surSigs) return;   // annulé
+        if (!surSigs) { ov._busy = false; return; }   // annulé
       }
       const btn = ov.querySelector(mode === 'send' ? '[data-edl-send]' : '[data-edl-dl]'); const old = btn.innerHTML;
       btn.disabled = true; btn.textContent = '…';
@@ -12503,28 +12534,20 @@ FP.edl = {
             if (FP.affectations.reanchorCurrent) FP.affectations.reanchorCurrent(veh.id);
           }
         } catch (e) {}
-        // Le km de l'état des lieux = relevé odomètre réel → met à jour le KM du véhicule s'il MONTE
-        // (même règle que partout : le km ne peut que croître). Déterministe + persisté (source unique du km) :
-        // ainsi la fiche affiche le bon km après une remise / restitution, sans double saisie.
-        try {
-          const kmNum = parseInt(String(data.km == null ? '' : data.km).replace(/[^\d]/g, ''), 10);
-          if (Number.isFinite(kmNum) && kmNum > (Number(veh.km) || 0)) {
-            veh.km = kmNum;
-            if (FP.saveVehicleOverride) FP.saveVehicleOverride(veh.id, { km: kmNum });
-            if (FP.db && FP.db.update && FP.supabase) {
-              FP.db.update('vehicules', veh.id, { km: kmNum })
-                .then(() => { if (FP.removeVehicleOverride) FP.removeVehicleOverride(veh.id, 'km'); if (FP.refreshDataCache) FP.refreshDataCache(); })
-                .catch(() => {});
-            }
-          }
-        } catch (e) {}
-        if (mode === 'dl') { doc.save(fname); btn.disabled = false; btn.innerHTML = old; return; }
+        // Le km de l'état des lieux = relevé odomètre réel → met à jour le KM du véhicule via l'écrivain
+        // CANONIQUE FP.setVehKm (garde « ne peut que monter » comparée à FP.kmActuel, persistance unique).
+        try { if (FP.setVehKm) FP.setVehKm(veh, data.km); } catch (e) {}
+        if (mode === 'dl') { doc.save(fname); btn.disabled = false; btn.innerHTML = old; ov._busy = false; return; }
         // Enregistre le PDF dans les Documents du véhicule + envoie par e-mail.
         const blob = doc.output('blob');
         let url = null;
         try { if (FP.uploadScan) url = await FP.uploadScan(new File([blob], fname, { type: 'application/pdf' }), 'documents'); } catch (e) {}
         const smode = data.signMode || 'integree';   // mode de signature — défini AVANT l'ajout aux Documents
         const willSign = (smode === 'integree' || smode === 'yousign');
+        // ⚠️ Si l'upload du PDF a ÉCHOUÉ alors qu'on en a BESOIN (signé sur place à ranger, ou base de la
+        // signature à distance), on ARRÊTE avec une vraie erreur — JAMAIS un « ✓ enregistré » menteur qui
+        // perdrait l'état des lieux en silence (règle 0-perte ③). La modale reste ouverte pour réessayer.
+        if (!url && (surSigs || willSign)) { throw new Error("Le PDF de l'état des lieux n'a pas pu être enregistré (échec de l'envoi du fichier). Vérifie ta connexion et réessaie."); }
         // ⚠️ Si le document part EN SIGNATURE, on n'ajoute PAS le PDF NON signé aux Documents du véhicule :
         // SEUL le PDF ENTIÈREMENT SIGNÉ y sera rangé (par l'edge edl-sign, une fois toutes les signatures faites).
         // Le PDF non signé reste uniquement dans le stockage (url = base sur laquelle l'edge appose les signatures).
@@ -12649,16 +12672,29 @@ FP.edl = {
               date: data.date, sens: data.sens, pdfUrl: url || '', fieldEmploye: sig.employe || null, fieldSociete: sig.societe || null,
               // Chaque signataire embarque son ordre + son e-mail PRÉ-RENDU (mailHtml/mailSubject/mailText)
               // + notified (a-t-il déjà reçu son lien ?). Seul le 1er de l'ordre est notifié tout de suite.
-              signataires: signersList.map(s => { const mk = renderMail(s); return { role: s.role, nom: s.nom, email: s.email, ordre: s.ordre, sigToken: s.sigToken, signed: false, notified: s.ordre === minOrdre, mailSubject: mk.subject, mailHtml: mk.html, mailText: mk.text }; }),
+              // ⚠️ notified = false pour TOUS au départ : on ne marque « notifié » que si l'e-mail PART vraiment
+              // (sinon le serveur — qui ne relance QUE si notified!==true — ne rattrapera jamais, et le conducteur
+              // ne recevra JAMAIS son lien alors que l'app afficherait « envoyé »). Correctif 0-perte ③.
+              signataires: signersList.map(s => { const mk = renderMail(s); return { role: s.role, nom: s.nom, email: s.email, ordre: s.ordre, sigToken: s.sigToken, signed: false, notified: false, mailSubject: mk.subject, mailHtml: mk.html, mailText: mk.text }; }),
               statut: 'en_attente',
             };
             const ins = await FP.db.insert('edl_signatures', rec);
             if (ins && ins.error) throw new Error(ins.error.message || 'insert');
             // Envoi UNIQUEMENT au 1er signataire de l'ordre (le gestionnaire quand il y a un signataire société).
+            // On ne marque « notified » QUE si l'envoi réussit réellement.
+            let firstMailOk = false;
             for (const s of signersList) {
               if (s.ordre !== minOrdre) continue;   // les suivants seront relayés par le serveur à leur tour
               const mk = renderMail(s);
-              try { await FP.sendEmail({ to: s.email, cc: '', subject: mk.subject, html: mk.html, text: mk.text, replyTo: prof.mailExpediteur || '' }); } catch (e) {}
+              try { await FP.sendEmail({ to: s.email, cc: '', subject: mk.subject, html: mk.html, text: mk.text, replyTo: prof.mailExpediteur || '' }); firstMailOk = true; } catch (e) { console.warn('[edl mail]', e); }
+            }
+            if (firstMailOk) {
+              try { const sig2 = rec.signataires.map(s => (s.ordre === minOrdre ? Object.assign({}, s, { notified: true }) : s)); await FP.db.update('edl_signatures', token, { signataires: sig2 }); } catch (e) {}
+            } else {
+              // L'e-mail du lien n'est pas parti → NE PAS prétendre que c'est envoyé : on prévient et on laisse réessayer.
+              ov._busy = false; btn.disabled = false; btn.innerHTML = old;
+              showErr('⚠️ La demande de signature est créée, mais le LIEN n\'a pas pu être envoyé par e-mail (vérifie l\'adresse du destinataire). Réessaie « Enregistrer + envoyer ».');
+              return;
             }
             sentForSign = true;
           } catch (e) {
@@ -12706,7 +12742,7 @@ FP.edl = {
         const seq = sentForSign && signersList.length > 1;   // gestionnaire d'abord, puis salarié
         if (FP.toast) FP.toast(surSigs ? (mailed ? '✓ État des lieux signé sur place, enregistré et envoyé' : '✓ État des lieux signé sur place et enregistré') : seq ? '✓ Lien de signature envoyé — à toi de signer d\'abord, le salarié sera notifié ensuite' : sentForSign ? '✓ Envoyé pour signature (lien e-mail)' : signed ? '✓ Envoyé pour signature (Yousign)' : (mailed ? '✓ État des lieux enregistré et envoyé' : (url ? '✓ État des lieux enregistré dans les Documents' : '✓ État des lieux généré')));
       } catch (e) {
-        btn.disabled = false; btn.innerHTML = old; console.warn('[edl]', e);
+        ov._busy = false; btn.disabled = false; btn.innerHTML = old; console.warn('[edl]', e);
         // Erreur PERSISTANTE et lisible (au lieu d'un « Échec » fugace) → on sait la vraie cause.
         showErr('⚠️ Échec :\n' + ((e && e.message) || e) + '\n\n(Astuce : si le message parle de « edl_signatures », la table n\'est pas encore créée côté serveur — lance le SQL fourni. Sinon, copie ce message.)');
       }
@@ -13109,24 +13145,32 @@ FP.offreAchat = {
   async linkFor(veh) {
     if (!veh || !veh.id) return '';
     if (this._tokenCache[veh.id]) return this.BASE + '?t=' + encodeURIComponent(this._tokenCache[veh.id]);
-    let token = '';
+    // Société du véhicule (jamais '__all__' : en vue CEO « toutes sociétés », on prend la société du véhicule)
+    // → sinon la demande serait rangée sous PXP par défaut et invisible pour la vraie société de l'acheteur.
+    const soc = (function () { let s = String(veh.societe || '').trim(); if (!s) { try { s = (FP.activeSociete && FP.activeSociete()) || ''; } catch (e) {} } return (s && s !== '__all__') ? s : ''; })();
+    const prix = (veh.prixVente || (FP.valeurRevente ? FP.valeurRevente(veh) : null)) || null;
+    let token = '', existing = null;
     try {
       if (FP.db && FP.db.select) {
         const r = await FP.db.select('offres_achat');
         const rows = (r && r.data) ? r.data : [];
-        const existing = rows.find(x => x && x.statut === 'lien' && String(x.vehiculeId || '') === String(veh.id));
+        existing = rows.find(x => x && x.statut === 'lien' && String(x.vehiculeId || '') === String(veh.id));
         if (existing && existing.token) token = existing.token;
       }
     } catch (e) {}
-    if (!token) {
+    if (token && existing) {
+      // Lien déjà existant : on rafraîchit le PRIX (le prix visé a pu changer) et la société si besoin,
+      // pour que l'acheteur et l'Archive voient le bon prix, pas un prix figé à la 1re génération.
+      const patch = {};
+      if ((existing.prix || null) !== (prix || null)) patch.prix = prix;
+      if (soc && (existing.societe || '') !== soc) patch.societe = soc;
+      if (Object.keys(patch).length) { try { await FP.db.update('offres_achat', existing.id, patch); } catch (e) {} }
+    } else {
       token = FP.secureToken('off-');
       try {
-        const prix = (veh.prixVente || (FP.valeurRevente ? FP.valeurRevente(veh) : null)) || null;
-        const res = await FP.db.insert('offres_achat', {
-          id: 'OFL-' + FP.secureToken(''), token, vehiculeId: veh.id,
-          plaque: veh.immat || '', marque: veh.marque || '', modele: veh.modele || '',
-          prix, statut: 'lien',
-        });
+        const rec = { id: 'OFL-' + FP.secureToken(''), token, vehiculeId: veh.id, plaque: veh.immat || '', marque: veh.marque || '', modele: veh.modele || '', prix, statut: 'lien' };
+        if (soc) rec.societe = soc;
+        const res = await FP.db.insert('offres_achat', rec);
         if (res && res.error) return '';
       } catch (e) { return ''; }
     }
@@ -13189,6 +13233,8 @@ FP.offreAchat = {
         acheteur: acheteur || {}, notes: note || '', statut: 'recu',
         receivedAt: new Date().toISOString(),
       };
+      // Société du véhicule (jamais '__all__') → la demande manuelle est rangée dans la bonne société.
+      try { let s = String((veh && veh.societe) || '').trim(); if (!s) s = (FP.activeSociete && FP.activeSociete()) || ''; if (s && s !== '__all__') rec.societe = s; } catch (e) {}
       const res = await FP.db.insert('offres_achat', rec);
       await this.load();
       return { error: (res && res.error) || null };
@@ -13229,7 +13275,12 @@ FP.docsFolder = {
     { key: 'carte-grise-barree', label: 'Carte grise barrée' },
     { key: 'etat-des-lieux',     label: 'État des lieux de sortie' },
   ],
+  // Catégories « une seule par véhicule » (ajouter REMPLACE l'ancien, comme la fiche) — évite les doublons.
+  // code-cession / facture-vente peuvent légitimement être multiples (on empile) → pas dans ce set.
+  SINGLE: new Set(['carte-grise', 'carte-grise-barree', 'facture-achat']),
   _typeLabel(k) { const t = this.TYPES.find(x => x.key === k); return t ? t.label : (k || 'Document'); },
+  // Prévient la fiche véhicule (ou tout écran ouvert) qu'un document a changé → rafraîchissement.
+  _changed(vehId) { try { window.dispatchEvent(new CustomEvent('fp:docs-changed', { detail: { vehId: vehId } })); } catch (e) {} },
   async _list(vehId) {
     try { const r = await FP.db.select('documents'); const rows = (r && r.data) ? r.data : []; return rows.filter(d => d && String(d.vehiculeId || '') === String(vehId)); }
     catch (e) { return []; }
@@ -13320,13 +13371,18 @@ FP.docsFolder = {
         const id = b.getAttribute('data-id');
         const ok = FP.confirm ? await FP.confirm('Supprimer ce document ?') : confirm('Supprimer ce document ?');
         if (!ok) return;
-        try { if (FP.persist && FP.persist.available && FP.persist.available()) FP.persist.delete('documents', id); else if (FP.db && FP.db.delete) await FP.db.delete('documents', id); } catch (e) {}
-        docs = docs.filter(x => x.id !== id); renderAll();
+        // Vraie vérif d'échec (plus de « ✓ supprimé » menteur) : on ne retire de la liste QUE si ça a marché.
+        let err = null;
+        try { if (FP.db && FP.db.delete) { const r = await FP.db.delete('documents', id); if (r && r.error) err = r.error; } else if (FP.persist && FP.persist.delete) FP.persist.delete('documents', id); } catch (e) { err = e; }
+        if (err) { if (FP.notifyError) FP.notifyError('Échec de la suppression — réessaie.'); else alert('Échec de la suppression.'); return; }
+        docs = docs.filter(x => x.id !== id); renderAll(); self._changed(veh.id);
         if (FP.toast) FP.toast('Document supprimé');
       }));
       box.querySelectorAll('.fp-docs-addline').forEach(b => b.addEventListener('click', () => { pending = { type: b.getAttribute('data-type'), name: '' }; fileInp.click(); }));
     }
-    this._list(veh.id).then(list => { docs = list || []; renderAll(); });
+    // ⚠️ Chargement ASYNC : on FUSIONNE (on n'écrase PAS) → un document ajouté juste avant la résolution
+    // du SELECT n'est pas effacé de l'écran (sinon l'utilisateur croit à un échec et le ré-ajoute = doublon).
+    this._list(veh.id).then(list => { const srv = list || []; const extra = docs.filter(d => !srv.some(x => x.id === d.id)); docs = srv.concat(extra); renderAll(); });
 
     // Upload (ligne de la checklist OU ajout libre) → table documents, même format que la fiche.
     fileInp.addEventListener('change', async (e) => {
@@ -13336,9 +13392,17 @@ FP.docsFolder = {
       try {
         const url = await FP.uploadScan(f, 'documents/' + (FP.normImmat ? FP.normImmat(veh.immat || 'veh') : 'veh'));
         if (!url) throw new Error('upload vide');
-        const doc = { id: 'D' + Date.now().toString(36), vehiculeId: veh.id, type, label: name || self._typeLabel(type), url, driveId: self._driveId(url) };
-        if (FP.persist && FP.persist.available && FP.persist.available()) FP.persist.insert('documents', doc); else if (FP.db && FP.db.insert) await FP.db.insert('documents', doc);
-        docs.push(doc); renderAll();
+        // Catégorie « une seule par véhicule » → on remplace l'ancien (même règle que la fiche, pas de doublon).
+        if (self.SINGLE.has(type)) {
+          const olds = docs.filter(d => d.type === type);
+          for (const o of olds) { try { if (FP.db && FP.db.delete) await FP.db.delete('documents', o.id); else if (FP.persist && FP.persist.delete) FP.persist.delete('documents', o.id); } catch (e2) {} }
+          docs = docs.filter(d => d.type !== type);
+        }
+        // id avec suffixe ALÉATOIRE (pas seulement la ms) → jamais de collision/écrasement entre 2 ajouts rapides.
+        const doc = { id: 'D' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), vehiculeId: veh.id, type, label: name || self._typeLabel(type), url, driveId: self._driveId(url) };
+        if (FP.persist && FP.persist.available && FP.persist.available()) FP.persist.insert('documents', doc);
+        else if (FP.db && FP.db.insert) { const r = await FP.db.insert('documents', doc); if (r && r.error) throw r.error; }
+        docs.push(doc); renderAll(); self._changed(veh.id);
         const nm = q('#fp-docs-name'); if (nm) nm.value = '';
         if (FP.toast) FP.toast('✓ Document ajouté');
       } catch (err) { if (FP.notifyError) FP.notifyError('Échec de l\'ajout du document'); else alert('Échec : ' + (err && err.message || err)); }
@@ -13637,7 +13701,7 @@ FP.dupe = {
     buttons.push({ label: 'Annuler', value: 'cancel', kind: 'danger' });
     const choice = await this._choiceModal({
       title: '⚠️ Doublon possible',
-      html: `${this._label(table)} identique semble déjà exister (<b>${this._tag(d).trim()}${extra}</b>).${fillLine}`,
+      html: `${this._label(table)} identique semble déjà exister (<b>${FP.esc ? FP.esc(this._tag(d).trim()) : this._tag(d).trim()}${extra}</b>).${fillLine}`,
       buttons,
     });
     if (choice === 'merge') { Object.assign(d, patch); return { action: 'merge', existing: d, patch }; }

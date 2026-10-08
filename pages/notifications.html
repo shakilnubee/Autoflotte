@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261008d">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261008e">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20261008d"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20261008e"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20261008d">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20261008e">
 <style>
   .notif { display: flex; gap: .8rem; align-items: flex-start; padding: .85rem 1rem; border-radius: 14px; border: 1px solid var(--fp-border); background: var(--fp-surface, #fff); text-decoration: none; transition: box-shadow .15s ease, transform .15s ease, border-color .15s ease; box-shadow: 0 1px 2px rgba(15,30,61,.04); }
   .notif + .notif { margin-top: .55rem; }
@@ -150,8 +150,8 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20261008d"></script>
-<script src="../assets/js/supabase-client.js?v=20261008d"></script>
+<script src="../assets/js/vendor/supabase.js?v=20261008e"></script>
+<script src="../assets/js/supabase-client.js?v=20261008e"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -167,11 +167,11 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261008d"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261008e"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20261008d"></script>
+<script src="../assets/js/app.min.js?v=20261008e"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -868,16 +868,20 @@
     const clItems = [];
     try {
       if (window.FP && FP.checklist && FP.CHECKLIST_CATS) {
-        actifs.forEach(v => {
-          const miss = [];
-          FP.CHECKLIST_CATS.forEach(c => {
+        // ⚠️ La checklist « cession » (sortieFlotte) concerne les véhicules VENDUS — justement ceux qui
+        // sortent de `actifs`. On inclut donc aussi les vendus, sinon le rappel disparaît pile quand on en a besoin.
+        const vendus = (data.vehicules || []).filter(v => FP.estVendu && FP.estVendu(v));
+        const listFor = (catKey) => (catKey === 'sortieFlotte') ? actifs.concat(vendus) : actifs;
+        const seen = {};
+        FP.CHECKLIST_CATS.forEach(c => {
+          listFor(c.key).forEach(v => {
             const prog = FP.checklist.progress(v.id, c.key);
             if (prog && prog.total && prog.done > 0 && prog.done < prog.total) {
-              miss.push({ k: c.key, label: `${c.label} (${prog.done}/${prog.total})`, target: `vehicules.html?checklist=${encodeURIComponent(c.key)}&clveh=${encodeURIComponent(v.id)}` });
+              (seen[v.id] = seen[v.id] || { v, miss: [] }).miss.push({ k: c.key, label: `${c.label} (${prog.done}/${prog.total})`, target: `vehicules.html?checklist=${encodeURIComponent(c.key)}&clveh=${encodeURIComponent(v.id)}` });
             }
           });
-          if (miss.length) clItems.push(compItem(`${v.immat || '?'} · ${(v.marque || '')} ${(v.modele || '')}`.trim(), miss, `vehicules.html?veh=${encodeURIComponent(v.id)}`, '', 'checklist', v.id));
         });
+        Object.keys(seen).forEach(id => { const o = seen[id]; clItems.push(compItem(`${o.v.immat || '?'} · ${(o.v.marque || '')} ${(o.v.modele || '')}`.trim(), o.miss, `vehicules.html?veh=${encodeURIComponent(o.v.id)}`, '', 'checklist', o.v.id)); });
       }
     } catch (e) {}
     const cfg = [];
@@ -2029,6 +2033,11 @@
   // l'alerte reste tant que l'utilisateur n'a pas cliqué « ✓ Vu » (sinon elle s'effaçait toute seule).
   if (window.FP && FP.qrScans && FP.qrScans.load) {
     FP.qrScans.load().then(() => scheduleRender()).catch(() => {});
+  }
+  // Demandes d'achat reçues : charger + re-rendre (sinon l'alerte « demande d'achat reçue » n'apparaît
+  // pas de façon fiable au 1er affichage de la page Alertes — _submissions était encore null).
+  if (window.FP && FP.offreAchat && FP.offreAchat.load) {
+    FP.offreAchat.load().then(() => scheduleRender()).catch(() => {});
   }
 </script>
 </body>

@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261008d">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261008e">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20261008d"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20261008e"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20261008d">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20261008e">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -227,6 +227,12 @@
       #contrat-tabbar .ctab.active { color:var(--fp-primary); border-bottom-color:var(--fp-accent); }
       #contrat-tabbar .ctab.active i { color:var(--fp-accent); }
       body.fp-dark #contrat-tabbar .ctab.active { color:#fff; }
+      /* ⚠️ MOBILE — modale « contrat cadre » : ses grilles sont en style INLINE (2-3 colonnes), que le CSS
+         global ne peut pas atteindre → on les force en 1 colonne ici (!important bat le style inline). */
+      @media (max-width:560px){
+        #cadre-modal [style*="grid-template-columns"]{ grid-template-columns:1fr !important; }
+        #cadre-modal select, #cadre-modal input, #cadre-modal textarea{ min-width:0 !important; max-width:100% !important; }
+      }
     </style>
     <!-- Navigation Leasing / Assurance via le MENU DÉROULANT de la sidebar (chaque sous-onglet = sa
          page, n'affiche QUE ses sections). Barre interne masquée mais conservée (pilote switchContratTab). -->
@@ -764,8 +770,8 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20261008d"></script>
-<script src="../assets/js/supabase-client.js?v=20261008d"></script>
+<script src="../assets/js/vendor/supabase.js?v=20261008e"></script>
+<script src="../assets/js/supabase-client.js?v=20261008e"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -781,11 +787,11 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261008d"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261008e"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20261008d"></script>
+<script src="../assets/js/app.min.js?v=20261008e"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -1924,6 +1930,9 @@
     // KPIs des lignes « dérivées » (BPCE / factures).
     let mensTotal = 0, engagementTotal = 0, nbAvecLoyer = 0;
     rowsAll.forEach(({ v }) => {
+      // Un véhicule VENDU / hors flotte ne doit plus compter dans le loyer projeté (parité avec
+      // FP.leasingMensuelFlotte utilisé par le Budget → sinon Contrats surévalue le loyer total).
+      if (v && FP.horsFlotte && FP.horsFlotte(v)) return;
       // SOURCE UNIQUE du loyer = le loyer d'offre courant (FP.leasingLoyerCourant + avenants),
       // la médiane des factures ne servant que de repli — même calcul que la colonne « loyer moyen »
       // de la ligne et que le KPI du haut. (Avant : uniquement la médiane → 2 totaux différents à
@@ -3454,6 +3463,9 @@
     // ---- Détail d'une demande (modale) ----
     function openDetail(id){
       const oa = OA(); if (!oa) return;
+      // Si les demandes ne sont pas encore chargées (ouverture via le lien d'alerte ?offre=…, réseau lent),
+      // on les charge PUIS on rouvre — au lieu d'échouer en silence (plus de setTimeout fixe hasardeux).
+      if (oa._submissions == null) { oa.load().then(() => openDetail(id)).catch(() => {}); return; }
       const s = (oa._submissions || []).find(x => x && x.id === id); if (!s) return;
       const a = s.acheteur || {};
       const old = document.getElementById('arch-detail-ov'); if (old) old.remove();
@@ -3649,7 +3661,7 @@
     if (!CONTRAT_TABS[_ct]) { try { _ct = (FP.lastTab && FP.lastTab.get('contrats', 'leasing')) || 'leasing'; } catch (e) { _ct = 'leasing'; } }
     switchContratTab(CONTRAT_TABS[_ct] ? _ct : 'leasing');
     // Lien d'alerte « demande d'achat reçue » : ?ctab=archive&offre=<id> → ouvre le détail de la demande.
-    try { const _of = new URLSearchParams(location.search).get('offre'); if (_of && _ct === 'archive') setTimeout(() => { try { if (window.__archOpen) window.__archOpen(_of); } catch (e) {} }, 400); } catch (e) {} }
+    try { const _of = new URLSearchParams(location.search).get('offre'); if (_of && _ct === 'archive' && window.__archOpen) window.__archOpen(_of); } catch (e) {} }
 
   // ===== Contrats LLD (Location Longue Durée) saisis à la main — tous loueurs =====
   // Prompt de lecture automatique d'une offre/contrat LLD (générique, tous loueurs)
