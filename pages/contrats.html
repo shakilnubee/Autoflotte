@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261006k">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261008a">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20261006k"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20261008a"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20261006k">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20261008a">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -214,6 +214,14 @@
       #contrat-sections[data-ctab="cadre"]     .contrat-section[data-section="leasing"],
       #contrat-sections[data-ctab="cadre"]     .contrat-section[data-section="localease"],
       #contrat-sections[data-ctab="cadre"]     .contrat-section[data-section="assurance"] { display:none !important; }
+      /* Onglet ARCHIVE (demandes d'achat / documents de vente) : n'affiche QUE sa section. */
+      #contrat-sections[data-ctab="leasing"]   .contrat-section[data-section="archive"],
+      #contrat-sections[data-ctab="assurance"] .contrat-section[data-section="archive"],
+      #contrat-sections[data-ctab="cadre"]     .contrat-section[data-section="archive"] { display:none !important; }
+      #contrat-sections[data-ctab="archive"]   .contrat-section[data-section="leasing"],
+      #contrat-sections[data-ctab="archive"]   .contrat-section[data-section="localease"],
+      #contrat-sections[data-ctab="archive"]   .contrat-section[data-section="assurance"],
+      #contrat-sections[data-ctab="archive"]   .contrat-section[data-section="cadre"] { display:none !important; }
       #contrat-tabbar .ctab { display:inline-flex; align-items:center; gap:7px; padding:10px 20px; font-size:14px; font-weight:700; background:none; border:none; border-bottom:2px solid transparent; color:#94A3B8; cursor:pointer; transition:color .15s, border-color .15s, transform .12s; }
       #contrat-tabbar .ctab:hover { color:var(--fp-primary); transform:translateY(-1px); }
       #contrat-tabbar .ctab.active { color:var(--fp-primary); border-bottom-color:var(--fp-accent); }
@@ -226,6 +234,7 @@
       <button id="ctab-leasing" type="button" class="ctab">Leasing</button>
       <button id="ctab-assurance" type="button" class="ctab">Assurance</button>
       <button id="ctab-cadre" type="button" class="ctab">Contrats cadre</button>
+      <button id="ctab-archive" type="button" class="ctab">Archive</button>
     </div>
     <p class="text-xs text-slate-500 mb-3 flex items-center gap-1.5" id="contrat-drag-hint"><i data-lucide="grip-vertical" class="w-3.5 h-3.5"></i> Glisse une section par sa poignée pour changer l'ordre — l'ordre est mémorisé.</p>
     <div id="contrat-sections">
@@ -265,6 +274,42 @@
         </select>
       </div>
       <div id="cadre-list"></div>
+    </div>
+
+    <!-- ===== Section ARCHIVE (demandes d'achat reçues + dossiers de vente) ===== -->
+    <div class="card p-6 mb-6 contrat-section" data-section="archive">
+      <div class="section-title" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <i data-lucide="archive" class="w-5 h-5"></i> Archive — demandes d'achat &amp; ventes
+        <span class="text-xs font-normal text-slate-400">formulaires acheteur reçus, classés par véhicule</span>
+      </div>
+      <p class="text-sm text-slate-600 mb-4">Chaque fois qu'un acheteur remplit le <b>formulaire acheteur</b> (lien envoyé depuis la page <b>À vendre</b>), sa demande arrive ici. Tu retrouves les coordonnées (particulier ou société), tu peux ouvrir le <b>dossier de vente</b> du véhicule (où tu ranges le Cerfa de cession), puis <b>classer</b> la demande une fois traitée.</p>
+      <!-- KPIs -->
+      <div class="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+        <div class="kpi p-3"><div class="kpi-label">Demandes reçues</div><div class="kpi-value" id="arch-kpi-nb">—</div></div>
+        <div class="kpi p-3"><div class="kpi-label">À traiter</div><div class="kpi-value" id="arch-kpi-new" style="color:var(--fp-accent)">—</div></div>
+        <div class="kpi p-3"><div class="kpi-label">Véhicules concernés</div><div class="kpi-value" id="arch-kpi-veh">—</div></div>
+      </div>
+      <!-- Barre de filtres -->
+      <div id="arch-filters" class="flex items-center gap-2 flex-wrap mb-4">
+        <input id="arch-search" type="search" placeholder="Rechercher (acheteur, plaque, véhicule, ville, e-mail…)" class="field-input !py-1.5 !text-sm" style="width:auto;min-width:220px">
+        <select id="arch-f-type" class="field-input !py-1.5 !text-sm" style="width:auto">
+          <option value="all">Tous les acheteurs</option>
+          <option value="particulier">👤 Particulier</option>
+          <option value="societe">🏢 Société</option>
+        </select>
+        <select id="arch-f-statut" class="field-input !py-1.5 !text-sm" style="width:auto">
+          <option value="actives">À traiter</option>
+          <option value="archive">Classées</option>
+          <option value="all">Toutes</option>
+        </select>
+        <span class="text-xs text-slate-400 ml-1">Trier&nbsp;par</span>
+        <select id="arch-sort" class="field-input !py-1.5 !text-sm" style="width:auto">
+          <option value="date">Plus récentes</option>
+          <option value="vehicule">Véhicule</option>
+          <option value="acheteur">Acheteur</option>
+        </select>
+      </div>
+      <div id="arch-list"></div>
     </div>
 
     <!-- Section Leasing -->
@@ -716,8 +761,8 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20261006k"></script>
-<script src="../assets/js/supabase-client.js?v=20261006k"></script>
+<script src="../assets/js/vendor/supabase.js?v=20261008a"></script>
+<script src="../assets/js/supabase-client.js?v=20261008a"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -733,11 +778,11 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261006k"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261008a"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20261006k"></script>
+<script src="../assets/js/app.min.js?v=20261008a"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -2598,18 +2643,20 @@
 
   // ===== Onglets Leasing / Assurance : chaque onglet n'affiche QUE ses sections (séparation nette). =====
   // Leasing = sections leasing (BPCE) + localease (Ayvens/LLD). Assurance = section assurance.
-  const CONTRAT_TABS = { leasing: ['leasing', 'localease'], assurance: ['assurance'], cadre: ['cadre'] };
+  const CONTRAT_TABS = { leasing: ['leasing', 'localease'], assurance: ['assurance'], cadre: ['cadre'], archive: ['archive'] };
   function switchContratTab(name){
     if (!CONTRAT_TABS[name]) name = 'leasing';
     // ⚠️ On pilote la séparation par un ATTRIBUT sur le conteneur + CSS `!important` : les fonctions
     // de rendu (renderLocalease/renderAssurance…) remettent `section.style.display=''` à chaque
     // rafraîchissement — un toggle inline se ferait donc écraser. La règle CSS, elle, tient bon.
     const host = $('contrat-sections'); if (host) host.setAttribute('data-ctab', name);
-    const bl = document.getElementById('ctab-leasing'), ba = document.getElementById('ctab-assurance'), bc = document.getElementById('ctab-cadre');
+    const bl = document.getElementById('ctab-leasing'), ba = document.getElementById('ctab-assurance'), bc = document.getElementById('ctab-cadre'), bar = document.getElementById('ctab-archive');
     if (bl) bl.classList.toggle('active', name === 'leasing');
     if (ba) ba.classList.toggle('active', name === 'assurance');
     if (bc) bc.classList.toggle('active', name === 'cadre');
+    if (bar) bar.classList.toggle('active', name === 'archive');
     if (name === 'cadre') { try { renderCadre(); } catch (e) {} }
+    if (name === 'archive') { try { renderArchive(); } catch (e) {} }
     // Filtre « par loueur » + astuce de réorganisation = pertinents seulement sur Leasing. Sur Leasing
     // on délègue la visibilité à populateLeasingLoueurFilter (règle « ≥ 2 loueurs ») ; ailleurs on masque.
     if (name === 'leasing') { try { populateLeasingLoueurFilter(); } catch (e) {} }
@@ -2625,8 +2672,8 @@
     setDisp('loueur-add-quick', name === 'leasing' && canCfg);
     setDisp('assur-add-quick', name === 'assurance');
     setDisp('cadre-add-quick', name === 'cadre');
-    // « Comparer des devis » : leasing ou assurance uniquement (n'a pas de sens pour les contrats cadre).
-    setDisp('cmp-open', name !== 'cadre');
+    // « Comparer des devis » : leasing ou assurance uniquement (pas de sens pour cadre / archive).
+    setDisp('cmp-open', name === 'leasing' || name === 'assurance');
     try { if (FP.lastTab) FP.lastTab.set('contrats', name); } catch (e) {}
     if (window.lucide) lucide.createIcons();
   }
@@ -3298,15 +3345,238 @@
     // Re-render quand les données serveur arrivent (échéances/prestataires à jour)
     document.addEventListener('fp:data-ready', () => { try { if (($('contrat-sections')||{}).getAttribute && $('contrat-sections').getAttribute('data-ctab') === 'cadre') render(); } catch (e) {} });
   })();
+
+  // ============================================================================
+  //  ARCHIVE — demandes d'ACHAT reçues (formulaire acheteur) + dossier de vente par véhicule.
+  //  Source UNIQUE = FP.offreAchat (table offres_achat, synchronisée). Le dossier de vente (lien
+  //  Drive où ranger le Cerfa) est dans app_settings.vehDossierVente (keyé par vehId, protégé anti-perte).
+  // ============================================================================
+  (function archiveModule(){
+    const esc = (s) => (window.FP && FP.esc) ? FP.esc(s) : String(s == null ? '' : s);
+    const euro = (n) => (window.FP && FP.euro) ? FP.euro(n) : (Number(n) || 0) + ' €';
+    const vehsAll = () => ((window.data && Array.isArray(data.vehicules)) ? data.vehicules : ((window.FP_DATA && FP_DATA.vehicules) || []));
+    const vehById = (id) => vehsAll().find(v => v && String(v.id) === String(id)) || null;
+    const state = { search: '', type: 'all', statut: 'actives', sort: 'date' };
+    const OA = () => (window.FP && FP.offreAchat) ? FP.offreAchat : null;
+    const isArchiveTab = () => { try { return ($('contrat-sections') || {}).getAttribute && $('contrat-sections').getAttribute('data-ctab') === 'archive'; } catch (e) { return false; } };
+
+    function dossierOf(vehId){ try { const m = (FP.settings.get().vehDossierVente) || {}; return (vehId && m[vehId]) ? String(m[vehId]) : ''; } catch (e) { return ''; } }
+    function setDossier(vehId, url){
+      if (!vehId) return;
+      const s = FP.settings.get(); s.vehDossierVente = (s.vehDossierVente && typeof s.vehDossierVente === 'object') ? s.vehDossierVente : {};
+      const u = String(url || '').trim();
+      if (u) s.vehDossierVente[vehId] = u; else delete s.vehDossierVente[vehId];
+      FP.settings.save(s);
+    }
+    function dnum(iso){ try { return iso ? (FP.date ? FP.date(String(iso).slice(0,10)) : String(iso).slice(0,10)) : ''; } catch (e) { return ''; } }
+    function adresseOf(a){ a = a || {}; const l1 = [a.adrNumero, a.adrTypeVoie, a.adrNomVoie].filter(Boolean).join(' '); const l2 = [a.codePostal, a.ville].filter(Boolean).join(' '); return [l1, a.adrComplement, l2, a.pays].filter(Boolean).join(', '); }
+
+    function filtered(){
+      const oa = OA(); const list = (oa && oa._submissions) ? oa._submissions.slice() : [];
+      const q = state.search.trim().toLowerCase();
+      let out = list.filter(s => {
+        if (!s) return false;
+        if (state.statut === 'actives' && s.statut !== 'recu') return false;
+        if (state.statut === 'archive' && s.statut !== 'archive') return false;
+        if (state.type !== 'all' && s.type !== state.type) return false;
+        if (q) {
+          const a = s.acheteur || {};
+          const hay = [oa.nomAcheteur(s), s.plaque, s.marque, s.modele, a.email, a.telephone, a.ville, a.raisonSociale, a.siren].filter(Boolean).join(' ').toLowerCase();
+          if (hay.indexOf(q) < 0) return false;
+        }
+        return true;
+      });
+      if (state.sort === 'acheteur') out.sort((a, b) => oa.nomAcheteur(a).localeCompare(oa.nomAcheteur(b), 'fr'));
+      else if (state.sort === 'vehicule') out.sort((a, b) => String(a.plaque || '').localeCompare(String(b.plaque || ''), 'fr') || (b.when - a.when));
+      else out.sort((a, b) => b.when - a.when);
+      return out;
+    }
+
+    function typeBadge(t){ return t === 'societe'
+      ? '<span style="font-size:.66rem;font-weight:700;background:#EEF2FF;color:#3730A3;border-radius:9999px;padding:2px 8px">🏢 Société</span>'
+      : '<span style="font-size:.66rem;font-weight:700;background:#FFF3EA;color:#9A3412;border-radius:9999px;padding:2px 8px">👤 Particulier</span>'; }
+
+    function itemHTML(s){
+      const oa = OA(); const a = s.acheteur || {};
+      const doss = dossierOf(s.vehiculeId);
+      const newBadge = s.statut === 'recu' ? '<span style="font-size:.62rem;font-weight:800;background:#F97316;color:#fff;border-radius:9999px;padding:2px 7px;margin-left:4px">NOUVEAU</span>' : '';
+      const plaqueLink = (window.FP && FP.lienVehicule && s.plaque) ? FP.lienVehicule(s.plaque) : esc(s.plaque || '—');
+      return '<div class="arch-item" data-arch-id="' + esc(s.id) + '" style="border:1px solid var(--fp-border);border-radius:12px;padding:12px 14px;margin-bottom:10px;background:var(--fp-surface,#fff)">'
+        + '<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start">'
+          + '<div style="min-width:0">'
+            + '<div style="font-weight:800;font-size:.98rem">' + esc(oa.nomAcheteur(s)) + ' ' + typeBadge(s.type) + newBadge + '</div>'
+            + '<div class="text-xs text-slate-600 mt-1">🚗 ' + plaqueLink + (s.modele ? ' · ' + esc([s.marque, s.modele].filter(Boolean).join(' ')) : '') + '</div>'
+            + '<div class="text-xs text-slate-400 mt-0.5">Reçu le ' + esc(dnum(s.receivedAt) || '—') + (a.telephone ? ' · ' + esc(a.telephone) : '') + (a.email ? ' · ' + esc(a.email) : '') + '</div>'
+          + '</div>'
+          + (s.prix ? '<div style="font-weight:800;color:var(--fp-primary);white-space:nowrap">' + esc(euro(s.prix)) + '</div>' : '')
+        + '</div>'
+        + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">'
+          + '<button type="button" class="btn btn-outline !text-xs" style="padding:4px 11px" data-arch-detail="' + esc(s.id) + '"><i data-lucide="eye" class="w-3.5 h-3.5"></i> Détail</button>'
+          + '<button type="button" class="btn btn-outline !text-xs" style="padding:4px 11px" data-arch-contact="' + esc(s.id) + '"><i data-lucide="send" class="w-3.5 h-3.5"></i> Recontacter</button>'
+          + (doss
+              ? '<a href="' + esc(doss) + '" target="_blank" rel="noopener" class="btn btn-outline !text-xs" style="padding:4px 11px" onclick="event.stopPropagation()"><i data-lucide="folder-open" class="w-3.5 h-3.5"></i> Dossier de vente</a>'
+              : '<button type="button" class="btn btn-outline !text-xs" style="padding:4px 11px" data-arch-dossier="' + esc(s.id) + '"><i data-lucide="folder-plus" class="w-3.5 h-3.5"></i> Lier le dossier</button>')
+          + '<button type="button" class="btn ' + (s.statut === 'archive' ? 'btn-outline' : 'btn-dark') + ' !text-xs" style="padding:4px 11px" data-arch-toggle="' + esc(s.id) + '">' + (s.statut === 'archive' ? '<i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> Rouvrir' : '<i data-lucide="check" class="w-3.5 h-3.5"></i> Classer') + '</button>'
+        + '</div>'
+      + '</div>';
+    }
+
+    function render(){
+      const host = $('arch-list'); if (!host) return;
+      const oa = OA();
+      if (!oa) { host.innerHTML = '<p class="text-sm text-slate-400 py-6 text-center">Module indisponible.</p>'; return; }
+      // Charge les demandes si pas encore fait, puis re-render.
+      if (oa._submissions == null) { host.innerHTML = '<p class="text-sm text-slate-400 py-6 text-center">Chargement…</p>'; oa.load().then(() => { if (isArchiveTab()) render(); }); return; }
+      const all = oa._submissions || [];
+      const list = filtered();
+      // KPIs
+      const nb = all.filter(s => s.statut === 'recu' || s.statut === 'archive').length;
+      const nbNew = all.filter(s => s.statut === 'recu').length;
+      const vehSet = new Set(all.map(s => s.vehiculeId).filter(Boolean));
+      const setTxt = (id, v) => { const el = $(id); if (el) el.textContent = v; };
+      setTxt('arch-kpi-nb', nb); setTxt('arch-kpi-new', nbNew); setTxt('arch-kpi-veh', vehSet.size);
+      if (!list.length) {
+        host.innerHTML = '<div class="text-center py-10 text-slate-400"><i data-lucide="inbox" class="w-8 h-8 mx-auto mb-2"></i><p class="text-sm">' + (all.length ? 'Aucune demande ne correspond au filtre.' : 'Aucune demande d\'achat pour l\'instant.<br>Envoie le formulaire acheteur depuis la page « À vendre ».') + '</p></div>';
+        if (window.lucide) lucide.createIcons();
+        return;
+      }
+      if (state.sort === 'vehicule') {
+        // Groupé par véhicule.
+        const groups = {};
+        list.forEach(s => { const k = s.plaque || '—'; (groups[k] = groups[k] || []).push(s); });
+        host.innerHTML = Object.keys(groups).map(k => {
+          const g = groups[k]; const v = g[0];
+          return '<div style="margin-bottom:16px"><div style="font-weight:800;font-size:.8rem;text-transform:uppercase;letter-spacing:.03em;color:var(--fp-muted);margin-bottom:8px">🚗 ' + esc(k) + (v.modele ? ' · ' + esc([v.marque, v.modele].filter(Boolean).join(' ')) : '') + ' <span style="color:var(--fp-accent)">(' + g.length + ')</span></div>' + g.map(itemHTML).join('') + '</div>';
+        }).join('');
+      } else {
+        host.innerHTML = list.map(itemHTML).join('');
+      }
+      if (window.lucide) lucide.createIcons();
+    }
+    window.renderArchive = render;
+
+    // ---- Détail d'une demande (modale) ----
+    function openDetail(id){
+      const oa = OA(); if (!oa) return;
+      const s = (oa._submissions || []).find(x => x && x.id === id); if (!s) return;
+      const a = s.acheteur || {};
+      const old = document.getElementById('arch-detail-ov'); if (old) old.remove();
+      const rowsHtml = [];
+      const add = (lbl, val) => { if (val) rowsHtml.push('<div style="display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid var(--fp-border)"><span style="color:var(--fp-muted)">' + esc(lbl) + '</span><span style="font-weight:700;text-align:right">' + esc(val) + '</span></div>'); };
+      add('Type', s.type === 'societe' ? 'Société' : 'Particulier');
+      if (s.type === 'societe') {
+        add('Raison sociale', a.raisonSociale); add('SIREN', a.siren);
+        add('Représentant', [a.repPrenom, a.repNom].filter(Boolean).join(' ')); add('Qualité', a.qualite);
+      } else {
+        add('Nom', a.nom); add("Nom d'usage", a.nomUsage); add('Prénom', a.prenom);
+        add('Né(e) le', a.dateNaissance ? dnum(a.dateNaissance) : ''); add('À', a.lieuNaissance); add('Sexe', a.sexe);
+      }
+      add('Adresse', adresseOf(a));
+      add('Téléphone', a.telephone); add('E-mail', a.email);
+      add('Véhicule', [s.marque, s.modele].filter(Boolean).join(' ') + (s.plaque ? ' · ' + s.plaque : ''));
+      if (s.prix) add('Prix demandé', euro(s.prix));
+      add('Reçu le', dnum(s.receivedAt));
+      const doss = dossierOf(s.vehiculeId);
+      const ov = document.createElement('div');
+      ov.id = 'arch-detail-ov';
+      ov.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(8,15,30,.55);display:flex;align-items:center;justify-content:center;padding:16px';
+      ov.innerHTML = '<div style="background:var(--fp-surface,#fff);color:var(--fp-text,#0b1220);border-radius:16px;max-width:480px;width:100%;max-height:90vh;overflow:auto;box-shadow:0 24px 60px -20px rgba(0,0,0,.5)">'
+        + '<div style="padding:15px 18px;border-bottom:1px solid var(--fp-border);display:flex;align-items:center;justify-content:space-between;gap:10px;position:sticky;top:0;background:var(--fp-surface,#fff)">'
+          + '<b style="font-size:1.02rem">🧾 Demande d\'achat</b>'
+          + '<button type="button" id="arch-x" style="background:none;border:none;font-size:1.5rem;line-height:1;cursor:pointer;color:var(--fp-muted)">×</button>'
+        + '</div>'
+        + '<div style="padding:16px 18px">'
+          + '<div style="font-size:.95rem">' + rowsHtml.join('') + '</div>'
+          + '<div style="margin-top:14px">'
+            + '<label style="font-size:.72rem;font-weight:800;color:var(--fp-muted);text-transform:uppercase;letter-spacing:.03em">📁 Dossier de vente (lien Drive — où ranger le Cerfa)</label>'
+            + '<div style="display:flex;gap:6px;margin-top:5px">'
+              + '<input id="arch-doss-input" type="url" placeholder="https://drive.google.com/drive/folders/…" value="' + esc(doss) + '" style="flex:1;padding:9px 11px;border:1px solid var(--fp-border);border-radius:10px;background:var(--fp-bg,#fff);color:inherit;font-size:.88rem">'
+              + '<button type="button" id="arch-doss-save" class="btn btn-dark !text-xs" style="padding:0 14px">Enregistrer</button>'
+            + '</div>'
+            + (doss ? '<a href="' + esc(doss) + '" target="_blank" rel="noopener" style="display:inline-block;margin-top:7px;color:var(--fp-accent);font-weight:700;font-size:.82rem">🔗 Ouvrir le dossier</a>' : '')
+          + '</div>'
+          + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px">'
+            + '<button type="button" id="arch-contact2" class="btn btn-outline !text-sm" style="flex:1;min-width:130px"><i data-lucide="send" class="w-4 h-4"></i> Recontacter</button>'
+            + '<button type="button" id="arch-toggle2" class="btn ' + (s.statut === 'archive' ? 'btn-outline' : 'btn-dark') + ' !text-sm" style="flex:1;min-width:130px">' + (s.statut === 'archive' ? 'Rouvrir' : 'Classer comme traitée') + '</button>'
+          + '</div>'
+        + '</div>'
+      + '</div>';
+      document.body.appendChild(ov);
+      if (window.lucide) lucide.createIcons();
+      const close = () => ov.remove();
+      ov.addEventListener('click', e => { if (e.target === ov) close(); });
+      ov.querySelector('#arch-x').addEventListener('click', close);
+      ov.querySelector('#arch-doss-save').addEventListener('click', () => { setDossier(s.vehiculeId, ov.querySelector('#arch-doss-input').value); if (FP.toast) FP.toast('✓ Dossier enregistré'); close(); render(); });
+      ov.querySelector('#arch-contact2').addEventListener('click', () => { close(); contactBuyer(s); });
+      ov.querySelector('#arch-toggle2').addEventListener('click', async () => { close(); await toggleStatut(s); });
+      // Marque la demande comme VUE (éteint la pastille) à l'ouverture du détail.
+      try { oa.markSeen(); if (FP.refreshDeclCondBadge) FP.refreshDeclCondBadge(); } catch (e) {}
+    }
+    window.__archOpen = openDetail;
+
+    // ---- Recontacter l'acheteur (SMS + WhatsApp + E-mail — source unique FP.msg.open) ----
+    function contactBuyer(s){
+      const a = s.acheteur || {}; const oa = OA();
+      const veh = [s.marque, s.modele].filter(Boolean).join(' ') || 'le véhicule';
+      const texte = 'Bonjour ' + (oa.nomAcheteur(s)) + ',\n\nSuite à votre demande concernant ' + veh + (s.plaque ? ' (' + s.plaque + ')' : '') + ', je reviens vers vous.\n\nCordialement,';
+      if (window.FP && FP.msg && FP.msg.open) {
+        FP.msg.open({ nom: oa.nomAcheteur(s), phone: a.telephone || '', email: a.email || '', title: 'Recontacter ' + oa.nomAcheteur(s), emailSubject: 'Votre demande — ' + veh, text: texte });
+      } else if (a.email) { location.href = 'mailto:' + a.email; }
+    }
+
+    // ---- Classer / rouvrir une demande ----
+    async function toggleStatut(s){
+      const oa = OA(); if (!oa) return;
+      const next = s.statut === 'archive' ? 'recu' : 'archive';
+      const r = await oa.setStatut(s.id, next);
+      if (r && r.error) { if (FP.notifyError) FP.notifyError('Échec — réessaie.'); return; }
+      if (FP.toast) FP.toast(next === 'archive' ? '✓ Demande classée' : '↩ Demande rouverte');
+      render();
+    }
+
+    // ---- Délégation des clics sur la liste ----
+    const host = $('arch-list');
+    if (host) host.addEventListener('click', async (e) => {
+      const d = e.target.closest('[data-arch-detail]'); if (d) { openDetail(d.getAttribute('data-arch-detail')); return; }
+      const c = e.target.closest('[data-arch-contact]'); if (c) { const s = (OA()._submissions || []).find(x => x && x.id === c.getAttribute('data-arch-contact')); if (s) contactBuyer(s); return; }
+      const dd = e.target.closest('[data-arch-dossier]'); if (dd) { const s = (OA()._submissions || []).find(x => x && x.id === dd.getAttribute('data-arch-dossier')); if (s) openDetail(s.id); return; }
+      const t = e.target.closest('[data-arch-toggle]'); if (t) { const s = (OA()._submissions || []).find(x => x && x.id === t.getAttribute('data-arch-toggle')); if (s) await toggleStatut(s); return; }
+    });
+
+    // ---- Filtres ----
+    const bind = (id, ev, fn) => { const el = $(id); if (el) el.addEventListener(ev, fn); };
+    bind('arch-search', 'input', (e) => { state.search = e.target.value || ''; render(); });
+    bind('arch-f-type', 'change', (e) => { state.type = e.target.value; render(); });
+    bind('arch-f-statut', 'change', (e) => { state.statut = e.target.value; render(); });
+    bind('arch-sort', 'change', (e) => { state.sort = e.target.value; render(); });
+    // Bouton « ↺ Réinitialiser » (règle plateforme : FP.filterResetButton).
+    try {
+      if (window.FP && FP.filterResetButton) FP.filterResetButton(document.getElementById('arch-filters'), { onReset: () => {
+        state.search = ''; state.type = 'all'; state.statut = 'actives'; state.sort = 'date';
+        const se = $('arch-search'); if (se) se.value = ''; const ft = $('arch-f-type'); if (ft) ft.value = 'all';
+        const fs = $('arch-f-statut'); if (fs) fs.value = 'actives'; const so = $('arch-sort'); if (so) so.value = 'date';
+        render();
+      } });
+    } catch (e) {}
+
+    // Re-render quand les données serveur arrivent (si on est sur l'onglet Archive).
+    document.addEventListener('fp:data-ready', () => { try { if (isArchiveTab() && OA()) { OA().load().then(() => { if (isArchiveTab()) render(); }); } } catch (e) {} });
+    // Premier rendu si on ouvre directement sur Archive.
+    try { if (isArchiveTab()) render(); } catch (e) {}
+  })();
+
   { const bl = document.getElementById('ctab-leasing'), ba = document.getElementById('ctab-assurance');
     if (bl) bl.addEventListener('click', () => switchContratTab('leasing'));
     if (ba) ba.addEventListener('click', () => switchContratTab('assurance'));
     { const bc = document.getElementById('ctab-cadre'); if (bc) bc.addEventListener('click', () => switchContratTab('cadre')); }
-    // Ouverture : 1) ?tab=… (lien direct sidebar) ; 2) dernier onglet ; 3) Leasing.
-    let _ct = ''; try { _ct = new URLSearchParams(location.search).get('tab') || ''; } catch (e) {}
+    { const bar = document.getElementById('ctab-archive'); if (bar) bar.addEventListener('click', () => switchContratTab('archive')); }
+    // Ouverture : 1) ?tab= / ?ctab= (lien direct sidebar ou alerte) ; 2) dernier onglet ; 3) Leasing.
+    let _ct = ''; try { const _q = new URLSearchParams(location.search); _ct = _q.get('tab') || _q.get('ctab') || ''; } catch (e) {}
     if (_ct === 'localease') _ct = 'leasing';
     if (!CONTRAT_TABS[_ct]) { try { _ct = (FP.lastTab && FP.lastTab.get('contrats', 'leasing')) || 'leasing'; } catch (e) { _ct = 'leasing'; } }
-    switchContratTab(CONTRAT_TABS[_ct] ? _ct : 'leasing'); }
+    switchContratTab(CONTRAT_TABS[_ct] ? _ct : 'leasing');
+    // Lien d'alerte « demande d'achat reçue » : ?ctab=archive&offre=<id> → ouvre le détail de la demande.
+    try { const _of = new URLSearchParams(location.search).get('offre'); if (_of && _ct === 'archive') setTimeout(() => { try { if (window.__archOpen) window.__archOpen(_of); } catch (e) {} }, 400); } catch (e) {} }
 
   // ===== Contrats LLD (Location Longue Durée) saisis à la main — tous loueurs =====
   // Prompt de lecture automatique d'une offre/contrat LLD (générique, tous loueurs)
