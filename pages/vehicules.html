@@ -7242,6 +7242,44 @@
   openVehFromUrl();
   document.addEventListener('fp:data-ready', openVehFromUrl); // si la fiche est demandée avant le chargement live
 
+  // Ouverture d'une CHECKLIST (entrée flotte / remise / reprise / cession) via l'URL (?checklist=CAT),
+  // ex : depuis les raccourcis du tableau de bord → on demande d'abord POUR QUEL VÉHICULE, puis on ouvre.
+  let _clParamDone = false;
+  function openChecklistFromUrl() {
+    if (_clParamDone) return;
+    const cat = new URLSearchParams(window.location.search).get('checklist');
+    if (!cat || !(window.FP && FP.CHECKLIST_CATS) || !FP.CHECKLIST_CATS.some(c => c.key === cat)) return;
+    if (!data.vehicules || !data.vehicules.length) return; // attendre les données (relancé sur fp:data-ready)
+    _clParamDone = true;
+    pickVehicleThenChecklist(cat);
+  }
+  function pickVehicleThenChecklist(cat) {
+    const lbl = (FP.checklist && FP.checklist.catLabel) ? FP.checklist.catLabel(cat) : 'Checklist';
+    const vehs = (data.vehicules || []).filter(v => !(FP.estVendu && FP.estVendu(v)))
+      .sort((a, b) => String(a.immat || '').localeCompare(String(b.immat || '')));
+    const ov = document.createElement('div');
+    ov.className = 'modal-backdrop open'; ov.style.zIndex = '100000';
+    ov.innerHTML = `<div class="modal p-6" style="max-width:420px">
+      <div class="flex justify-between items-center mb-3"><h2 class="text-lg font-extrabold flex items-center gap-2">${FP.esc(lbl)}</h2><button class="p-2 hover:bg-slate-100 rounded-lg" data-x><i data-lucide="x" class="w-5 h-5"></i></button></div>
+      <p class="text-sm text-slate-600 mb-2">Pour quel véhicule ?</p>
+      <select id="cl-pick-veh" class="field-input w-full"><option value="">— Choisir un véhicule —</option>${vehs.map(v => `<option value="${FP.esc(v.id)}">${FP.esc((v.immat || '') + ' · ' + ((v.marque || '') + ' ' + (v.modele || '')).trim())}${(v.chauffeur && v.chauffeur !== '—') ? ' — ' + FP.esc(v.chauffeur) : ''}</option>`).join('')}</select>
+      <div class="flex gap-2 pt-4"><button class="btn btn-outline flex-1 justify-center" data-x>Annuler</button><button class="btn btn-dark flex-1 justify-center" id="cl-pick-ok"><i data-lucide="check" class="w-4 h-4"></i> Ouvrir la checklist</button></div>
+    </div>`;
+    document.body.appendChild(ov);
+    if (window.lucide) lucide.createIcons();
+    try { if (FP.searchSelect) FP.searchSelect(ov.querySelector('#cl-pick-veh'), { placeholder: 'Rechercher un véhicule…' }); } catch (e) {}
+    const close = () => { try { ov.remove(); } catch (e) {} try { const u = new URL(location.href); u.searchParams.delete('checklist'); history.replaceState({}, '', u); } catch (e) {} };
+    ov.addEventListener('click', e => { if (e.target === ov || e.target.closest('[data-x]')) close(); });
+    ov.querySelector('#cl-pick-ok').addEventListener('click', () => {
+      const id = (ov.querySelector('#cl-pick-veh') || {}).value;
+      const v = (data.vehicules || []).find(x => String(x.id) === String(id));
+      if (!v) { if (FP.toast) FP.toast('Choisis d’abord un véhicule'); return; }
+      close(); openChecklist(cat, v);
+    });
+  }
+  openChecklistFromUrl();
+  document.addEventListener('fp:data-ready', openChecklistFromUrl);
+
   // Filtrage direct par groupe via l'URL (?groupe=KEY), ex : depuis le graphe du tableau de bord
   (function applyGroupeFromUrl() {
     const g = new URLSearchParams(window.location.search).get('groupe');
