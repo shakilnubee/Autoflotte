@@ -12534,9 +12534,10 @@ FP.edl = {
             if (FP.affectations.reanchorCurrent) FP.affectations.reanchorCurrent(veh.id);
           }
         } catch (e) {}
-        // Le km de l'état des lieux = relevé odomètre réel → met à jour le KM du véhicule via l'écrivain
-        // CANONIQUE FP.setVehKm (garde « ne peut que monter » comparée à FP.kmActuel, persistance unique).
-        try { if (FP.setVehKm) FP.setVehKm(veh, data.km); } catch (e) {}
+        // ⚠️ L'état des lieux ne fait que LIRE / ENREGISTRER le km (inspection datée + ré-ancrage de la
+        // période ci-dessus, pour l'historique). Il NE réécrit PAS l'odomètre du véhicule : sinon il repassait
+        // par-dessus les corrections manuelles de km (demande explicite de l'utilisateur). La mise à jour de
+        // l'odomètre reste le fait des actions dédiées (relevé km, correction manuelle, remise/cession).
         if (mode === 'dl') { doc.save(fname); btn.disabled = false; btn.innerHTML = old; ov._busy = false; return; }
         // Enregistre le PDF dans les Documents du véhicule + envoie par e-mail.
         const blob = doc.output('blob');
