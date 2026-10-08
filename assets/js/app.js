@@ -13193,13 +13193,26 @@ FP.offreAchat = {
 // dépose des documents (Cerfa de cession, facture de vente, photos…) et on les retrouve AUSSI dans la fiche
 // → une seule source, rien en double. Modèle de rangement façon Drive (liste de fichiers + catégories).
 FP.docsFolder = {
-  // Catégories proposées à l'ajout (sous-ensemble des DOC_TYPES de la fiche → cohérent partout).
+  // Catégories (mêmes clés que les DOC_TYPES de la fiche → cohérent partout).
+  // ⚠️ Facture d'ACHAT (quand on a acheté le véhicule) ≠ Facture de VENTE (celle qu'on émet à l'acheteur).
+  // La CARTE GRISE BARRÉE (remise à l'acheteur) ≠ la carte grise normale. Le CODE DE CESSION change à
+  // chaque vente → on peut en ajouter un nouveau (nom libre pour distinguer l'ancien du nouveau).
   TYPES: [
-    { key: 'code-cession',   label: 'Certificat / code de cession (Cerfa)' },
-    { key: 'facture-achat',  label: 'Facture de vente' },
-    { key: 'etat-des-lieux', label: 'État des lieux' },
-    { key: 'carte-grise',    label: 'Carte grise' },
-    { key: 'autre',          label: 'Autre document' },
+    { key: 'code-cession',       label: 'Certificat / code de cession' },
+    { key: 'facture-vente',      label: "Facture de vente (à l'acheteur)" },
+    { key: 'facture-achat',      label: "Facture d'achat (du véhicule)" },
+    { key: 'carte-grise-barree', label: "Carte grise barrée (remise à l'acheteur)" },
+    { key: 'etat-des-lieux',     label: 'État des lieux' },
+    { key: 'carte-grise',        label: 'Carte grise' },
+    { key: 'autre',              label: 'Autre document' },
+  ],
+  // CHECKLIST des documents d'une VENTE : chaque ligne se coche ✓ dès qu'un PDF est joint → suivi complet.
+  CHECKLIST: [
+    { key: 'facture-vente',      label: "Facture de vente (à l'acheteur)" },
+    { key: 'facture-achat',      label: "Facture d'achat (du véhicule)" },
+    { key: 'code-cession',       label: 'Certificat / code de cession (le nouveau)' },
+    { key: 'carte-grise-barree', label: 'Carte grise barrée' },
+    { key: 'etat-des-lieux',     label: 'État des lieux de sortie' },
   ],
   _typeLabel(k) { const t = this.TYPES.find(x => x.key === k); return t ? t.label : (k || 'Document'); },
   async _list(vehId) {
@@ -13211,81 +13224,113 @@ FP.docsFolder = {
     try { let u = url; if (FP.signedScanUrl && /\/scans\//.test(String(url || ''))) u = await FP.signedScanUrl(url, 604800); window.open(u || url, '_blank', 'noopener'); }
     catch (e) { window.open(url, '_blank', 'noopener'); }
   },
-  // Ouvre le dossier d'un véhicule. opts.title / opts.defaultType facultatifs.
+  // Ouvre le dossier d'un véhicule (checklist de documents de vente). opts.title facultatif.
   open(veh, opts) {
     opts = opts || {};
     if (!veh || !veh.id) return;
     const esc = FP.esc || (x => String(x == null ? '' : x));
+    const self = this;
     const title = opts.title || ('📁 Dossier de vente — ' + (veh.immat || ''));
     const old = document.getElementById('fp-docs-ov'); if (old) old.remove();
     const ov = document.createElement('div');
     ov.id = 'fp-docs-ov';
     ov.style.cssText = 'position:fixed;inset:0;z-index:100001;background:rgba(8,15,30,.55);display:flex;align-items:center;justify-content:center;padding:16px';
-    const optionsHtml = this.TYPES.map(t => '<option value="' + t.key + '"' + (t.key === (opts.defaultType || 'code-cession') ? ' selected' : '') + '>' + esc(t.label) + '</option>').join('');
-    ov.innerHTML = '<div style="background:var(--fp-surface,#fff);color:var(--fp-text,#0b1220);border-radius:16px;max-width:520px;width:100%;max-height:90vh;overflow:auto;box-shadow:0 24px 60px -20px rgba(0,0,0,.5)">'
+    const optionsHtml = this.TYPES.map(t => '<option value="' + t.key + '">' + esc(t.label) + '</option>').join('');
+    ov.innerHTML = '<div style="background:var(--fp-surface,#fff);color:var(--fp-text,#0b1220);border-radius:16px;max-width:540px;width:100%;max-height:90vh;overflow:auto;box-shadow:0 24px 60px -20px rgba(0,0,0,.5)">'
       + '<div style="padding:15px 18px;border-bottom:1px solid var(--fp-border,#e5e7eb);display:flex;align-items:center;justify-content:space-between;gap:10px;position:sticky;top:0;background:var(--fp-surface,#fff)">'
         + '<b style="font-size:1.02rem">' + esc(title) + '</b>'
         + '<button type="button" id="fp-docs-x" style="background:none;border:none;font-size:1.5rem;line-height:1;cursor:pointer;color:var(--fp-muted,#64748b)">×</button>'
       + '</div>'
       + '<div style="padding:16px 18px">'
-        + '<p style="font-size:.8rem;color:var(--fp-muted,#64748b);margin:0 0 12px">Dépose ici les documents de la vente (Cerfa de cession, facture…). Ils sont rangés dans le véhicule et se retrouvent aussi dans sa fiche → <b>Documents</b>. Une seule source.</p>'
-        + '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:12px">'
-          + '<select id="fp-docs-type" style="flex:1;min-width:180px;padding:9px 11px;border:1px solid var(--fp-border,#e5e7eb);border-radius:10px;background:var(--fp-bg,#fff);color:inherit;font-size:.9rem">' + optionsHtml + '</select>'
-          + '<button type="button" id="fp-docs-add" class="btn btn-dark" style="padding:9px 16px;font-size:.85rem;white-space:nowrap">📎 Ajouter un document</button>'
-          + '<input id="fp-docs-file" type="file" accept="application/pdf,image/*" style="display:none">'
-        + '</div>'
+        + '<div id="fp-docs-suivi" style="font-size:.78rem;font-weight:800;color:var(--fp-accent,#F97316);margin-bottom:4px"></div>'
+        + '<p style="font-size:.78rem;color:var(--fp-muted,#64748b);margin:0 0 12px">Coche chaque document en joignant son <b>PDF</b> (ou photo). Tout est rangé dans le véhicule et se retrouve aussi dans sa fiche → <b>Documents</b>. Une seule source.</p>'
         + '<div id="fp-docs-list"><p style="font-size:.85rem;color:var(--fp-muted,#64748b);text-align:center;padding:16px 0">Chargement…</p></div>'
+        + '<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--fp-border,#e5e7eb)">'
+          + '<div style="font-size:.72rem;font-weight:700;color:var(--fp-muted,#64748b);margin-bottom:6px">Ajouter un autre document</div>'
+          + '<div style="display:flex;gap:6px;flex-wrap:wrap">'
+            + '<select id="fp-docs-type" style="flex:1;min-width:150px;padding:9px 11px;border:1px solid var(--fp-border,#e5e7eb);border-radius:10px;background:var(--fp-bg,#fff);color:inherit;font-size:.88rem">' + optionsHtml + '</select>'
+            + '<input id="fp-docs-name" placeholder="Nom (facultatif)" style="flex:1;min-width:150px;padding:9px 11px;border:1px solid var(--fp-border,#e5e7eb);border-radius:10px;background:var(--fp-bg,#fff);color:inherit;font-size:.88rem">'
+          + '</div>'
+          + '<button type="button" id="fp-docs-add" class="btn btn-outline" style="width:100%;margin-top:6px;padding:9px;font-size:.85rem">📎 Ajouter ce document</button>'
+        + '</div>'
+        + '<input id="fp-docs-file" type="file" accept="application/pdf,image/*" style="display:none">'
       + '</div>'
     + '</div>';
     document.body.appendChild(ov);
-    const self = this;
     const q = s => ov.querySelector(s);
     const close = () => ov.remove();
     ov.addEventListener('click', e => { if (e.target === ov) close(); });
     q('#fp-docs-x').addEventListener('click', close);
     let docs = [];
-    function renderList() {
-      const box = q('#fp-docs-list'); if (!box) return;
-      if (!docs.length) { box.innerHTML = '<div style="text-align:center;padding:22px 0;color:var(--fp-muted,#64748b)"><div style="font-size:1.8rem">🗂️</div><p style="font-size:.85rem;margin:.4rem 0 0">Aucun document pour l\'instant.<br>Ajoute le Cerfa de cession, une facture…</p></div>'; return; }
-      box.innerHTML = docs.map(d => '<div style="display:flex;align-items:center;gap:10px;padding:9px 11px;border:1px solid var(--fp-border,#e5e7eb);border-radius:10px;margin-bottom:7px;background:var(--fp-bg,#f8fafc)">'
-        + '<span style="font-size:1.1rem;flex:none">📄</span>'
-        + '<div style="flex:1;min-width:0">'
-          + '<div style="font-weight:700;font-size:.88rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(d.label || self._typeLabel(d.type)) + '</div>'
-          + '<div style="font-size:.72rem;color:var(--fp-muted,#64748b)">' + esc(self._typeLabel(d.type)) + '</div>'
+    let pending = { type: 'autre', name: '' };   // prochaine pièce à téléverser (ligne cliquée ou ajout libre)
+    const fileInp = q('#fp-docs-file');
+
+    function docRow(d) {
+      return '<div style="display:flex;align-items:center;gap:8px;margin-top:5px">'
+        + '<span style="font-size:.95rem;flex:none">📄</span>'
+        + '<div style="flex:1;min-width:0;font-size:.83rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(d.label || self._typeLabel(d.type)) + '</div>'
+        + '<button type="button" class="fp-docs-open" data-url="' + esc(d.url || '') + '" style="background:none;border:1px solid var(--fp-border,#e5e7eb);border-radius:7px;padding:3px 9px;font-size:.72rem;font-weight:700;cursor:pointer;color:var(--fp-primary,#0F1E3D)">Ouvrir</button>'
+        + '<button type="button" class="fp-docs-del" data-id="' + esc(d.id) + '" title="Supprimer" style="background:none;border:none;color:#dc2626;font-size:.95rem;cursor:pointer;flex:none">🗑</button>'
+      + '</div>';
+    }
+    function lineBlock(item) {
+      const mine = docs.filter(d => d.type === item.key);
+      const ok = mine.length > 0;
+      const dot = ok
+        ? '<span style="flex:none;width:20px;height:20px;border-radius:9999px;background:#16a34a;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:.8rem">✓</span>'
+        : '<span style="flex:none;width:20px;height:20px;border-radius:9999px;border:2px solid var(--fp-border,#cbd5e1);display:inline-block"></span>';
+      return '<div style="border:1px solid var(--fp-border,#e5e7eb);border-radius:12px;padding:10px 12px;margin-bottom:8px;background:' + (ok ? 'rgba(22,163,74,.06)' : 'var(--fp-bg,#f8fafc)') + '">'
+        + '<div style="display:flex;align-items:center;gap:9px">'
+          + dot
+          + '<div style="flex:1;min-width:0;font-weight:700;font-size:.9rem">' + esc(item.label) + '</div>'
+          + '<button type="button" class="fp-docs-addline" data-type="' + esc(item.key) + '" style="flex:none;background:none;border:1px solid var(--fp-border,#e5e7eb);border-radius:8px;padding:4px 10px;font-size:.74rem;font-weight:700;cursor:pointer;color:var(--fp-primary,#0F1E3D)">📎 ' + (ok ? 'Ajouter' : 'Joindre') + '</button>'
         + '</div>'
-        + '<button type="button" class="fp-docs-open" data-url="' + esc(d.url || '') + '" style="background:none;border:1px solid var(--fp-border,#e5e7eb);border-radius:8px;padding:5px 10px;font-size:.76rem;font-weight:700;cursor:pointer;color:var(--fp-primary,#0F1E3D)">Ouvrir</button>'
-        + '<button type="button" class="fp-docs-del" data-id="' + esc(d.id) + '" title="Supprimer" style="background:none;border:none;color:#dc2626;font-size:1rem;cursor:pointer;flex:none">🗑</button>'
-      + '</div>').join('');
+        + mine.map(docRow).join('')
+      + '</div>';
+    }
+    function renderAll() {
+      const box = q('#fp-docs-list'); if (!box) return;
+      const checklistKeys = self.CHECKLIST.map(c => c.key);
+      const done = self.CHECKLIST.filter(c => docs.some(d => d.type === c.key)).length;
+      const suivi = q('#fp-docs-suivi'); if (suivi) suivi.textContent = 'Suivi : ' + done + ' / ' + self.CHECKLIST.length + ' documents clés';
+      let html = self.CHECKLIST.map(lineBlock).join('');
+      const autres = docs.filter(d => checklistKeys.indexOf(d.type) < 0);
+      if (autres.length) {
+        html += '<div style="margin-top:10px;font-size:.72rem;font-weight:700;color:var(--fp-muted,#64748b)">Autres documents</div>'
+          + '<div style="border:1px solid var(--fp-border,#e5e7eb);border-radius:12px;padding:8px 12px;margin-top:5px;background:var(--fp-bg,#f8fafc)">' + autres.map(docRow).join('') + '</div>';
+      }
+      box.innerHTML = html;
       box.querySelectorAll('.fp-docs-open').forEach(b => b.addEventListener('click', () => self._open(b.getAttribute('data-url'))));
       box.querySelectorAll('.fp-docs-del').forEach(b => b.addEventListener('click', async () => {
         const id = b.getAttribute('data-id');
         const ok = FP.confirm ? await FP.confirm('Supprimer ce document ?') : confirm('Supprimer ce document ?');
         if (!ok) return;
         try { if (FP.persist && FP.persist.available && FP.persist.available()) FP.persist.delete('documents', id); else if (FP.db && FP.db.delete) await FP.db.delete('documents', id); } catch (e) {}
-        docs = docs.filter(x => x.id !== id); renderList();
+        docs = docs.filter(x => x.id !== id); renderAll();
         if (FP.toast) FP.toast('Document supprimé');
       }));
+      box.querySelectorAll('.fp-docs-addline').forEach(b => b.addEventListener('click', () => { pending = { type: b.getAttribute('data-type'), name: '' }; fileInp.click(); }));
     }
-    this._list(veh.id).then(list => { docs = list || []; renderList(); });
-    // Ajout d'un document (upload → table documents, même format que la fiche).
-    const addBtn = q('#fp-docs-add'), fileInp = q('#fp-docs-file');
-    if (addBtn && fileInp) {
-      addBtn.addEventListener('click', () => fileInp.click());
-      fileInp.addEventListener('change', async (e) => {
-        const f = e.target.files && e.target.files[0]; e.target.value = ''; if (!f) return;
-        const type = (q('#fp-docs-type') || {}).value || 'code-cession';
-        const o = addBtn.textContent; addBtn.disabled = true; addBtn.textContent = '⏳ Envoi…';
-        try {
-          const url = await FP.uploadScan(f, 'documents/' + (FP.normImmat ? FP.normImmat(veh.immat || 'veh') : 'veh'));
-          if (!url) throw new Error('upload vide');
-          const doc = { id: 'D' + Date.now().toString(36), vehiculeId: veh.id, type, label: self._typeLabel(type), url, driveId: self._driveId(url) };
-          if (FP.persist && FP.persist.available && FP.persist.available()) FP.persist.insert('documents', doc); else if (FP.db && FP.db.insert) await FP.db.insert('documents', doc);
-          docs.push(doc); renderList();
-          if (FP.toast) FP.toast('✓ Document ajouté');
-        } catch (err) { if (FP.notifyError) FP.notifyError('Échec de l\'ajout du document'); else alert('Échec : ' + (err && err.message || err)); }
-        addBtn.disabled = false; addBtn.textContent = o;
-      });
-    }
+    this._list(veh.id).then(list => { docs = list || []; renderAll(); });
+
+    // Upload (ligne de la checklist OU ajout libre) → table documents, même format que la fiche.
+    fileInp.addEventListener('change', async (e) => {
+      const f = e.target.files && e.target.files[0]; e.target.value = ''; if (!f) return;
+      const type = pending.type || 'autre';
+      const name = (pending.name || '').trim();
+      try {
+        const url = await FP.uploadScan(f, 'documents/' + (FP.normImmat ? FP.normImmat(veh.immat || 'veh') : 'veh'));
+        if (!url) throw new Error('upload vide');
+        const doc = { id: 'D' + Date.now().toString(36), vehiculeId: veh.id, type, label: name || self._typeLabel(type), url, driveId: self._driveId(url) };
+        if (FP.persist && FP.persist.available && FP.persist.available()) FP.persist.insert('documents', doc); else if (FP.db && FP.db.insert) await FP.db.insert('documents', doc);
+        docs.push(doc); renderAll();
+        const nm = q('#fp-docs-name'); if (nm) nm.value = '';
+        if (FP.toast) FP.toast('✓ Document ajouté');
+      } catch (err) { if (FP.notifyError) FP.notifyError('Échec de l\'ajout du document'); else alert('Échec : ' + (err && err.message || err)); }
+    });
+    // Ajout libre (type choisi + nom facultatif).
+    const addBtn = q('#fp-docs-add');
+    if (addBtn) addBtn.addEventListener('click', () => { pending = { type: (q('#fp-docs-type') || {}).value || 'autre', name: (q('#fp-docs-name') || {}).value || '' }; fileInp.click(); });
   },
 };
 
