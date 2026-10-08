@@ -12320,7 +12320,14 @@ FP.edl = {
     const ta = (id, ph) => `<textarea id="${id}" rows="2" placeholder="${esc(ph || 'Commentaires…')}" style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:6px 9px;font-size:12.5px;margin-top:4px"></textarea>`;
     const ov = document.createElement('div');
     ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,30,61,.55);z-index:10000;display:flex;align-items:center;justify-content:center;padding:14px';
-    ov.innerHTML = `<div style="background:#fff;border-radius:16px;max-width:780px;width:100%;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 60px -20px rgba(0,0,0,.5)">
+    ov.innerHTML = `<style>
+      /* Le formulaire d'état des lieux est construit en styles INLINE (fond blanc attendu). En mode
+         SOMBRE mobile, le navigateur rendait les champs sans fond explicite en NOIR (texte illisible).
+         On force donc un rendu CLAIR + fond blanc + texte foncé sur TOUS les contrôles de ce modal. */
+      .fp-edl-card{color-scheme:light}
+      .fp-edl-card input:not([type=checkbox]):not([type=radio]),.fp-edl-card select,.fp-edl-card textarea{background:#fff!important;color:#0f1e3d!important;-webkit-text-fill-color:#0f1e3d}
+      .fp-edl-card input::placeholder,.fp-edl-card textarea::placeholder{color:#94a3b8!important;-webkit-text-fill-color:#94a3b8;opacity:1}
+    </style><div class="fp-edl-card" style="background:#fff;color-scheme:light;border-radius:16px;max-width:780px;width:100%;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 60px -20px rgba(0,0,0,.5)">
       <div style="padding:14px 18px;border-bottom:1px solid #eef2f7;display:flex;align-items:center;gap:10px">
         <div style="font-size:16px;font-weight:800;color:#0f1e3d">📋 État des lieux du véhicule</div>
         <button type="button" data-edl-x style="margin-left:auto;border:none;background:none;font-size:22px;line-height:1;cursor:pointer;color:#64748b">×</button>
@@ -12348,7 +12355,8 @@ FP.edl = {
         ${ta('edl-com-acc', 'Commentaires (accessoires)…')}
         ${sec('Photos de l\'état du véhicule')}
         <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
-          <label style="cursor:pointer;border:1px solid #e2e8f0;border-radius:8px;padding:6px 12px;font-size:12.5px;color:#0f1e3d;background:#fff;display:inline-flex;gap:6px;align-items:center">📷 Ajouter des photos<input type="file" data-edl-photos accept="image/*" multiple capture="environment" style="display:none"></label>
+          <label style="cursor:pointer;border:1px solid #e2e8f0;border-radius:8px;padding:6px 12px;font-size:12.5px;color:#0f1e3d;background:#fff;display:inline-flex;gap:6px;align-items:center">📷 Prendre une photo<input type="file" data-edl-photos accept="image/*" multiple capture="environment" style="display:none"></label>
+          <label style="cursor:pointer;border:1px solid #e2e8f0;border-radius:8px;padding:6px 12px;font-size:12.5px;color:#0f1e3d;background:#fff;display:inline-flex;gap:6px;align-items:center">🖼️ Galerie / fichiers<input type="file" data-edl-photos accept="image/*" multiple style="display:none"></label>
           <span data-edl-existing></span>
           <span data-edl-photocount style="font-size:12px;color:#94a3b8">Recommandé à la restitution (carrosserie, intérieur, dommages…). Elles sont jointes au PDF et rangées dans la fiche.</span>
         </div>
@@ -12400,7 +12408,7 @@ FP.edl = {
     // --- Photos (jointes au PDF + enregistrées dans la fiche « État des lieux ») ---
     const edlPhotos = [];
     const edlPhotoSrc = []; // parallèle à edlPhotos : URL d'origine si la photo a été « reprise » (déjà un doc), sinon null
-    const photoIn = ov.querySelector('[data-edl-photos]');
+    const photoIns = ov.querySelectorAll('[data-edl-photos]'); // 2 entrées : « Prendre une photo » (caméra) + « Galerie / fichiers »
     const thumbsBox = ov.querySelector('[data-edl-thumbs]');
     const pcount = ov.querySelector('[data-edl-photocount]');
     const renderThumbs = () => {
@@ -12419,7 +12427,7 @@ FP.edl = {
       }; img.onerror = () => res(r.result || null); img.src = r.result; };   // décodage impossible → fichier brut
       r.onerror = () => res(null); r.readAsDataURL(file);
     });
-    if (photoIn) photoIn.addEventListener('change', async e => {
+    const onPhotoPick = async e => {
       const files = Array.from(e.target.files || []); e.target.value = '';
       let failed = 0;
       for (const f of files) {
@@ -12432,7 +12440,9 @@ FP.edl = {
       renderThumbs();
       // Ne JAMAIS laisser tomber une photo en silence : on prévient si au moins une n'a pas pu être ajoutée.
       if (failed && FP.toast) FP.toast('⚠️ ' + failed + ' photo(s) non ajoutée(s) (format illisible) — réessaie ou change de format.');
-    });
+    };
+    // Les DEUX boutons (caméra + galerie) ACCUMULENT dans la même liste (même modèle que la fiche véhicule).
+    photoIns.forEach(inp => inp.addEventListener('change', onPhotoPick));
     if (thumbsBox) thumbsBox.addEventListener('click', e => { const b = e.target.closest('[data-edl-prm]'); if (b) { const _i = +b.getAttribute('data-edl-prm'); edlPhotos.splice(_i, 1); edlPhotoSrc.splice(_i, 1); renderThumbs(); } });
     // Récupère une image (URL Storage) → data URL (via URL signée + redimensionnement). Sert à
     // « reprendre » les photos DÉJÀ enregistrées dans la fiche (1er état des lieux, sans re-photographier).
