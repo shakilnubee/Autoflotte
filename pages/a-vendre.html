@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261008d">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261008e">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20261008d"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20261008e"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20261008d">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20261008e">
 <style>
   .pipeline { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; }
   .pipeline-col { background: #F8FAFC; border-radius: .85rem; padding: 1rem; min-height: 200px; }
@@ -172,8 +172,8 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20261008d"></script>
-<script src="../assets/js/supabase-client.js?v=20261008d"></script>
+<script src="../assets/js/vendor/supabase.js?v=20261008e"></script>
+<script src="../assets/js/supabase-client.js?v=20261008e"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -189,10 +189,10 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261008d"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261008e"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
-<script src="../assets/js/app.min.js?v=20261008d"></script>
+<script src="../assets/js/app.min.js?v=20261008e"></script>
 <script>
   lucide.createIcons();
   FP.loadVehicleOverrides();
@@ -261,7 +261,7 @@
                 <span class="price">${prixSugg ? FP.euro(prixSugg) : '—'}</span>
               </div>
               <div class="text-xs text-slate-600 mb-1">${FP.esc(v.marque)} ${FP.esc(v.modele)}</div>
-              <div class="text-xs text-slate-400">${FP.num(v.km)} km · ${FP.esc(v.chauffeur ? (FP.prenomAffiche ? FP.prenomAffiche(v.chauffeur) : v.chauffeur) : '—')}</div>
+              <div class="text-xs text-slate-400">${FP.num(FP.kmActuel ? FP.kmActuel(v) : v.km)} km · ${FP.esc(v.chauffeur ? (FP.prenomAffiche ? FP.prenomAffiche(v.chauffeur) : v.chauffeur) : '—')}</div>
               ${estim ? `<div class="text-xs mt-1" style="color:var(--fp-accent)" title="Estimation indicative : valeur d'achat, âge et kilométrage">💡 Cote estimée : <b>${FP.euro(estim)}</b></div>` : ''}
               <div class="qr-vente" data-qrv="${FP.esc(v.id)}" style="display:none"></div>
               <input type="number" class="price-input" data-field="prixVente" data-id="${v.id}" placeholder="Prix visé (€)" value="${v.prixVente || ''}" />
@@ -336,7 +336,17 @@
     if (!v) return;
     const patch = { [field]: value };
     if (field === 'pipelineStatut') {
-      if (value === 'vendu') { v.statut = 'vendu'; patch.statut = 'vendu'; if (v.immat && FP.archiveVehicleDocs) FP.archiveVehicleDocs(v.immat); }
+      if (value === 'vendu') {
+        v.statut = 'vendu'; patch.statut = 'vendu';
+        // PRIX DE VENTE RÉEL (comme la modale de cession) → « Encaissé » juste (sinon on comptait le prix VISÉ).
+        // On trace aussi la cession (vehCession) pour cohérence avec la fiche. Laisser vide = garder le prix visé.
+        try {
+          const ask = window.prompt('Prix de vente RÉEL de ' + (v.immat || 'ce véhicule') + ' (€) — laisse vide pour garder le prix visé :', v.prixVente || '');
+          if (ask !== null) { const n = parseInt(String(ask).replace(/[^\d]/g, ''), 10); if (Number.isFinite(n) && n > 0) { v.prixVente = n; patch.prixVente = n; } }
+        } catch (e) {}
+        try { const s = FP.settings.get(); s.vehCession = (s.vehCession && typeof s.vehCession === 'object') ? s.vehCession : {}; const prev = s.vehCession[v.id] || {}; s.vehCession[v.id] = { date: prev.date || new Date().toISOString().slice(0, 10), prix: (v.prixVente || null), acheteur: prev.acheteur || '', note: prev.note || '' }; FP.settings.save(s); } catch (e) {}
+        if (v.immat && FP.archiveVehicleDocs) FP.archiveVehicleDocs(v.immat);
+      }
       // Repasser d'un « Vendu » à une étape antérieure doit ANNULER le statut « vendu » global
       // (sinon pipelineOf le renvoie dans « Vendu » et le véhicule reste vendu partout).
       // On le remet « à vendre » pour qu'il reste dans le pipeline au lieu d'en disparaître.
