@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261008f">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261008g">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20261008f"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20261008g"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20261008f">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20261008g">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -770,8 +770,8 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20261008f"></script>
-<script src="../assets/js/supabase-client.js?v=20261008f"></script>
+<script src="../assets/js/vendor/supabase.js?v=20261008g"></script>
+<script src="../assets/js/supabase-client.js?v=20261008g"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -787,11 +787,11 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261008f"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261008g"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20261008f"></script>
+<script src="../assets/js/app.min.js?v=20261008g"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -3217,8 +3217,11 @@
         if (e.target.closest('#cc-veh-add')) {
           const sel = ov.querySelector('#cc-veh'); const im = sel && sel.value; if (im && !vehChips.includes(im)) { vehChips.push(im); renderChips(); } return;
         }
-        if (e.target.closest('#cc-pdf-btn')) { ov.querySelector('#cc-pdf-file').click(); return; }
       });
+      // Bouton « Joindre » : écouteur DIRECT (plus fiable que la délégation — l'icône SVG ou un re-render
+      // pouvait avaler le clic) → ouvre toujours le sélecteur de fichiers.
+      { const _jb = ov.querySelector('#cc-pdf-btn'), _ji = ov.querySelector('#cc-pdf-file');
+        if (_jb && _ji) _jb.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); _ji.click(); }); }
       // Changement de catégorie (dossier) d'un document → on re-range la liste.
       ov.addEventListener('change', (e) => {
         const cs = e.target.closest('[data-pdf-cat]'); if (!cs) return;
@@ -3230,13 +3233,29 @@
         const files = Array.from(fileList || []).filter(f => f && (/pdf/i.test(f.type || '') || /^image\//.test(f.type || '') || /\.pdf$/i.test(f.name || '')));
         const st = ov.querySelector('#cc-pdf-st'); if (!files.length) { if (st) st.textContent = '⚠️ Aucun PDF / image.'; return; }
         if (!FP.uploadScan) { if (st) st.textContent = '⚠️ Stockage indisponible.'; return; }
-        let ok = 0, ko = 0;
+        let ok = 0, ko = 0, firstFile = null;
         for (let k = 0; k < files.length; k++) {
           const f = files[k]; if (st) st.textContent = '⏳ Envoi… ' + (k + 1) + '/' + files.length;
-          try { const url = await FP.uploadScan(f, 'contrats-cadre'); if (url) { pdfs.push({ name: f.name || 'Document', url, cat: detectDocCat(f.name) }); ok++; renderPdfs(); } else ko++; }
+          try { const url = await FP.uploadScan(f, 'contrats-cadre'); if (url) { pdfs.push({ name: f.name || 'Document', url, cat: detectDocCat(f.name) }); ok++; if (!firstFile) firstFile = f; renderPdfs(); } else ko++; }
           catch (err) { console.error('[cadre pdf]', err); ko++; }
         }
         if (st) st.textContent = ok ? ('✓ ' + ok + ' document(s) ajouté(s)' + (ko ? ' · ' + ko + ' échec(s)' : '') + ' — rangés par catégorie') : '⚠️ Échec de l\'envoi.';
+        // 🔍 SCAN IA AUTOMATIQUE du 1er document déposé (comme les amendes) : lit sa couche texte + IA et
+        // remplit les champs ENCORE VIDES du formulaire (ne JAMAIS écraser une saisie — cf. fillEmptyFromScan).
+        if (ok && firstFile && FP.scanIA) {
+          try {
+            if (st) st.textContent = '🔍 Lecture IA du document…';
+            let pdfText = ''; try { pdfText = await contratPdfText(firstFile); } catch (e) {}
+            const prompt = (pdfText && pdfText.length > 40)
+              ? CADRE_PROMPT.concat(['', 'TEXTE EXTRAIT DU DOCUMENT (fait FOI — lis-le en priorité) :', pdfText.slice(0, 16000)])
+              : CADRE_PROMPT;
+            const fields = await FP.scanIA(firstFile, 'contrat-cadre', prompt, { maxTokens: 8192 });
+            const n = fillEmptyFromScan(fields);
+            if (st) st.textContent = (n > 0)
+              ? ('✓ ' + ok + ' document(s) · ' + n + ' champ(s) rempli(s) par l\'IA — vérifie puis Enregistre')
+              : ('✓ ' + ok + ' document(s) ajouté(s) — rangés par catégorie');
+          } catch (e) { console.warn('[cadre auto-scan]', e); }
+        }
       }
       ov.querySelector('#cc-pdf-file').addEventListener('change', (e) => { const fl = e.target.files; e.target.value = ''; uploadFiles(fl); });
       // Glisser-déposer un (ou plusieurs) fichier(s) directement sur la zone documents.
