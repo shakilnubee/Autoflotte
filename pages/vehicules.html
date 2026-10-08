@@ -881,6 +881,8 @@
     <p class="text-sm text-slate-600 mb-2" id="proc-sub"></p>
     <div id="proc-progress" class="text-xs font-semibold mb-2" style="color:var(--fp-primary)"></div>
     <div id="proc-checklist" class="text-sm space-y-1"></div>
+    <!-- Panneau de finalisation (reprise / cession) : rendu UNE fois (pas re-rendu à chaque case cochée). -->
+    <div id="proc-finalize" class="hidden"></div>
     <div class="flex gap-2 pt-4 items-center">
       <button type="button" class="btn btn-outline text-sm" id="proc-edit" title="Ajouter / retirer / renommer les cases (modèle commun à tous les véhicules)"><i data-lucide="pencil" class="w-4 h-4"></i> Modifier la liste</button>
       <button type="button" class="btn btn-dark flex-1 justify-center" id="proc-ok"><i data-lucide="check" class="w-4 h-4"></i> Terminé</button>
@@ -4240,8 +4242,96 @@
     if ($('proc-title')) $('proc-title').innerHTML = `<i data-lucide="${_procIcon[cat] || 'clipboard-list'}" class="w-5 h-5" style="color:var(--fp-accent)"></i> ${FP.esc(lbl)}`;
     if ($('proc-sub')) $('proc-sub').innerHTML = `<b>${FP.esc(v.immat || '')}</b>` + (v.chauffeur && v.chauffeur !== '—' ? ` · 👤 ${FP.esc(v.chauffeur)}` : '') + ' — coche au fur et à mesure.';
     renderProcBody();
+    renderFinalize(cat, v);   // panneau « Finaliser » (reprise / cession) — infos à enregistrer + bouton d'application
     $('proc-backdrop').classList.add('open');
     if (window.lucide) lucide.createIcons();
+  }
+  // Panneau de finalisation : visible UNIQUEMENT pour la reprise (restitution) et la cession (sortieFlotte).
+  // On y saisit les infos à enregistrer (km, date, nouveau conducteur / prix+acheteur, note) ; le bouton
+  // « Terminé » devient « Terminer la reprise / la cession » et applique le changement d'un coup.
+  function renderFinalize(cat, v) {
+    const box = $('proc-finalize'); const okBtn = $('proc-ok'); if (!box) return;
+    const esc = FP.esc || (s => String(s == null ? '' : s));
+    if (cat !== 'restitution' && cat !== 'sortieFlotte') {
+      box.classList.add('hidden'); box.innerHTML = '';
+      if (okBtn) okBtn.innerHTML = '<i data-lucide="check" class="w-4 h-4"></i> Terminé';
+      return;
+    }
+    const today = new Date().toISOString().slice(0, 10);
+    const kmA = (FP.kmActuel ? FP.kmActuel(v) : v.km); const kmVal = (kmA != null && kmA !== '') ? kmA : '';
+    let html = `<div class="mt-4 pt-3 border-t border-slate-200 space-y-3">
+      <div class="text-xs font-bold uppercase tracking-wide" style="color:var(--fp-accent)">Finaliser — infos à enregistrer</div>
+      <label class="block"><span class="text-xs text-slate-600">Kilométrage ${cat === 'sortieFlotte' ? 'de sortie' : 'de restitution'}</span>
+        <input id="proc-km" type="number" min="0" class="field-input w-full mt-1" value="${esc(kmVal)}" placeholder="km au compteur"></label>
+      <label class="block"><span class="text-xs text-slate-600">Date</span>
+        <input id="proc-date" type="date" class="field-input w-full mt-1" value="${today}"></label>`;
+    if (cat === 'restitution') {
+      html += `<label class="block"><span class="text-xs text-slate-600">Nouveau conducteur <span class="text-slate-400">(laisse vide pour libérer le véhicule)</span></span>
+        <input id="proc-newcond" type="text" class="field-input w-full mt-1" placeholder="Choisir ou créer un conducteur…" autocomplete="off"></label>`;
+    } else {
+      html += `<div class="grid grid-cols-2 gap-2">
+        <label class="block"><span class="text-xs text-slate-600">Prix de vente (€)</span><input id="proc-prix" type="number" min="0" class="field-input w-full mt-1" placeholder="€"></label>
+        <label class="block"><span class="text-xs text-slate-600">Acheteur</span><input id="proc-acheteur" type="text" class="field-input w-full mt-1" placeholder="Nom de l'acheteur"></label></div>`;
+    }
+    html += `<label class="block"><span class="text-xs text-slate-600">Note / dégâts éventuels (optionnel)</span>
+        <input id="proc-note" type="text" class="field-input w-full mt-1" placeholder="Rayures, frais, remarques…"></label>
+      <button type="button" id="proc-edl" class="btn btn-outline text-sm w-full justify-center"><i data-lucide="camera" class="w-4 h-4"></i> 📸 État des lieux (photos)</button>`;
+    box.innerHTML = html; box.classList.remove('hidden');
+    if (okBtn) okBtn.innerHTML = cat === 'sortieFlotte'
+      ? '<i data-lucide="check" class="w-4 h-4"></i> Terminer la cession'
+      : '<i data-lucide="check" class="w-4 h-4"></i> Terminer la reprise';
+    if (cat === 'restitution') { try { const inp = $('proc-newcond'); if (inp && FP.conducteurPicker) FP.conducteurPicker(inp, {}); } catch (e) {} }
+    const edlB = $('proc-edl'); if (edlB) edlB.addEventListener('click', () => { try { if (FP.edl) FP.edl.open(v, { sens: 'restitution', conducteur: v.chauffeur || '' }); } catch (e) {} });
+    if (window.lucide) lucide.createIcons();
+  }
+  // Enregistre un état des lieux de SORTIE daté (km + note) dans l'historique du véhicule (settings.inspections).
+  function recordInspectionSortie(vehId, km, date, note) {
+    try {
+      const s = FP.settings.get();
+      s.inspections = (s.inspections && typeof s.inspections === 'object') ? s.inspections : {};
+      const kmN = (Number.isFinite(km) && km >= 0) ? km : null;
+      const rec = { id: 'INS' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), date: date || new Date().toISOString().slice(0, 10), sens: 'Sortie', km: kmN, items: {}, note: note || 'État des lieux (restitution)' };
+      s.inspections[vehId] = [rec, ...(s.inspections[vehId] || [])];
+      FP.settings.save(s);
+    } catch (e) {}
+  }
+  // Applique la reprise / la cession : ferme la période du conducteur (km + date), met à jour le véhicule,
+  // réaffecte (ou libère), et pour la cession passe en « vendu » + enregistre prix/acheteur (lié À vendre).
+  async function finalizeProc() {
+    const cat = _procCat, v = _procVeh; if (!v) return;
+    const km = parseInt((($('proc-km') || {}).value || ''), 10);
+    const kmOk = Number.isFinite(km) && km >= 0;
+    const date = (($('proc-date') || {}).value) || new Date().toISOString().slice(0, 10);
+    const note = (($('proc-note') || {}).value || '').trim();
+    const ancien = (v.chauffeur || '').trim();
+    if (cat === 'sortieFlotte') {
+      const ok = FP.confirm ? await FP.confirm(`Confirmer la CESSION de ${v.immat || 'ce véhicule'} ?\n\nIl passera en « vendu » et sortira de la flotte active (il reste consultable dans « À vendre »).`) : confirm('Confirmer la cession ?');
+      if (!ok) return;
+      const prix = parseInt((($('proc-prix') || {}).value || ''), 10);
+      const acheteur = (($('proc-acheteur') || {}).value || '').trim();
+      try { if (FP.affectations) FP.affectations.record(v.id, '', date, ancien, kmOk ? km : null); } catch (e) {}
+      v.chauffeur = ''; v.statut = 'vendu';
+      const pf = ['chauffeur', 'statut'];
+      if (kmOk && km >= (Number(v.km) || 0)) { v.km = km; pf.push('km'); }
+      if (Number.isFinite(prix) && prix > 0) { v.prixVente = prix; pf.push('prixVente'); }
+      await persistVehFields(v, pf);
+      try { const s = FP.settings.get(); s.vehCession = (s.vehCession && typeof s.vehCession === 'object') ? s.vehCession : {}; s.vehCession[v.id] = { date, prix: (Number.isFinite(prix) && prix > 0) ? prix : null, acheteur: acheteur || '', note: note || '' }; FP.settings.save(s); } catch (e) {}
+      if (note || kmOk) recordInspectionSortie(v.id, kmOk ? km : null, date, note || 'Cession / sortie de flotte');
+      try { if (v.immat && FP.archiveVehicleDocs) FP.archiveVehicleDocs(v.immat); } catch (e) {}
+      if (FP.toast) FP.toast('✓ Véhicule cédé — visible dans « À vendre » (Vendu)');
+    } else { // restitution
+      const nouveau = (($('proc-newcond') || {}).value || '').trim();
+      try { if (FP.affectations) FP.affectations.record(v.id, nouveau, date, ancien, kmOk ? km : null); } catch (e) {}
+      v.chauffeur = nouveau || '';
+      const pf = ['chauffeur'];
+      if (kmOk && km >= (Number(v.km) || 0)) { v.km = km; pf.push('km'); }
+      await persistVehFields(v, pf);
+      if (note) recordInspectionSortie(v.id, kmOk ? km : null, date, note);
+      if (FP.toast) FP.toast(nouveau ? ('✓ Repris et réaffecté à ' + nouveau) : '✓ Véhicule repris — maintenant libre');
+    }
+    _procEdit = false; $('proc-backdrop').classList.remove('open');
+    try { renderTable(); renderKPIs(); } catch (e) {}
+    try { if (typeof drawerVehId !== 'undefined' && drawerVehId === v.id && $('drawer') && $('drawer').classList.contains('open')) openDrawer(v.id); } catch (e) {}
   }
   function renderProcBody() {
     const cat = _procCat, v = _procVeh; if (!cat || !v) return;
@@ -4296,7 +4386,11 @@
     openChecklist('sortieFlotte', v);
   }
   window._openChecklist = openChecklist;   // exposé pour les boutons de la fiche (prise / restitution)
-  $('proc-ok') && $('proc-ok').addEventListener('click', () => { _procEdit = false; $('proc-backdrop').classList.remove('open'); try { if (typeof renderTable === 'function') renderTable(); } catch (e) {} });
+  $('proc-ok') && $('proc-ok').addEventListener('click', () => {
+    // Reprise / cession → on APPLIQUE le changement (km, période, réaffectation / vendu…). Sinon simple fermeture.
+    if (_procCat === 'restitution' || _procCat === 'sortieFlotte') { finalizeProc(); return; }
+    _procEdit = false; $('proc-backdrop').classList.remove('open'); try { if (typeof renderTable === 'function') renderTable(); } catch (e) {}
+  });
   $('proc-close') && $('proc-close').addEventListener('click', () => $('proc-backdrop').classList.remove('open'));
   $('proc-backdrop') && $('proc-backdrop').addEventListener('click', e => { if (e.target === $('proc-backdrop')) $('proc-backdrop').classList.remove('open'); });
 
