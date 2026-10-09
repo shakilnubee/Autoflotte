@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261009a">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261009b">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20261009a"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20261009b"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20261009a">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20261009b">
 <style>
   /* Petites additions locales pour cette page */
   /* .filter-chip : style centralisé (modèle Style C) dans assets/css/styles.css */
@@ -1145,8 +1145,8 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20261009a"></script>
-<script src="../assets/js/supabase-client.js?v=20261009a"></script>
+<script src="../assets/js/vendor/supabase.js?v=20261009b"></script>
+<script src="../assets/js/supabase-client.js?v=20261009b"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -1162,13 +1162,13 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261009a"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261009b"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
-<script src="../assets/js/fleet-docs.js?v=20261009a"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20261009a"></script>
+<script src="../assets/js/fleet-docs.js?v=20261009b"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20261009b"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20261009a"></script>
+<script src="../assets/js/app.min.js?v=20261009b"></script>
 <script>
   lucide.createIcons();
 
@@ -3972,21 +3972,34 @@
       cgOrigSalarie: !!v.cgOrigSalarie,
     };
   }
-  // Renvoie true si l'enregistrement en base a réussi, false sinon
+  // Enregistre un véhicule (ajout OU édition de la ligne complète).
+  // ⚠️ DURABILITÉ (piège #6 du CLAUDE.md) : on passe par FP.persist (file optimiste enfilée AVANT le réseau,
+  // retente auto + pastille d'erreur). Avant, l'écriture directe via FP.db était « fire-and-forget » : un
+  // ajout/une édition via la modale suivi d'une navigation immédiate avortait le fetch → véhicule/correction
+  // PERDU en silence malgré le toast « ✓ enregistré ». (persistVehFields/setVehKm étaient déjà protégés ;
+  // seul ce chemin « ligne complète » modale/lot/fusion ne l'était pas.)
   async function persistVehicleUpsert(v, isNew) {
-    if (!dbAvailable()) return false;
+    if (!dbAvailable()) {
+      // Hors-ligne : au moins garder une ÉDITION via l'override local (un NOUVEau véhicule, lui, sera rejoué
+      // par la file dès le retour réseau si FP.persist est dispo ci-dessous).
+      try { if (!isNew && FP.saveVehicleOverride) { const { id, ...fields } = vehToDb(v); FP.saveVehicleOverride(v.id, fields); } } catch (e) {}
+      return false;
+    }
     try {
-      let res;
-      if (isNew) { res = await FP.db.insert('vehicules', vehToDb(v)); }
-      else { const { id, ...fields } = vehToDb(v); res = await FP.db.update('vehicules', v.id, fields); }
-      if (res && res.error) throw res.error;
-      // Rafraîchit le cache local (fp_data_cache_v3_<soc>) tout de suite → pas de flash de valeur
-      // périmée en changeant d'onglet (le cache n'était sinon réécrit qu'au prochain loadAll).
+      if (FP.persist) {
+        if (isNew) FP.persist.insert('vehicules', vehToDb(v));            // enfilé AVANT le réseau → durable
+        else { const { id, ...fields } = vehToDb(v); FP.persist.update('vehicules', v.id, fields); }
+      } else {
+        if (isNew) await FP.db.insert('vehicules', vehToDb(v));
+        else { const { id, ...fields } = vehToDb(v); await FP.db.update('vehicules', v.id, fields); }
+      }
+      // Rafraîchit le cache local (fp_data_cache_v3_<soc>) tout de suite → pas de flash de valeur périmée.
       try { FP.refreshDataCache && FP.refreshDataCache(); } catch (e) {}
       return true;
     } catch (err) {
       console.error('[persistVehicle]', err);
-      alert("⚠️ Modifié à l'écran, mais l'enregistrement dans la base a échoué :\n" + (err.message || err) + "\n\nVérifie que les colonnes existent dans Supabase (voir le script fourni). La modification reste enregistrée localement.");
+      // Filet : garde l'édition en override local (la file FP.persist remonte déjà l'échec via la pastille).
+      try { if (!isNew && FP.saveVehicleOverride) { const { id, ...fields } = vehToDb(v); FP.saveVehicleOverride(v.id, fields); } } catch (e) {}
       return false;
     }
   }
@@ -4216,6 +4229,9 @@
         if (g.action === 'merge') {
           // L'existant a déjà reçu les champs manquants (VIN, CO₂, CT, etc.) → on le ré-enregistre.
           saveMasse(g.existing.id);
+          // ⚠️ Rattacher AUSSI le document scanné au véhicule fusionné (sinon il était abandonné en silence
+          //    sur ce chemin — seuls « ajouter » et « éditer » l'attachaient).
+          try { attachExtraDoc(g.existing.id); } catch (e) {}
           closeModal();
           if (window.FP && FP.toast) FP.toast('✓ Véhicule fusionné');
           renderKPIs();
