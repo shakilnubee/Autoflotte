@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261009a">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261009b">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20261009a"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20261009b"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20261009a">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20261009b">
 <style>
   .chart-wrap { position: relative; height: 280px; }
   .chart-wrap-sm { position: relative; height: 220px; }
@@ -318,8 +318,8 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20261009a"></script>
-<script src="../assets/js/supabase-client.js?v=20261009a"></script>
+<script src="../assets/js/vendor/supabase.js?v=20261009b"></script>
+<script src="../assets/js/supabase-client.js?v=20261009b"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -335,10 +335,10 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261009a"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261009b"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
-<script src="../assets/js/app.min.js?v=20261009a"></script>
+<script src="../assets/js/app.min.js?v=20261009b"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -585,7 +585,10 @@
     // Coût = MÊME source que la page Sinistres : helper canonique FP.coutSinistre (0 pour un devis ET
     // pour un sinistre pris en charge / remboursé). Avant : montantTTC brut sans annuler PEC/remboursé
     // → le KPI Coût des Statistiques divergeait de la page Sinistres pour un incident pris en charge.
-    const cout = sins.reduce((s, f) => s + (FP.coutSinistre ? FP.coutSinistre(f) : (+f.montantTTC || 0)), 0);
+    // Reste à charge RÉEL = déduit aussi les remboursements PARTIELS par incident (source unique, comme
+    // la page Sinistres / le Budget / le TCO). Avant : coutSinistre seul → remboursement partiel ignoré,
+    // d'où un KPI « net » > au « Reste à charge » de la page Sinistres qu'il prétend égaler.
+    const cout = FP.resteChargeSinistre ? FP.resteChargeSinistre(sins) : sins.reduce((s, f) => s + (FP.coutSinistre ? FP.coutSinistre(f) : (+f.montantTTC || 0)), 0);
     const condCount = {};
     Object.entries(perImmat).forEach(([immat, c]) => {
       let ch = immatChauffeur[immat] || '';
@@ -657,7 +660,9 @@
     let months;
     if (annee === 'all') months = buildLast12();
     else { months = []; for (let m = 0; m < 12; m++) months.push({ ym: `${annee}-${String(m + 1).padStart(2, '0')}`, label: new Date(+annee, m, 1).toLocaleDateString('fr-FR', { month: 'short' }) }); }
-    const monthData = months.map(m => fact.filter(f => (f.date || '').startsWith(m.ym)).reduce((s, f) => s + (+f.montantTTC || 0), 0));
+    // Même périmètre d'EXPLOITATION que les autres blocs de la page et le dashboard (exclut achat/
+    // cession/leasing/sinistre) : sinon un achat de véhicule faisait un pic ici absent des autres graphes.
+    const monthData = months.map(m => fact.filter(f => (f.date || '').startsWith(m.ym) && (FP.coutFactureExploit ? FP.coutFactureExploit(f) : true)).reduce((s, f) => s + (+f.montantTTC || 0), 0));
     const datasets = [{ label: (annee === 'all' ? 'Dépenses' : annee), data: monthData, borderColor: '#F97316', backgroundColor: 'rgba(249,115,22,.15)', tension: .35, fill: true, pointRadius: 3 }];
     let showLegend = false;
     // Comparaison N vs N-1 : quand une année précise est choisie, on superpose l'année précédente (pointillés).

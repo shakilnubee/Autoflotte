@@ -1346,7 +1346,12 @@ FP.leasingLocaleaseAnnuel = function (data) {
     const ov = FP.getLeasingOverrides ? FP.getLeasingOverrides() : {};
     // Index plaque → véhicule pour exclure les véhicules SORTIS (vendu/restitué/hors service) — cohérent TCO.
     const vehByImmat = {}; try { (((data || {}).vehicules) || (window.FP_DATA && window.FP_DATA.vehicules) || []).forEach(v => { const k = FP.normImmat(v && v.immat || ''); if (k) vehByImmat[k] = v; }); } catch (e) {}
-    const mens = list.reduce((s, c) => {
+    // ⚠️ Anti-doublon par PLAQUE : un même véhicule ne compte qu'UNE fois, même si deux contrats LLD ont été
+    // saisis pour sa plaque (ressaisie / 2e appareil) — sinon le loyer annuel est compté en DOUBLE (+ ligne
+    // dupliquée). Le dernier contrat saisi pour une plaque l'emporte. (Règle anti-doublon / « une info = une fois ».)
+    const _byPlate = {}, _noPlate = [];
+    list.forEach(c => { const k = FP.normImmat(c && c.immat || ''); if (k) _byPlate[k] = c; else _noPlate.push(c); });
+    const mens = Object.keys(_byPlate).map(k => _byPlate[k]).concat(_noPlate).reduce((s, c) => {
       // Contrat LLD terminé (échéance connue et dépassée) → on ne projette plus son loyer annuel.
       if (FP.leasingTermine && FP.leasingTermine(c)) return s;
       const _v = vehByImmat[FP.normImmat(c && c.immat || '')];
@@ -2995,6 +3000,9 @@ FP.condKeyMaps = function () {
   // elles étaient déjà dans COLLECTION_KEYS mais PAS migrées/purgées → perte de données vécue.
   const keys = ['condConges', 'condSortie', 'condArrivee', 'condLangues', 'pointsManuel', 'condDocs', 'permisMasque', 'condCarteTotal', 'condBadgeUlys'];
   try { FP.prestataires().forEach(p => { if (p && p.numKey && keys.indexOf(p.numKey) < 0) keys.push(p.numKey); }); } catch (e) {}
+  // + tout « condNum_* » ENCORE présent en réglages (prestataire supprimé depuis) : même regex que isCollKey,
+  //   sinon ses n° de carte/badge deviennent orphelins au renommage / hérités par un homonyme recréé.
+  try { const s = (FP.settings && FP.settings.get) ? FP.settings.get() : null; if (s) Object.keys(s).forEach(k => { if (/^condNum_/.test(k) && keys.indexOf(k) < 0) keys.push(k); }); } catch (e) {}
   return keys;
 };
 FP.migrateCondKey = function (oldKey, newKey) {
@@ -3348,15 +3356,32 @@ FP.consoPendantConge = (txList, opts) => {
     // Une même personne peut avoir plusieurs « clés » selon comment son nom est écrit (prénom seul,
     // prénom+nom) ou d'où vient la conso (carte/badge). On teste le congé sous TOUTES les clés
     // plausibles (la plus fiable d'abord) pour ne RATER aucune conso réellement faite pendant un congé.
+    // ⚠️ Identification CERTAINE par carte/badge : le n° désigne la personne SANS ambiguïté. Dans ce cas on
+    // NE teste le congé QUE sous SON identité — élargir aux clés d'un HOMONYME de prénom accuserait à tort un
+    // collègue (ex. conso carburant de Charles X un jour où Charles Y est en congé). Règle « ne jamais accuser
+    // à tort » + 0-conducteurs. L'élargissement « même prénom » ne sert QUE de repli quand la carte n'identifie rien.
+    let carteKey = null;
+    try {
+      const carte = t.carte || t.badge;
+      if (carte) {
+        const sC = String(carte); const isU = /^ULYS/i.test(sC); const numC = sC.replace(/^ULYS[-_\s]*/i, '');
+        const cc = isU ? (FP.conducteurParBadgeUlys && FP.conducteurParBadgeUlys(numC))
+                       : ((FP.conducteurParCarteTotal && FP.conducteurParCarteTotal(sC)) || (FP.conducteurParBadgeUlys && FP.conducteurParBadgeUlys(sC)));
+        if (cc && cc.key) carteKey = cc.key;
+      }
+    } catch (e) {}
     const cand = [];
-    const k1 = FP.condKeyDeConso(t); if (k1) cand.push(k1);
-    try { const c = FP.conducteurs && FP.conducteurs.find ? FP.conducteurs.find(t.conducteur) : null; if (c && c.key && cand.indexOf(c.key) < 0) cand.push(c.key); } catch (e) {}
-    const np = (FP.normPrenom && t.conducteur) ? FP.normPrenom(t.conducteur) : null;
-    if (np && cand.indexOf(np) < 0) cand.push(np);
-    // + TOUTE clé de congé du MÊME prénom (ex. congé saisi sous la fiche de « Charles LENNON » alors que
-    //   la conso Ulys ne porte que le prénom « Charles ») — via le helper canonique FP.congeKeysPourPrenom
-    //   (résout la clé → nom → prénom ; jamais un découpage fragile de la clé).
-    if (np) { (FP.congeKeysPourPrenom ? FP.congeKeysPourPrenom(np) : []).forEach(k => { if (cand.indexOf(k) < 0) cand.push(k); }); }
+    if (carteKey) {
+      cand.push(carteKey);   // conso reliée à une personne CERTAINE → on ne teste QUE son congé
+    } else {
+      const k1 = FP.condKeyDeConso(t); if (k1) cand.push(k1);
+      try { const c = FP.conducteurs && FP.conducteurs.find ? FP.conducteurs.find(t.conducteur) : null; if (c && c.key && cand.indexOf(c.key) < 0) cand.push(c.key); } catch (e) {}
+      const np = (FP.normPrenom && t.conducteur) ? FP.normPrenom(t.conducteur) : null;
+      if (np && cand.indexOf(np) < 0) cand.push(np);
+      // + TOUTE clé de congé du MÊME prénom (ex. congé saisi sous la fiche de « Charles LENNON » alors que
+      //   la conso Ulys ne porte que le prénom « Charles ») — UNIQUEMENT quand la carte n'a pas identifié la personne.
+      if (np) { (FP.congeKeysPourPrenom ? FP.congeKeysPourPrenom(np) : []).forEach(k => { if (cand.indexOf(k) < 0) cand.push(k); }); }
+    }
     let cg = null, key = null;
     for (const k of cand) { const g = FP.congeCouvrant(k, dtx); if (g) { cg = g; key = k; break; } }
     // ⚠️ Garde « badge lié au VÉHICULE » : si la conso porte une plaque et qu'un AUTRE conducteur conduisait
@@ -5591,7 +5616,7 @@ FP.settings = {
       //   « déjà traités », anomalies conso « OK », lignes ignorées du TCO.
       'rapprIgnore', 'tfAnomOk', 'ignores',
       // — Échéances de documents + surveillances/corbeilles synchronisées (jumeaux de docStatus/docTypes) :
-      'docExpire', 'assuranceIgnore', 'amendesJustifWatch', 'docTrash', 'sinistreDossiers', 'sinistreDossiersSupprimes',
+      'docExpire', 'assuranceIgnore', 'amendesJustifWatch', 'docTrash', 'sinistreDossiers', 'sinistreDossiersSupprimes', 'recoverHidden',
       // — Notes de zone libres (irrécupérables, sans miroir local), liste des prestataires (garages /
       //   cartes carburant / badges péage), et corbeille de restauration synchronisée (filet anti-perte) :
       //   ce sont des maps/tableaux de DONNÉES → fusion fine multi-appareils (mergeMap/mergeArr), sinon un
@@ -7137,14 +7162,22 @@ FP.coutParPeriode = function (opts) {
   // Export CSV du total par année
   const exportEl = $(opts.exportEl);
   if (exportEl) exportEl.addEventListener('click', () => {
+    // ⚠️ Règle 0sexies : l'export suit la PÉRIODE CHOISIE à l'écran (Du → Au), pas tout l'historique.
+    const from = fromEl.value, to = toEl.value;
+    const rows = (from || to)
+      ? list().filter(f => { const d = f.date || ''; if (from && d < from) return false; if (to && d > to) return false; return true; })
+      : list();
     const by = {};
-    list().forEach(f => { const y = (f.date || '').slice(0, 4); if (/^\d{4}$/.test(y)) by[y] = (by[y] || 0) + (Number(f.montantTTC) || 0); });
+    rows.forEach(f => { const y = (f.date || '').slice(0, 4); if (/^\d{4}$/.test(y)) by[y] = (by[y] || 0) + (Number(f.montantTTC) || 0); });
     const ys = Object.keys(by).sort();
     const eur = n => n.toFixed(2).replace('.', ',');
-    const lines = ['Année;Total TTC (€)'].concat(ys.map(y => `${y};${eur(by[y])}`));
+    const lines = [];
+    if (from || to) lines.push('Période;' + (from || '…') + ' → ' + (to || '…'));
+    lines.push('Année;Total TTC (€)');
+    ys.forEach(y => lines.push(`${y};${eur(by[y])}`));
     lines.push(`Total;${eur(ys.reduce((s, y) => s + by[y], 0))}`);
     const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = (opts.fileLabel || 'cout-par-annee') + '.csv'; a.click();
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = (opts.fileLabel || 'cout-par-annee') + ((from || to) ? '-periode' : '') + '.csv'; a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   });
   return { render() { renderYears(); renderRange(); } };
@@ -7463,7 +7496,7 @@ FP.leasingContrat = (immat) => {
   // l'offre PDF. Sans ce repli, un contrat pourtant renseigné (forfait km, loyer…) restait INVISIBLE.
   // L'utilisateur peut toujours saisir une vraie date de début différente (elle prime).
   if (!merged.debut) {
-    try { const v = ((window.FP_DATA && FP_DATA.vehicules) || []).find(x => (x.immat || '').trim().toUpperCase() === key); if (v && v.dateMiseEnCirculation) merged.debut = v.dateMiseEnCirculation; } catch (e) {}
+    try { const v = FP.vehByImmat ? FP.vehByImmat(key) : ((window.FP_DATA && FP_DATA.vehicules) || []).find(x => (x.immat || '').trim().toUpperCase() === key); if (v && v.dateMiseEnCirculation) merged.debut = v.dateMiseEnCirculation; } catch (e) {}
   }
   if (!merged.kmContrat || !merged.debut) return null;
   return merged;
@@ -8458,7 +8491,10 @@ FP.contratCadreMissing = (c) => {
 FP.buildAlertes = (data) => {
   const out = [];
   const today = new Date();
-  const days = (d) => Math.ceil((new Date(d) - today) / (1000 * 60 * 60 * 24));
+  // ⚠️ SOURCE UNIQUE du décompte : FP.joursRestants (minuit→minuit), comme buildEcheances/calendrier/
+  // renouvellements/fiche. Avant : Math.ceil sur une date UTC + l'heure courante → off-by-one la nuit
+  // (une même échéance affichait « 31j » ici et « 30j » au calendrier, avec une couleur de palier décalée).
+  const days = (d) => { const j = FP.joursRestants ? FP.joursRestants(d) : Math.ceil((new Date(d) - today) / 86400000); return j == null ? Math.ceil((new Date(d) - today) / 86400000) : j; };
   // Véhicules sortis de la flotte active (vendus / à vendre / cédés…) : pas d'alertes pour eux.
   const horsFlotte = FP.horsFlotte; // défini plus haut (source unique)
 
@@ -8801,7 +8837,7 @@ FP.buildAlertes = (data) => {
         niveau: 'warn', categorie: 'Amendes', sort: 999, muteKey: 'amende-echue',
         message: `${echues.length} amende${echues.length > 1 ? 's' : ''} : échéance dépassée (risque de majoration)`,
         detail: 'Le tarif de départ n\'est peut-être plus valable : règle-les vite et vérifie si un avis de majoration est arrivé. Le montant affiché reste le tarif de départ tant que l\'avis majoré n\'est pas importé (Parc Pilot n\'invente pas le majoré).',
-        vehicules: echues.map(a => ({ label: `${FP.esc(a.prenom || '—')}${a.numeroAvis ? ' · avis ' + FP.esc(a.numeroAvis) : ''} — ${FP.euro(FP.montantDu(a))} (échéance ${a.dateLimiteForfaitaire ? FP.date(a.dateLimiteForfaitaire) : 'estimée'} dépassée)`, target: 'amendes.html?filtre=apayer' })),
+        vehicules: echues.map(a => ({ label: `${a.prenom || '—'}${a.numeroAvis ? ' · avis ' + a.numeroAvis : ''} — ${FP.euro(FP.montantDu(a))} (échéance ${a.dateLimiteForfaitaire ? FP.date(a.dateLimiteForfaitaire) : 'estimée'} dépassée)`, target: 'amendes.html?filtre=apayer' })),
       });
     }
   } catch (e) {}

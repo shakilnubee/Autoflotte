@@ -433,6 +433,11 @@
           if (orphans.length) conso = conso.filter(c => !orphans.includes(c));
         }
       } catch (_){}
+      // Purge aussi le DÉTAIL transaction total_conso_tx (péage Ulys daté) rattaché à ce n° de facture —
+      // sinon la détection conso-pendant-congé continue de signaler des lignes d'une facture supprimée.
+      try { const num = String(f.numeroFacture || '').trim();
+        if (num){ const r = await FP.supabase.from('total_conso_tx').select('id').eq('facnum', num);
+          if (r && !r.error && Array.isArray(r.data)) for (const row of r.data){ try { await FP.persist.delete('total_conso_tx', row.id); } catch (e) {} } } } catch (e) { console.warn('[uls-del tx]', e); }
       render();
       if (consoLoaded) renderConso();
     }
@@ -733,6 +738,10 @@
       // 2) la conso liée (décompte du cumul)
       for (const c of liees){ try { await FP.persist.delete('total_conso', c.id); } catch (e) { console.error('[tf-del conso]', e); } }
       if (conso) conso = conso.filter(c => String(c.id).split('-').pop() !== num);
+      // 3) le DÉTAIL transaction (total_conso_tx) rattaché à ce n° de facture — sinon la détection
+      //    conso-pendant-congé / les anomalies continuent de signaler les lignes d'une facture supprimée.
+      if (num) { try { const r = await FP.supabase.from('total_conso_tx').select('id').eq('facnum', num);
+        if (r && !r.error && Array.isArray(r.data)) for (const row of r.data){ try { await FP.persist.delete('total_conso_tx', row.id); } catch (e) {} } } catch (e) { console.warn('[tf-del tx]', e); } }
       render(); renderConso();
     }
 

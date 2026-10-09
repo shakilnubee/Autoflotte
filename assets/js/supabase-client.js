@@ -505,7 +505,7 @@
       let settingsChanged = false, settingsLoaded = false;
       try {
         // Réglages société : déjà en vol (lancés en parallèle de loadAll ci-dessus).
-        const shared = _settingsPromise ? await _settingsPromise : null;
+        let shared = _settingsPromise ? await _settingsPromise : null;   // ⚠️ let : réassigné ligne ~517 (réconciliation). Un const levait un TypeError avalé → pull des réglages jeté à chaque chargement (désync multi-appareils).
         if (shared && typeof shared === 'object') {
           settingsLoaded = true;   // pull initial OK → pas besoin de la retry 3 s (évite un 2ᵉ SELECT app_settings)
           const key = (FP.settings && FP.settings._key) ? FP.settings._key() : 'auto_flotte_settings';
