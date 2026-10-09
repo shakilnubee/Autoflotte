@@ -8467,8 +8467,12 @@ FP.buildAlertes = (data) => {
     // Les 3 paliers (rouge / orange / info) se calent sur l'anticipation configurée (ctJours) :
     // info = ctJours (défaut 90), orange = 2/3, rouge = 1/3 → 30/60/90 par défaut.
     const _ctI = FP.notifCfg().ctJours, _ctW = Math.round(_ctI * 2 / 3), _ctD = Math.round(_ctI / 3);
-    if (diff < 0)        out.push({ niveau: 'danger', categorie: 'Contrôle technique', message: `CT dépassé de ${-diff}j`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
-    else if (diff < _ctD) out.push({ niveau: 'danger', categorie: 'Contrôle technique', message: `CT à faire dans ${diff}j`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
+    // ⚠️ `critique: true` sur un CT ROUGE (dépassé ou imminent) → il n'est JAMAIS masqué par un
+    // simple « ✓ Vu » (accusé de lecture) : un contrôle technique en retard / proche est une obligation
+    // légale trop importante pour disparaître des Alertes parce qu'on l'a « vu » une fois. (Il reste
+    // masquable explicitement, et il DISPARAÎT dès qu'on renouvelle le CT → la date change → nouvelle clé.)
+    if (diff < 0)        out.push({ niveau: 'danger', categorie: 'Contrôle technique', message: `CT dépassé de ${-diff}j`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh, critique: true });
+    else if (diff < _ctD) out.push({ niveau: 'danger', categorie: 'Contrôle technique', message: `CT à faire dans ${diff}j`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh, critique: true });
     else if (diff < _ctW) out.push({ niveau: 'warn',   categorie: 'Contrôle technique', message: `CT à prévoir dans ${diff}j`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
     else if (diff < _ctI) out.push({ niveau: 'info', categorie: 'Contrôle technique', message: `CT à venir (${diff}j)`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
   });
@@ -9306,6 +9310,10 @@ FP.buildAlertes = (data) => {
   const vues = s0.alertesVues || {};
   return out.filter(a => {
     if (a.muteKey && masquees.includes(a.muteKey)) return false;                       // ancien « masquer » définitif
+    // Les alertes CRITIQUES (ex. CT rouge : dépassé ou imminent) ne sont JAMAIS cachées par un « ✓ Vu » :
+    // trop importantes pour rester acquittées (elles réapparaissent donc dans Alertes/Suivi). Elles
+    // disparaissent quand la situation est RÉGLÉE (ex. CT renouvelé → la date change → la clé change).
+    if (a.critique) return true;
     if (a.muteKey && vues[a.muteKey] != null && vues[a.muteKey] === FP.alertes.sig(a)) return false; // « Vu » ET rien n'a changé
     return true;
   });
