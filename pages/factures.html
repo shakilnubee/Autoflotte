@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261008l">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261009a">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20261008l"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20261009a"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20261008l">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20261009a">
 <style>
   /* .filter-chip : style centralisé (modèle Style C) dans assets/css/styles.css */
   .type-pill { display: inline-flex; align-items: center; gap: .3rem; padding: .15rem .55rem; border-radius: 9999px; font-size: .72rem; font-weight: 600; background: #F1F5F9; color: var(--fp-text); }
@@ -592,8 +592,8 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20261008l"></script>
-<script src="../assets/js/supabase-client.js?v=20261008l"></script>
+<script src="../assets/js/vendor/supabase.js?v=20261009a"></script>
+<script src="../assets/js/supabase-client.js?v=20261009a"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -609,12 +609,12 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261008l"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261009a"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20261008l"></script>
-<script src="../assets/js/fleet-views.min.js?v=20261008l"></script>
+<script src="../assets/js/app.min.js?v=20261009a"></script>
+<script src="../assets/js/fleet-views.min.js?v=20261009a"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -1078,10 +1078,13 @@
       const v = (data.vehicules || []).find(x => FP.normImmat(x.immat) === FP.normImmat(f.vehiculeImmat));
       if (v) { const rc = FP.recomputeVehiculeFromFactures(v, data.factures); if (rc && FP.toast) FP.toast('Fiche véhicule recalculée : ' + v.immat); }
     }
-    // Nettoie le statut de remboursement éventuel (sinistre) pour ne pas laisser de fantôme
+    // Nettoie les réglages orphelins liés à cette facture (statut remboursement sinistre + override
+    // « est-ce une révision ? » keyé par id de facture) pour ne pas laisser de fantôme.
     try {
-      const s = FP.settings.get();
-      if (s.sinistreStatut && s.sinistreStatut[f.id] != null) { delete s.sinistreStatut[f.id]; FP.settings.save(s); }
+      const s = FP.settings.get(); let ch = false; const fid = String(f.id);
+      if (s.sinistreStatut && s.sinistreStatut[f.id] != null) { delete s.sinistreStatut[f.id]; ch = true; }
+      if (s.revisionOverride && s.revisionOverride[fid] != null) { delete s.revisionOverride[fid]; ch = true; }
+      if (ch) FP.settings.save(s);
     } catch (e) {}
     closeDrawer();
     renderKPIs(); renderTable(); renderCharts();

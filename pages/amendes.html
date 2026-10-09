@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261008l">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261009a">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20261008l"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20261009a"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20261008l">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20261009a">
 <style>
   .kpi-link { cursor: pointer; transition: transform .12s, box-shadow .12s; }
   .kpi-link:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(15,23,42,.10); }
@@ -489,8 +489,8 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20261008l"></script>
-<script src="../assets/js/supabase-client.js?v=20261008l"></script>
+<script src="../assets/js/vendor/supabase.js?v=20261009a"></script>
+<script src="../assets/js/supabase-client.js?v=20261009a"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -506,11 +506,11 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261008l"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261009a"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20261008l"></script>
+<script src="../assets/js/app.min.js?v=20261009a"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -3007,10 +3007,20 @@
     // Capture les amendes supprimées (avec leur position) pour permettre « Annuler ».
     const removed = [];
     ids.forEach(id => { const i = data.amendes.findIndex(x => x.id === id); if (i >= 0) { const rec = data.amendes[i]; removed.push({ rec, idx: i }); data.amendes.splice(i, 1); FP.persist.delete('amendes', id, rec); } });
+    // Purge les réglages orphelins liés (montant payé / montants saisis) — comme la suppression UNITAIRE —
+    // en les CAPTURANT d'abord pour les restaurer si l'utilisateur annule (pas de perte de données).
+    const savedCfg = {};
+    try { const s = FP.settings.get(); let ch = false; ids.forEach(id => { const o = {};
+      if (s.amendeMontantPaye && (id in s.amendeMontantPaye)) { o.paye = s.amendeMontantPaye[id]; delete s.amendeMontantPaye[id]; ch = true; }
+      if (s.amendeMontants && (id in s.amendeMontants)) { o.montants = s.amendeMontants[id]; delete s.amendeMontants[id]; ch = true; }
+      if (Object.keys(o).length) savedCfg[id] = o; }); if (ch) FP.settings.save(s); } catch (e) {}
     const n = ids.length; state.selectedIds.clear();
     renderKPIs(); renderTable(); renderCharts();
     const restore = () => {
       removed.sort((a, b) => a.idx - b.idx).forEach(({ rec, idx }) => { data.amendes.splice(Math.min(idx, data.amendes.length), 0, rec); if (FP.persist) FP.persist.insert('amendes', rec); });
+      try { const s = FP.settings.get(); let ch = false; Object.keys(savedCfg).forEach(id => { const o = savedCfg[id];
+        if ('paye' in o) { s.amendeMontantPaye = s.amendeMontantPaye || {}; s.amendeMontantPaye[id] = o.paye; ch = true; }
+        if ('montants' in o) { s.amendeMontants = s.amendeMontants || {}; s.amendeMontants[id] = o.montants; ch = true; } }); if (ch) FP.settings.save(s); } catch (e) {}
       renderKPIs(); renderTable(); renderCharts();
       if (FP.toast) FP.toast(`↺ ${n} amende(s) restaurée(s)`);
     };

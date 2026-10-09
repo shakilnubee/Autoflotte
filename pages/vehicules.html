@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261008l">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261009a">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20261008l"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20261009a"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20261008l">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20261009a">
 <style>
   /* Petites additions locales pour cette page */
   /* .filter-chip : style centralisé (modèle Style C) dans assets/css/styles.css */
@@ -1145,8 +1145,8 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20261008l"></script>
-<script src="../assets/js/supabase-client.js?v=20261008l"></script>
+<script src="../assets/js/vendor/supabase.js?v=20261009a"></script>
+<script src="../assets/js/supabase-client.js?v=20261009a"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -1162,13 +1162,13 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261008l"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261009a"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
-<script src="../assets/js/fleet-docs.js?v=20261008l"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20261008l"></script>
+<script src="../assets/js/fleet-docs.js?v=20261009a"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20261009a"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20261008l"></script>
+<script src="../assets/js/app.min.js?v=20261009a"></script>
 <script>
   lucide.createIcons();
 
@@ -1279,7 +1279,14 @@
   // Fallback localStorage (si Supabase indisponible)
   function lsGetAllDocs(){ try { return JSON.parse(localStorage.getItem(DOCS_KEY) || '{}'); } catch { return {}; } }
   function getVehDocs(id){
-    if (docsCache) return docsCache.filter(d => d.vehiculeId === id);
+    if (docsCache) {
+      // La plupart des documents sont keyés par l'id DB du véhicule, MAIS ceux des sinistres sont keyés
+      // par la PLAQUE (sinistres.html) → sans ce 2e test ils n'apparaissaient jamais sur la fiche véhicule.
+      // On relie donc aussi par plaque normalisée (règle 0-plaques) — un id DB (long) ne peut pas collisionner.
+      const v = (typeof data !== 'undefined' && data.vehicules) ? data.vehicules.find(x => x && x.id === id) : null;
+      const nk = (v && v.immat && FP.normImmat) ? FP.normImmat(v.immat) : null;
+      return docsCache.filter(d => d.vehiculeId === id || (nk && d.vehiculeId && FP.normImmat(String(d.vehiculeId)) === nk));
+    }
     return lsGetAllDocs()[id] || [];
   }
   // Les documents de type « état des lieux » regroupent DEUX natures : le PDF de l'état des lieux
@@ -4012,6 +4019,10 @@
       // effacé à tort, et la valeur saisie disparaît au rechargement.
       fields.forEach(f => { patch[f] = (f in full) ? full[f] : (v[f] === undefined ? null : v[f]); });
       let ok = false;
+      // ⚠️ DURABILITÉ AVANT L'AWAIT (piège #6 du CLAUDE.md) : on pose l'override local AVANT l'appel réseau.
+      // Sinon un Save suivi d'une navigation immédiate avorte le fetch → ni .then ni catch ne s'exécutent →
+      // la saisie serait perdue EN SILENCE (modèle identique à FP.setVehKm / FP.persist). On le RETIRE à la réussite.
+      fields.forEach(f => { if (FP.saveVehicleOverride) FP.saveVehicleOverride(v.id, { [f]: v[f] }); });
       try {
         const res = await FP.db.update('vehicules', v.id, patch);
         if (res && res.error) throw res.error;
@@ -4019,10 +4030,8 @@
       } catch (err) {
         console.error('[persistVehFields]', err);
       }
-      fields.forEach(f => {
-        if (ok) { if (FP.removeVehicleOverride) FP.removeVehicleOverride(v.id, f); }
-        else if (FP.saveVehicleOverride) FP.saveVehicleOverride(v.id, { [f]: v[f] });
-      });
+      if (ok) fields.forEach(f => { if (FP.removeVehicleOverride) FP.removeVehicleOverride(v.id, f); });
+      // en cas d'échec : l'override reste posé (ci-dessus) → la valeur est conservée + re-tentée
       // Écriture serveur OK → rafraîchit le cache local tout de suite (pas de flash périmé à la navigation).
       if (ok) { try { FP.refreshDataCache && FP.refreshDataCache(); } catch (e) {} }
       // ⚠️ Ne PAS échouer en silence : si l'écriture serveur a raté, prévenir l'utilisateur

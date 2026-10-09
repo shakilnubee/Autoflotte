@@ -1765,8 +1765,13 @@ FP.coutExploitAnnee = (v, annee, factures) => {
     let tot = 0;
     mine.forEach(f => {
       if (!String(f.date || '').startsWith(an)) return;
-      if (FP.estEntretien(f)) tot += Number(f.montantTTC) || 0;
-      else if (String(f.type || '').toLowerCase() === 'sinistre') tot += (FP.coutSinistre ? FP.coutSinistre(f) : 0);
+      const t = String(f.type || '').toLowerCase();
+      // Sinistre = seulement le reste à charge (franchise), jamais le montant brut de réparation.
+      if (t === 'sinistre') { tot += (FP.coutSinistre ? FP.coutSinistre(f) : 0); return; }
+      // Tout le reste de l'EXPLOITATION (entretien, réparation, CARBURANT, PÉAGES, autres frais) au TTC,
+      // via le MÊME périmètre que le dashboard/budget/TCO (FP.coutFactureExploit = hors leasing/achat/cession).
+      // Avant, « Dépensé {année} » ne comptait QUE l'entretien → il mentait vs le coût au km et le TCO.
+      else if (FP.coutFactureExploit(f)) tot += Number(f.montantTTC) || 0;
     });
     return tot;
   } catch (e) { return 0; }
@@ -2984,7 +2989,11 @@ FP.removeConge = (condKey, idx) => { const a = FP.getConges(condKey).slice(); if
 // (fiche vide alors que la donnée existe encore sous l'ancienne clé) — et une suppression + recréation
 // au même prénom ferait hériter les données de l'ancien. `applyRename`/suppression doivent appeler ça.
 FP.condKeyMaps = function () {
-  const keys = ['condConges', 'condSortie', 'condDocs', 'permisMasque', 'condCarteTotal', 'condBadgeUlys'];
+  // ⚠️ TOUTE map keyée par la clé conducteur DOIT figurer ici, sinon elle devient orpheline au renommage
+  // (migrateCondKey) et est héritée par un homonyme recréé après suppression (purgeCondKey). Ajouts 2026-10 :
+  // condArrivee (date d'arrivée), condLangues (langue e-mails), pointsManuel (points de permis saisis) —
+  // elles étaient déjà dans COLLECTION_KEYS mais PAS migrées/purgées → perte de données vécue.
+  const keys = ['condConges', 'condSortie', 'condArrivee', 'condLangues', 'pointsManuel', 'condDocs', 'permisMasque', 'condCarteTotal', 'condBadgeUlys'];
   try { FP.prestataires().forEach(p => { if (p && p.numKey && keys.indexOf(p.numKey) < 0) keys.push(p.numKey); }); } catch (e) {}
   return keys;
 };
@@ -9391,7 +9400,7 @@ FP.buildEcheances = (data) => {
     const diff = FP.joursRestants(dateStr);
     if (diff == null) return 'info';
     let dgr = 30, wrn = 60;
-    if (categorie === 'Contrôle technique' || categorie === 'Anti-pollution') {
+    if (categorie === 'Contrôle technique' || categorie === 'Anti-pollution' || categorie === 'Assurance') {
       const i = Number(cfg.ctJours) || 90; dgr = Math.round(i / 3); wrn = Math.round(i * 2 / 3);
     } else if (categorie === 'Permis' || categorie === "Pièce d'identité") {
       const w = Number(cfg.docAlerteJours) || 120; wrn = w; dgr = Math.round(w / 2);
@@ -9428,7 +9437,25 @@ FP.buildEcheances = (data) => {
         }
       } catch (e) {}
     }
+    // Échéance d'ASSURANCE (date lue sur l'attestation/carte verte) — était dans les Alertes mais MANQUAIT
+    // au calendrier/Renouvellements (risque de rater un renouvellement d'assurance planifié via le calendrier).
+    try { const ech = FP.assuranceEcheanceOf ? FP.assuranceEcheanceOf(v) : null; const fin = ech && String(ech.fin || '').trim();
+      if (fin) push(fin, 'Assurance', 'Assurance — ' + v.immat, veh, 'contrats.html?tab=assurance'); } catch (e) {}
   });
+
+  // Contrats CADRE à renouveler (carte carburant, badge péage, maintenance, télématique, assurance par
+  // entité…) — présents dans les Alertes, désormais AUSSI au calendrier/Renouvellements (même source).
+  try {
+    (FP.contratsCadre ? FP.contratsCadre.list() : []).forEach(c => {
+      if (!c || !c.dateFin) return;
+      const ech = FP.contratCadreEcheance ? FP.contratCadreEcheance(c) : null; if (!ech) return;
+      const ref = ech.ref || c.dateFin; if (!ref) return;
+      const nom = String(c.prestataire || (FP.contratCadreTypeLabel ? FP.contratCadreTypeLabel(c.type) : '') || 'Contrat').trim();
+      const zone = String(c.paysEntite || '').trim();
+      const det = `${FP.contratCadreTypeLabel ? FP.contratCadreTypeLabel(c.type) : ''}${zone ? ' · ' + zone : ''}${c.numero ? ' · n° ' + c.numero : ''}`;
+      push(ref, 'Contrats', (ech.surResiliation ? 'Résiliation — ' : 'Fin — ') + nom, det, 'contrats.html?tab=cadre');
+    });
+  } catch (e) {}
 
   // Permis qui expirent
   (data.conducteurs || []).forEach(c => {

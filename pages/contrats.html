@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261008l">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261009a">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20261008l"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20261009a"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20261008l">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20261009a">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -770,8 +770,8 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20261008l"></script>
-<script src="../assets/js/supabase-client.js?v=20261008l"></script>
+<script src="../assets/js/vendor/supabase.js?v=20261009a"></script>
+<script src="../assets/js/supabase-client.js?v=20261009a"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -787,11 +787,11 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261008l"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261009a"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20261008l"></script>
+<script src="../assets/js/app.min.js?v=20261009a"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -957,7 +957,9 @@
     leasingFactures = (data.factures || []).filter(f => f.type === 'leasing');
     leasingByVeh = {};
     leasingFactures.forEach(f => {
-      const k = f.vehiculeImmat;
+      // ⚠️ Clé NORMALISÉE (règle 0-plaques) : les factures scannées sont en « HL724CD », les fiches en
+      // « HL-724-CD » → sans normImmat, un même véhicule était compté 2 fois et ses loyers tombaient à 0.
+      const k = f.vehiculeImmat ? (FP.normImmat ? FP.normImmat(f.vehiculeImmat) : f.vehiculeImmat) : '';
       if (!k) return;
       if (!leasingByVeh[k]) leasingByVeh[k] = { count: 0, total: 0, lastDate: '', lastFile: null, amounts: [] };
       leasingByVeh[k].count++;
@@ -965,8 +967,9 @@
       if (f.montantTTC > 0) leasingByVeh[k].amounts.push(f.montantTTC);
       if ((f.date || '') > leasingByVeh[k].lastDate) { leasingByVeh[k].lastDate = f.date || ''; leasingByVeh[k].lastFile = f; }
     });
+    // Set de plaques leasing en clé NORMALISÉE des DEUX côtés (fiches + factures) → plus de doublon de format.
     leasingImmats = new Set([
-      ...vehicules.filter(v => { const props = propsLeasing(); const p = String(v.proprietaire || '').trim().toLowerCase(); return p && props.includes(p); }).map(v => v.immat),
+      ...vehicules.filter(v => { const props = propsLeasing(); const p = String(v.proprietaire || '').trim().toLowerCase(); return p && props.includes(p); }).map(v => (FP.normImmat ? FP.normImmat(v.immat) : v.immat)),
       ...Object.keys(leasingByVeh),
     ]);
     // (Ancien filtre « masquer du leasing » retiré : la corbeille supprime désormais vraiment le
@@ -1069,7 +1072,8 @@
     const s = arr.slice().sort((a, b) => a - b); const m = Math.floor(s.length / 2);
     return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
   }
-  function mensualiteFixe(immat) { const a = leasingByVeh[immat]; return a ? median(a.amounts) : null; }
+  // Tolérant au format de plaque (leasingByVeh est keyé en normImmat) : marche avec « HL-724-CD » OU « HL724CD ».
+  function mensualiteFixe(immat) { const a = leasingByVeh[FP.normImmat ? FP.normImmat(immat || '') : immat]; return a ? median(a.amounts) : null; }
   // Détail des frais de pénalité de dépassement km : km projetés hors forfait × coût du km sup.
   // Affiché sous le badge « Risque de dépassement / À surveiller ». Renvoie '' si pas de dépassement.
   function penaltyHtml(overKm, kmSupp, editAttr, tolKm) {
