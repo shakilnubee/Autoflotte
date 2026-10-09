@@ -75,15 +75,20 @@ Deno.serve(async (req) => {
   // du client (mailExpediteur + domaine d'envoi vérifié + nom société) → invisible pour un envoi
   // légitime, il ne corrige qu'un `from` étranger. Repli sûr : config absente → EMAIL_FROM.
   const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  // ⚠️ FAIL-CLOSED : on ne fait confiance au `from` du PAYLOAD que pour un CEO *prouvé* (profiles.is_admin).
+  // Dans TOUS les autres cas — non-CEO, clé service absente, ou lecture profiles/app_settings qui échoue —
+  // on IMPOSE l'adresse scopée de la société (sinon EMAIL_FROM), jamais le `from` du navigateur. Avant, un
+  // échec de lecture laissait passer le `from` du payload → usurpation possible (ex. « au nom de » PXP).
+  let provenCEO = false, scopedFrom = "", scopedReply = "";
   if (callerId && SERVICE) {
     try {
       const rest = (path: string) => fetch(`${SUPA}/rest/v1/${path}`, { headers: { apikey: SERVICE, Authorization: `Bearer ${SERVICE}` } }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
       const profRows = await rest(`profiles?id=eq.${encodeURIComponent(callerId)}&select=is_admin,role,societe`);
       const me = Array.isArray(profRows) ? profRows[0] : null;
-      const isCEO = !!(me && me.is_admin); // source de vérité = profiles (jamais user_metadata)
-      if (!isCEO) {
+      if (me && me.is_admin) {
+        provenCEO = true; // source de vérité = profiles (jamais user_metadata)
+      } else {
         const soc = (me && me.societe) || "";
-        let allowedFrom = "", replyTo = "";
         if (soc) {
           const setRows = await rest(`app_settings?id=eq.${encodeURIComponent(String(soc))}&select=data`);
           const data = (Array.isArray(setRows) && setRows[0] && setRows[0].data) || {};
@@ -95,16 +100,17 @@ Deno.serve(async (req) => {
             let nom = (data.societe && data.societe.nom) || "";
             nom = String(nom).replace(/[<>"]/g, "").trim();
             if (/^parc\s*pilot$/i.test(nom)) nom = "";
-            allowedFrom = nom ? `${nom} <${fromAddr}>` : fromAddr;
-            replyTo = exp;
+            scopedFrom = nom ? `${nom} <${fromAddr}>` : fromAddr;
+            scopedReply = exp;
           }
         }
-        // On IMPOSE le from de la société (ou le secret EMAIL_FROM si non configurée) : le `from` du
-        // payload est ignoré pour un non-CEO → plus d'envoi « au nom de » une autre société.
-        msg.from = allowedFrom || "";
-        if (replyTo && !msg.replyTo) msg.replyTo = replyTo;
       }
-    } catch (_) { /* lecture impossible (infra) → comportement standard : repli EMAIL_FROM ci-dessous */ }
+    } catch (_) { provenCEO = false; /* lecture impossible → on reste fail-closed (non prouvé CEO) */ }
+  }
+  // Tant que l'appelant n'est pas prouvé CEO, on écrase le from du payload par l'adresse scopée (ou "" → EMAIL_FROM).
+  if (!provenCEO) {
+    msg.from = scopedFrom || "";
+    if (scopedReply && !msg.replyTo) msg.replyTo = scopedReply;
   }
 
   // Expéditeur : si le site fournit `from` (adresse de la société), on l'utilise ; sinon le
