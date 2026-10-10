@@ -5828,7 +5828,7 @@ FP.settings = {
       if (!st) { st = document.createElement('style'); st.id = 'fp-grp-style'; (document.head || document.documentElement).appendChild(st); }
       st.textContent = Object.keys(s.groupes)
         .filter(k => /^[a-z0-9-]+$/.test(k))                       // clés sûres pour un sélecteur CSS
-        .map(k => `.dot-${k},.gp-${k} .dot{background:var(--grp-${k})}`).join('');
+        .map(k => `.dot-${k},.gp-${k} .dot{background:var(--grp-${k})}.gp-${k}{--gp-c:var(--grp-${k})}`).join('');
     } catch (e) {}
     // Couleur de base de la plateforme (sidebar, titres, boutons foncés)
     const pc = (s.platformColor && s.platformColor[0] === '#') ? s.platformColor : '#' + (s.platformColor || this.defaults.platformColor);
