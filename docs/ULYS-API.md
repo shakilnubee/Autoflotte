@@ -47,6 +47,38 @@ jeton en **secret côté serveur** et ajoute les en-têtes obligatoires (`Author
 
 Aucune écriture vers Ulys à ce palier (l'import de factures reste une lecture Ulys + écriture locale).
 
+## Import AUTOMATIQUE quotidien + alerte e-mail (serveur)
+
+⚠️ **Rappel** : la synchro décrite ci-dessus (badges + factures) se déclenche **quand on ouvre
+l'onglet Contrôle → Ulys** (et si la dernière synchro date de +18 h). Si personne n'ouvre
+l'onglet, rien n'entre et aucune alerte ne part (la notif in-app est une notif **locale**
+navigateur, pas un e-mail).
+
+La fonction **`ulys-daily`** (Edge Function, `supabase/functions/ulys-daily/index.ts`) comble ça :
+elle tourne **côté serveur, 1×/jour** (tâche planifiée pg_cron) et, **sans qu'on ouvre l'app** :
+1. appelle l'API Ulys (`getinvoices`) ;
+2. **insère les factures ABSENTES** dans `factures` (en-têtes HT/TVA/TTC, fournisseur « Ulys »,
+   anti-doublon par n° de facture — colonnes snake_case identiques à `FP.db`) ;
+3. **envoie un e-mail d'alerte** (branded, liste des factures + total) s'il y a du nouveau.
+
+Le **détail par conducteur** (transaction par transaction) reste rempli par l'app à la prochaine
+ouverture de l'onglet Ulys (`FP.ulysApi.importConsoRecent`, idempotent) : il dépend du parseur CSV
+côté client, on ne le duplique pas côté serveur.
+
+### Mise en route (une seule fois)
+1. **Secret cron** : réutiliser le `KM_RELANCE_SECRET` déjà en place (la fonction accepte
+   `KM_RELANCE_SECRET` **ou** `ULYS_DAILY_SECRET`).
+2. *(option)* Secret **`ULYS_ALERT_TO`** = e-mail(s) destinataire(s) de l'alerte (sinon : adresse
+   d'envoi + copie de la société, réglages Paramètres → E-mails).
+3. Exécuter **`supabase/ulys-daily-setup.sql`** dans Supabase → SQL Editor (remplacer
+   `<<CRON_SECRET>>` par le secret de l'étape 1). Planifie la tâche à 06:30 UTC.
+4. **Déploiement** : automatique au push sur `main` (`deploy-edge-functions.yml`).
+
+### Vérifier la config (sans secret)
+Un **GET** sur l'URL de la fonction renvoie des **booléens** (clé Ulys présente ? secret cron ?
+Resend ? e-mail d'alerte ?) — **aucune valeur secrète**. Test à blanc : POST `{"dryRun": true}`
+(avec `x-cron-secret`, ou connecté en CEO) → liste ce qui SERAIT importé/envoyé, sans rien écrire.
+
 ## Endpoints API disponibles (référence, doc V1.11)
 
 | Endpoint | Méthode | Usage |
