@@ -502,6 +502,10 @@
         .assur-rep-bar>i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--fp-accent),#FB923C)}
         tr.assur-row-none td{background:#FEF2F2}
         body.fp-dark .assur-rep-bar{background:#1B2740} body.fp-dark tr.assur-row-none td{background:rgba(185,28,28,.14)}
+        /* Sélecteur de groupe = puces colorées (style propre, source couleur = --gp-c par groupe, comme les pastilles) */
+        .assur-grp-chip.on{background:color-mix(in srgb,var(--gp-c,#64748B) 14%,transparent);border-color:color-mix(in srgb,var(--gp-c,#64748B) 42%,transparent);color:color-mix(in srgb,var(--gp-c,#64748B) 78%,#0f172a)}
+        .assur-grp-chip.on .fp-fchip-cnt{background:var(--gp-c,#64748B);color:#fff}
+        body.fp-dark .assur-grp-chip.on{color:color-mix(in srgb,var(--gp-c,#94A3B8) 60%,#ffffff)}
       </style>
       <!-- Barre de recherche + filtres rapides (recherche · couverture · assureur · groupe · réinitialiser) -->
       <div id="assur-toolbar" class="fp-filterbar mb-3">
@@ -515,7 +519,7 @@
           <button type="button" class="fp-fchip" data-assur-couv="none">Sans assureur <span class="fp-fchip-cnt" id="assur-none-count"></span></button>
         </div>
         <span id="assur-filter-wrap" style="display:none"><select id="assur-filter" class="fp-fsel" style="min-width:160px"></select></span>
-        <select id="assur-groupe-filter" class="fp-fsel" style="min-width:140px"></select>
+        <div id="assur-groupe-chips" class="fp-fchips"></div>
         <button type="button" id="assur-reset" class="fp-reset">↺ Réinitialiser</button>
       </div>
       <!-- (styles de la barre : modèle unifié .fp-filterbar/.fp-searchbox/.fp-chip/.fp-fsel/.fp-reset dans styles.css) -->
@@ -1269,12 +1273,18 @@
     let none = 0; try { none = assList.length ? owned().filter(v => !assureurIdOf(v)).length : 0; } catch (e) {}
     const nc = $('assur-none-count'); if (nc) nc.textContent = none ? ('(' + none + ')') : '';
     ['none', 'couvert'].forEach(k => { const b = document.querySelector('#assur-toolbar [data-assur-couv="' + k + '"]'); if (b) b.style.display = assList.length ? '' : 'none'; });
-    const gs = $('assur-groupe-filter');
-    if (gs) {
-      const groupes = (FP.groupeKeys ? FP.groupeKeys() : []);
-      const cur = assurGroupe;
-      gs.innerHTML = '<option value="all">Tous les groupes</option>' + groupes.map(k => `<option value="${escC(k)}">${escC(FP.groupeLabel(k))}</option>`).join('');
-      gs.value = [...gs.options].some(o => o.value === cur) ? cur : 'all'; assurGroupe = gs.value;
+    // Filtre groupe = puces colorées (une par groupe visible + « Tous »), avec le nombre de véhicules
+    // possédés du groupe. Même couleur que les pastilles (var --gp-c via la classe gp-<k>). Source unique
+    // des groupes : FP.groupeKeysVisible (respecte les groupes masqués), repli FP.groupeKeys.
+    const gc = $('assur-groupe-chips');
+    if (gc) {
+      const groupes = (FP.groupeKeysVisible ? FP.groupeKeysVisible() : (FP.groupeKeys ? FP.groupeKeys() : []));
+      if (!groupes.includes(assurGroupe)) assurGroupe = 'all';   // groupe devenu invalide/masqué → Tous
+      const own = (() => { try { return owned(); } catch (e) { return []; } })();
+      const cntOf = (k) => own.filter(v => FP.vehGroupes(v).includes(k)).length;
+      const chip = (val, label, cnt, cls) => `<button type="button" class="fp-fchip assur-grp-chip${cls ? ' ' + cls : ''}${assurGroupe === val ? ' on' : ''}" data-assur-grp="${escC(val)}">${escC(label)}<span class="fp-fchip-cnt">${cnt}</span></button>`;
+      gc.innerHTML = chip('all', 'Tous les groupes', own.length, '')
+        + groupes.map(k => chip(k, FP.groupeLabel(k), cntOf(k), 'gp-' + k)).join('');
     }
     const se = $('assur-search'); if (se && se.value !== assurSearch) se.value = assurSearch;
   }
@@ -4918,7 +4928,7 @@
   // Barre d'outils Assurance : recherche + puces de couverture + filtre groupe + réinitialiser.
   { const se = $('assur-search'); if (se) se.addEventListener('input', (e) => { assurSearch = e.target.value; renderAssurance(); }); }
   document.querySelectorAll('#assur-toolbar [data-assur-couv]').forEach(b => b.addEventListener('click', () => { assurCouv = b.getAttribute('data-assur-couv'); renderAssurance(); }));
-  { const gf = $('assur-groupe-filter'); if (gf) gf.addEventListener('change', (e) => { assurGroupe = e.target.value; renderAssurance(); }); }
+  { const gc = $('assur-groupe-chips'); if (gc) gc.addEventListener('click', (e) => { const b = e.target.closest('[data-assur-grp]'); if (!b) return; assurGroupe = b.getAttribute('data-assur-grp'); renderAssurance(); }); }
   { const rb = $('assur-reset'); if (rb) rb.addEventListener('click', () => { assurSearch = ''; assurCouv = 'all'; assurGroupe = 'all'; assurFilter = 'all'; const se = $('assur-search'); if (se) se.value = ''; const af = $('assur-filter'); if (af) af.value = 'all'; renderAssurance(); }); }
   if ($('tbody-assurance')) $('tbody-assurance').addEventListener('change', (e) => {
     const sel = e.target.closest('[data-assureur-sel]'); if (!sel) return;
