@@ -8943,13 +8943,19 @@ FP.buildAlertes = (data) => {
       // (postérieurs au « Vu »), jamais ceux déjà acquittés. On filtre donc sur le marqueur « vu » (timestamp
       // fp_qrscan_seen), pas sur toute la fenêtre 24 h → « seulement la nouvelle, pas celle d'avant ».
       const _seenIso = (FP.qrScans && FP.qrScans._readSeen) ? FP.qrScans._readSeen() : '';
-      const _fresh = _seenIso ? scans.filter(s => s && s.at && s.at > _seenIso) : scans.slice();
+      // ⏱️ Fenêtre COURTE (demande utilisateur) : on ne garde QUE les scans de MOINS D'1 HEURE — sinon
+      // l'alerte traînait une longue liste de scans sur 24 h, pénible. L'historique complet daté reste
+      // disponible sur la fiche de chaque véhicule (rien n'est perdu).
+      const _cutoff = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+      const _fresh = (_seenIso ? scans.filter(s => s && s.at && s.at > _seenIso) : scans.slice())
+        .filter(s => s && s.at && s.at >= _cutoff);
       const byVeh = new Map(); _fresh.forEach(s => { if (s && s.vehiculeId && !byVeh.has(s.vehiculeId)) byVeh.set(s.vehiculeId, s); });
       const list = Array.from(byVeh.values());
       if (list.length) {
+        const nH = _fresh.length;   // nb de scans RÉELLEMENT affichés (< 1 h), pas le total 24 h
         const items = list.map(s => ({ label: `${s.plaque || 'Véhicule'} — QR ouvert ${rel(s.at)}`, target: 'vehicules.html?immat=' + encodeURIComponent(s.plaque || '') }));
-        const msg = `${nNew} nouveau${nNew > 1 ? 'x' : ''} scan${nNew > 1 ? 's' : ''} de QR (24 h)`;
-        out.push({ niveau: 'info', categorie: 'Activité QR', message: msg, detail: 'Quelqu\'un a ouvert le portail QR d\'un véhicule (le détail daté est dans la fiche du véhicule). « ✓ Vu » efface l\'alerte — elle reviendra UNIQUEMENT au prochain scan (jamais les scans déjà vus).', sort: 470, seenKey: 'qr', vehicules: items });
+        const msg = `${nH} nouveau${nH > 1 ? 'x' : ''} scan${nH > 1 ? 's' : ''} de QR (dernière heure)`;
+        out.push({ niveau: 'info', categorie: 'Activité QR', message: msg, detail: 'Quelqu\'un a ouvert le portail QR d\'un véhicule dans la dernière heure (le détail daté complet est dans la fiche du véhicule). « ✓ Vu » efface l\'alerte — elle reviendra UNIQUEMENT au prochain scan (jamais les scans déjà vus).', sort: 470, seenKey: 'qr', vehicules: items });
       }
     }
   } catch (e) {}
