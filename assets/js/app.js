@@ -12930,6 +12930,7 @@ FP.edl = {
               });
             }
           } catch (e) {}
+          let photoKo = 0;
           for (let pi = 0; pi < data.photos.length; pi++) {
             const p = data.photos[pi];
             try {
@@ -12946,9 +12947,11 @@ FP.edl = {
               // Nom DÉTERMINISTE (empreinte) → upsert : au ré-essai, la même image écrase le même fichier
               // au lieu d'en créer un nouveau, et l'insert ci-dessous est sauté (plus d'accumulation).
               const purl = await FP.uploadScan(new File([arr], 'edl.' + ext, { type: mime }), 'documents', { name: 'edl-' + motLbl + '-' + sensLabel.toLowerCase() + '-h' + h });
-              if (purl) await FP.persist.insert('documents', { id: 'D' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), vehiculeId: veh.id, type: 'etat-des-lieux', label: sensLabel, url: purl, driveId: null });
-            } catch (e) {}
+              if (purl) await FP.persist.insert('documents', { id: 'D' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), vehiculeId: veh.id, type: 'etat-des-lieux', label: sensLabel, url: purl, driveId: null }); else photoKo++;
+            } catch (e) { photoKo++; }
           }
+          // ⚠️ M8 — photos EDL non enregistrées = feedback VISIBLE (plus de drop silencieux, règle 0-perte ③).
+          if (photoKo > 0) { try { if (FP.notifyError) FP.notifyError(photoKo + " photo(s) de l'état des lieux non enregistrée(s) (connexion ?). Le PDF est OK — réessaie pour joindre les photos."); } catch (e) {} }
         }
         const b64 = doc.output('datauristring').split(',')[1];
         // (smode / willSign déjà calculés plus haut — avant l'ajout conditionnel aux Documents)

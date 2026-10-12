@@ -356,6 +356,14 @@
       // réglages société via FP.setAmendeMontants (même source que la page Amendes, règle 0-source).
       const mi = num(g('montantMinore')), fo = num(g('montantForfaitaire')), ini = num(g('montantInitial'));
       const montant = (mi != null ? mi : (fo != null ? fo : (ini != null ? ini : 0))); // JAMAIS le majoré par défaut
+      // ⚠️ M6 — un avis SANS montant minoré/forfaitaire lisible (typiquement un AVIS DE MAJORATION, ou un
+      // scan illisible) créerait une amende FANTÔME à 0 € sans rattacher l'amende d'origine. On BLOQUE la
+      // création depuis le scanner du tableau de bord et on renvoie vers la page « Amendes » (qui, elle,
+      // sait détecter une majoration et la rattacher à l'avis initial via lierMajoration).
+      if (!(Number(montant) > 0)) {
+        try { if (FP.notifyError) FP.notifyError("Cet avis n'a pas de montant à payer lisible (c'est peut-être un AVIS DE MAJORATION). Ouvre-le dans la page « Amendes » pour le rattacher à l'amende d'origine."); } catch (e) {}
+        return { table: 'amendes', id: null, annule: true };
+      }
       const immat = FP.normImmat ? FP.normImmat(g('immat')) : (g('immat') || '').toUpperCase();
       const dateAm = g('dateInfraction') || g('date') || '';
       // Conducteur : déduit via la plaque → chauffeur du véhicule (comme la page Amendes).
@@ -371,6 +379,14 @@
         montant, statut: 'à payer', avisUrl: model._fileUrl || null };  // avis scanné rattaché → bouton « Voir » sur la fiche amende
       // Anti-doublon central (règle plateforme) : n° d'avis + montant, sinon prénom+date+montant.
       if (FP.dupe && FP.dupe.confirmAdd && !(await FP.dupe.confirmAdd('amendes', rec, data.amendes || []))) return { table: 'amendes', id: null, annule: true };
+      // ⚠️ M6 — repli quand le n° d'avis est absent/illisible (FP.dupe ne clé alors sur rien → 2 scans du
+      // même avis = 2 amendes). On re-scanne par prénom + date + montant et on DEMANDE avant de doubler.
+      if (!(rec.numeroAvis && rec.numeroAvis.length >= 4)) {
+        try {
+          const dj = (data.amendes || []).find(a => a && (a.prenom || '') === (rec.prenom || '') && (a.date || '') === (rec.date || '') && Math.abs((Number(a.montant) || 0) - (Number(rec.montant) || 0)) < 0.5);
+          if (dj) { const okDup = FP.confirm ? await FP.confirm('Une amende identique (même conducteur, date et montant) existe déjà. L\'ajouter quand même ?') : true; if (!okDup) return { table: 'amendes', id: null, annule: true }; }
+        } catch (e) {}
+      }
       await FP.persist.insert('amendes', rec); try { if (window.data && Array.isArray(data.amendes)) data.amendes.push(rec); } catch (e) {}
       // Ventilation lue par l'IA → réglages société (pas de colonne DB), pour ne rien perdre.
       try { if (FP.setAmendeMontants) FP.setAmendeMontants(rec.id, { montantMinore: mi, montantForfaitaire: fo, montantMajore: num(g('montantMajore')), dateLimiteMinore: g('dateLimiteMinore') || g('dateLimite') || '', dateLimiteForfaitaire: g('dateLimiteForfaitaire') || '' }); } catch (e) {}
