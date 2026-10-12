@@ -4931,12 +4931,31 @@ FP.haptic = (function () {
     if (sessionStorage.getItem('fp_splash_done')) return;          // une fois par session d'appli
     const s = document.createElement('div');
     s.id = 'fp-splash';
-    s.style.cssText = 'position:fixed;inset:0;z-index:2147483646;background:#0F1E3D;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.2rem;transition:opacity .4s ease';
+    s.style.cssText = 'position:fixed;inset:0;z-index:2147483646;background:radial-gradient(120% 80% at 50% 18%,#15254a,#0B1424 70%);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1rem;transition:opacity .45s ease;overflow:hidden';
     s.innerHTML =
-      '<div style="width:84px;height:84px;border-radius:22px;background:#F97316;display:flex;align-items:center;justify-content:center;font:800 42px/1 system-ui,-apple-system,sans-serif;color:#fff;box-shadow:0 14px 34px -10px rgba(249,115,22,.6)">P</div>' +
-      '<div style="font:700 20px/1 system-ui,-apple-system,sans-serif;color:#fff;letter-spacing:.02em">Parc Pilot</div>' +
-      '<div style="width:22px;height:22px;border:2.5px solid rgba(255,255,255,.3);border-top-color:#F97316;border-radius:50%;animation:fp-splash-spin .7s linear infinite"></div>' +
-      '<style>@keyframes fp-splash-spin{to{transform:rotate(360deg)}}</style>';
+      '<div class="fps-aura"></div>' +
+      '<div class="fps-logo-wrap"><div class="fps-logo">P<span class="fps-shine"></span></div></div>' +
+      '<div class="fps-name">Parc Pilot</div>' +
+      '<div class="fps-sub">Pilotage de flotte</div>' +
+      '<div class="fps-bar"><span></span></div>' +
+      '<style>' +
+      '.fps-aura{position:absolute;inset:-25%;z-index:0;pointer-events:none;background:radial-gradient(38% 28% at 32% 34%,rgba(249,115,22,.26),transparent 60%),radial-gradient(44% 30% at 70% 62%,rgba(56,130,246,.20),transparent 60%);filter:blur(12px);animation:fps-drift 9s ease-in-out infinite alternate}' +
+      '@keyframes fps-drift{to{transform:translate(4%,3%) scale(1.12)}}' +
+      '.fps-logo-wrap{position:relative;z-index:1;animation:fps-float 3.4s ease-in-out .8s infinite}' +
+      '@keyframes fps-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}' +
+      '.fps-logo{position:relative;width:94px;height:94px;border-radius:24px;background:linear-gradient(145deg,#FB923C,#F97316);display:flex;align-items:center;justify-content:center;font:900 47px/1 system-ui,-apple-system,sans-serif;color:#fff;overflow:hidden;transform-origin:50% 62%;box-shadow:0 22px 54px -14px rgba(249,115,22,.7),inset 0 2px 0 rgba(255,255,255,.4);animation:fps-pop .78s cubic-bezier(.2,.9,.3,1.35) both,fps-glow 2.6s ease-in-out .95s infinite}' +
+      '@keyframes fps-pop{0%{opacity:0;transform:perspective(700px) rotateX(40deg) scale(.58) translateY(18px)}60%{opacity:1}100%{opacity:1;transform:perspective(700px) rotateX(0) scale(1) translateY(0)}}' +
+      '@keyframes fps-glow{0%,100%{box-shadow:0 22px 54px -14px rgba(249,115,22,.5),inset 0 2px 0 rgba(255,255,255,.4)}50%{box-shadow:0 26px 68px -10px rgba(249,115,22,.95),inset 0 2px 0 rgba(255,255,255,.45)}}' +
+      '.fps-shine{position:absolute;inset:0;background:linear-gradient(105deg,transparent 35%,rgba(255,255,255,.55) 50%,transparent 65%);transform:translateX(-130%);animation:fps-shine 3.6s ease-in-out 1.5s infinite}' +
+      '@keyframes fps-shine{0%,30%{transform:translateX(-130%)}60%,100%{transform:translateX(130%)}}' +
+      '.fps-name{position:relative;z-index:1;font:800 23px/1 "Inter",system-ui,-apple-system,sans-serif;color:#fff;letter-spacing:.01em;animation:fps-rise .6s ease .38s both}' +
+      '.fps-sub{position:relative;z-index:1;font:700 11px/1 "Inter",system-ui,sans-serif;letter-spacing:.2em;text-transform:uppercase;color:#7C93B4;animation:fps-rise .6s ease .52s both}' +
+      '@keyframes fps-rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}' +
+      '.fps-bar{position:relative;z-index:1;width:148px;height:4px;border-radius:9999px;background:rgba(255,255,255,.1);overflow:hidden;margin-top:.5rem;animation:fps-rise .6s ease .66s both}' +
+      '.fps-bar span{position:absolute;top:0;left:-40%;height:100%;width:40%;border-radius:9999px;background:linear-gradient(90deg,#FB923C,#F97316);animation:fps-load 1.25s cubic-bezier(.4,0,.2,1) infinite}' +
+      '@keyframes fps-load{0%{left:-40%}100%{left:100%}}' +
+      '@media (prefers-reduced-motion:reduce){.fps-aura,.fps-logo-wrap,.fps-logo,.fps-shine,.fps-name,.fps-sub,.fps-bar,.fps-bar span{animation:none!important}.fps-logo{transform:none}.fps-name,.fps-sub,.fps-bar{opacity:1}}' +
+      '</style>';
     (document.body || document.documentElement).appendChild(s);
     const hide = () => { try { sessionStorage.setItem('fp_splash_done', '1'); } catch (e) {} s.style.opacity = '0'; setTimeout(() => s.remove(), 420); };
     const t = setTimeout(hide, 2200);                              // filet : jamais bloqué > 2,2 s
