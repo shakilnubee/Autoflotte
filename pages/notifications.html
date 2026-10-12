@@ -218,7 +218,10 @@
     if (!a.muteKey) return card;
     const sig = (FP.alertes && FP.alertes.sig) ? FP.alertes.sig(a) : '';
     return `<div class="notif-card-wrap" style="position:relative">${card}
-      <button type="button" data-vu="${esc(a.muteKey)}" data-sig="${esc(sig)}" title="J'ai vu — l'alerte reviendra si la situation change" class="hover:text-emerald-700 hover:border-emerald-200 hover:bg-emerald-50" style="position:absolute;top:8px;right:8px;z-index:2;display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:9999px;font-size:11px;font-weight:700;background:#fff;color:#059669;border:1px solid var(--fp-border);cursor:pointer"><i data-lucide="check" class="w-3.5 h-3.5"></i> Vu</button>
+      <div style="position:absolute;top:8px;right:8px;z-index:2;display:inline-flex;align-items:center;gap:4px">
+        <button type="button" data-vu="${esc(a.muteKey)}" data-sig="${esc(sig)}" title="J'ai vu — l'alerte reviendra si la situation change" class="hover:text-emerald-700 hover:border-emerald-200 hover:bg-emerald-50" style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:9999px;font-size:11px;font-weight:700;background:#fff;color:#059669;border:1px solid var(--fp-border);cursor:pointer"><i data-lucide="check" class="w-3.5 h-3.5"></i> Vu</button>
+        <button type="button" data-mute="${esc(a.muteKey)}" title="Ignorer définitivement — cette alerte ne reviendra plus (restaurable dans « alertes masquées » en bas de page)" class="hover:text-rose-700 hover:border-rose-200 hover:bg-rose-50" style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:9999px;font-size:11px;font-weight:700;background:#fff;color:#64748b;border:1px solid var(--fp-border);cursor:pointer"><i data-lucide="bell-off" class="w-3.5 h-3.5"></i> Ignorer</button>
+      </div>
     </div>`;
   }
 
@@ -378,16 +381,26 @@
     if (FP.toast) FP.toast('✓ Vu — reviendra si la situation change');
     smoothRemoveCard(b);   // retrait fluide (pas de reconstruction de toute la liste)
   });
-  // (compat) ancien masquage définitif, si un bouton « Ignorer » subsiste quelque part.
+  // « 🔕 Ignorer » : masquage DÉFINITIF (même les alertes critiques, ex. CT dépassé « jamais fait »).
+  // L'alerte ne revient plus TANT qu'elle n'est pas réaffichée depuis « alertes masquées » (bas de page).
+  // Confirmé une fois (restaurable), car ça peut cacher une alerte importante.
   document.getElementById('notif-cols').addEventListener('click', (e) => {
     const b = e.target.closest('[data-mute]'); if (!b) return;
     e.preventDefault(); e.stopPropagation();
-    const card = b.parentElement.querySelector('.notif');
+    const wrap = b.closest('.notif-card-wrap');
+    const card = wrap ? wrap.querySelector('.notif') : null;
     const cat = card ? (card.querySelector('.notif-cat') || {}).textContent || '' : '';
     const msg = card ? (card.querySelector('.font-semibold') || {}).textContent || '' : '';
     const label = [cat, msg].filter(Boolean).join(' — ');
-    FP.alertes.masquer(b.dataset.mute, label);
-    smoothRemoveCard(b);   // retrait fluide
+    const doMute = () => {
+      FP.alertes.masquer(b.dataset.mute, label);
+      if (FP.toast) FP.toast('🔕 Alerte ignorée — restaurable dans « alertes masquées »');
+      smoothRemoveCard(b);   // retrait fluide
+    };
+    if (FP.confirm) {
+      FP.confirm('Ignorer définitivement cette alerte ?\n\nElle ne réapparaîtra plus — même si elle est importante. Tu pourras la restaurer à tout moment depuis « alertes masquées » en bas de page.',
+        { okText: 'Ignorer', cancelText: 'Annuler', danger: true }).then(ok => { if (ok) doMute(); });
+    } else { doMute(); }
   });
   // « ✓ Vu » : marque l'activité comme vue (n'efface QUE l'occurrence, revient au prochain événement).
   document.getElementById('notif-cols').addEventListener('click', (e) => {
