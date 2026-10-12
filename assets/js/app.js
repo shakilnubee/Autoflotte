@@ -1833,6 +1833,10 @@ FP.echeanceStatut = function (dateOrISO, kind) {
   // → une SEULE vérité pour la couleur/urgence du CT : tableau Véhicules, fiche, Contrats, Alertes.
   let S;
   if (kind === 'ct' && FP.notifCfg) { const I = (FP.notifCfg().ctJours || 90); S = { urgent: Math.round(I / 3), bientot: Math.round(I * 2 / 3) }; }
+  // PERMIS + PIÈCE D'IDENTITÉ : seuils = réglage configurable `notifCfg().docAlerteJours` (bientôt = X j,
+  // urgent = X/2), EXACTEMENT comme les Alertes et Renouvellements. Avant : seuils figés 30/90 ici → la
+  // fiche conducteur affichait « valide » quand les Alertes affichaient déjà « à renouveler ». Une seule vérité.
+  else if ((kind === 'permis' || kind === 'piece' || kind === 'pièce') && FP.notifCfg) { const W = (FP.notifCfg().docAlerteJours || 120); S = { urgent: Math.round(W / 2), bientot: W }; }
   else S = FP.ECHEANCE_SEUILS[kind] || FP.ECHEANCE_SEUILS.defaut;
   let statut = 'valide';
   if (j < 0) statut = 'expire'; else if (j <= S.urgent) statut = 'urgent'; else if (j <= S.bientot) statut = 'bientot';

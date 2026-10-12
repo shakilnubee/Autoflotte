@@ -79,6 +79,19 @@ function ok(cond, label) { eq(!!cond, true, label); }
   eq(FP.contratCadreCoutAnnuel({ montant: 0 }), 0, 'contrat 0€ = 0');
 }
 
+// --- M4 : permis — la fiche suit le réglage docAlerteJours (comme les Alertes), plus de seuil figé ---
+{
+  const { FP, load } = makeFP({});
+  FP.notifCfg = () => ({ ctJours: 90, docAlerteJours: 120 });
+  // joursRestants est une méthode d'objet (pas FP.x=) → on la stub (minuit→minuit, comme la vraie).
+  FP.joursRestants = (iso) => { const d = new Date(iso), n = new Date(); return Math.round((Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) - Date.UTC(n.getFullYear(), n.getMonth(), n.getDate())) / 86400000); };
+  load(['ECHEANCE_SEUILS', 'ECHEANCE_COULEUR', 'echeanceStatut']);
+  const inDays = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
+  eq(FP.echeanceStatut(inDays(100), 'permis').statut, 'bientot', 'M4 — permis à 100j = « bientôt » (suit docAlerteJours=120), PAS « valide »');
+  eq(FP.echeanceStatut(inDays(50), 'permis').statut, 'urgent', 'M4 — permis à 50j = « urgent » (docAlerteJours/2=60)');
+  eq(FP.echeanceStatut(inDays(200), 'permis').statut, 'valide', 'M4 — permis à 200j = « valide »');
+}
+
 // --- M3 : contrats-cadres « abonnements » dans les totaux SANS double-compter ---
 {
   const settings = { contratsCadre: [
