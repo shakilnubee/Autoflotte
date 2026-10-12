@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261012a">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261012b">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20261012a"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20261012b"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20261012a">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20261012b">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -225,6 +225,13 @@
       #contrat-tabbar .ctab { display:inline-flex; align-items:center; gap:7px; padding:10px 20px; font-size:14px; font-weight:700; background:none; border:none; border-bottom:2px solid transparent; color:#94A3B8; cursor:pointer; transition:color .15s, border-color .15s, transform .12s; }
       #contrat-tabbar .ctab:hover { color:var(--fp-primary); transform:translateY(-1px); }
       #contrat-tabbar .ctab.active { color:var(--fp-primary); border-bottom-color:var(--fp-accent); }
+      /* Coffre-fort documents : zone de dépôt + lignes */
+      .arcdoc-drop { border:2px dashed var(--fp-border); border-radius:14px; background:var(--fp-bg); padding:18px; text-align:center; cursor:pointer; transition:border-color .15s, background .15s; }
+      .arcdoc-drop:hover { border-color:var(--fp-accent); }
+      .arcdoc-drop.drag { border-color:var(--fp-accent); background:color-mix(in srgb, var(--fp-accent) 10%, transparent); }
+      .arcdoc-row { display:flex; align-items:center; gap:10px; padding:9px 11px; border:1px solid var(--fp-border); border-radius:11px; background:var(--fp-surface); margin-bottom:7px; }
+      .arcdoc-row .ad-ic { width:34px; height:34px; border-radius:9px; display:flex; align-items:center; justify-content:center; flex:0 0 auto; background:color-mix(in srgb, var(--fp-accent) 13%, var(--fp-surface)); color:var(--fp-accent); }
+      .arcdoc-yeargrp { font-size:.72rem; font-weight:800; color:var(--fp-faint); text-transform:uppercase; letter-spacing:.08em; margin:12px 0 6px; }
       #contrat-tabbar .ctab.active i { color:var(--fp-accent); }
       body.fp-dark #contrat-tabbar .ctab.active { color:#fff; }
       /* ⚠️ MOBILE — modale « contrat cadre » : ses grilles sont en style INLINE (2-3 colonnes), que le CSS
@@ -319,6 +326,50 @@
         </select>
       </div>
       <div id="arch-list"></div>
+
+      <!-- Rubrique : COFFRE-FORT DE DOCUMENTS (relevés d'information, attestations, courriers…) -->
+      <div class="mt-8 pt-6" style="border-top:1px solid var(--fp-border)">
+        <div class="flex items-center gap-2 flex-wrap mb-1">
+          <div class="text-xs font-bold uppercase tracking-wide" style="color:var(--fp-accent)">📂 Documents archivés</div>
+          <span class="text-xs text-slate-400">dépose tes relevés d'information, attestations, courriers… et retrouve-les en un clic</span>
+        </div>
+        <p class="text-sm text-slate-600 mb-3">Un <b>coffre-fort</b> pour tous tes documents de flotte. Glisse tes fichiers, donne-leur un <b>nom</b> + une <b>catégorie</b> + une <b>année</b>, et retrouve-les en tapant (recherche, filtres). Tout est <b>stocké dans Parc Pilot</b> et <b>synchronisé</b> sur tous tes appareils.</p>
+        <div id="arcdoc-drop" class="arcdoc-drop">
+          <input type="file" id="arcdoc-file" multiple accept="application/pdf,image/*" style="display:none">
+          <i data-lucide="upload-cloud" class="w-7 h-7" style="color:var(--fp-accent)"></i>
+          <div class="text-sm font-semibold text-slate-700 mt-1">Glisse tes fichiers ici</div>
+          <div class="text-xs text-slate-400 mt-0.5">ou <button type="button" id="arcdoc-browse" class="font-semibold" style="color:var(--fp-accent)">parcourir</button> · PDF, photos, scans · plusieurs à la fois</div>
+        </div>
+        <div class="flex items-center gap-2 flex-wrap my-3">
+          <input id="arcdoc-search" type="search" placeholder="Rechercher un document (nom, catégorie, véhicule…)" class="field-input !py-1.5 !text-sm" style="width:auto;min-width:240px">
+          <select id="arcdoc-f-cat" class="field-input !py-1.5 !text-sm" style="width:auto"></select>
+          <select id="arcdoc-f-year" class="field-input !py-1.5 !text-sm" style="width:auto"></select>
+          <span id="arcdoc-count" class="text-xs text-slate-400 ml-1"></span>
+        </div>
+        <div id="arcdoc-list"></div>
+      </div>
+    </div>
+
+    <!-- Modal : classer les fichiers déposés (nom + catégorie + année + véhicule) -->
+    <div id="arcdoc-ov" class="fiche-ov">
+      <div class="fiche-card" style="max-width:560px">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="text-lg font-extrabold text-slate-900 flex items-center gap-2"><i data-lucide="folder-plus" class="w-5 h-5"></i> Classer <span id="arcdoc-nfiles"></span></h3>
+          <button type="button" id="arcdoc-close" class="text-slate-400 hover:text-slate-700 text-xl leading-none">&times;</button>
+        </div>
+        <div class="grid grid-cols-2 gap-3 mb-3">
+          <div><label class="block text-xs font-semibold text-slate-600 mb-1">Catégorie</label><select id="arcdoc-cat" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"></select></div>
+          <div><label class="block text-xs font-semibold text-slate-600 mb-1">Année</label><input id="arcdoc-year" type="number" min="1990" max="2099" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"></div>
+        </div>
+        <div class="mb-3"><label class="block text-xs font-semibold text-slate-600 mb-1">Véhicule concerné <span class="text-slate-400 font-normal">(optionnel)</span></label><select id="arcdoc-veh" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"></select></div>
+        <div class="text-xs font-semibold text-slate-600 mb-1">Fichiers (tu peux renommer)</div>
+        <div id="arcdoc-files" class="space-y-1.5 mb-3" style="max-height:30vh;overflow:auto"></div>
+        <div id="arcdoc-status" class="text-xs mb-2"></div>
+        <div class="flex justify-end gap-2">
+          <button type="button" id="arcdoc-cancel" class="btn btn-outline text-sm">Annuler</button>
+          <button type="button" id="arcdoc-save" class="btn btn-primary text-sm"><i data-lucide="check" class="w-4 h-4"></i> Déposer</button>
+        </div>
+      </div>
     </div>
 
     <!-- Section Leasing -->
@@ -774,8 +825,8 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20261012a"></script>
-<script src="../assets/js/supabase-client.js?v=20261012a"></script>
+<script src="../assets/js/vendor/supabase.js?v=20261012b"></script>
+<script src="../assets/js/supabase-client.js?v=20261012b"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -791,11 +842,11 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261012a"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261012b"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20261012a"></script>
+<script src="../assets/js/app.min.js?v=20261012b"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -2682,7 +2733,7 @@
     if (bc) bc.classList.toggle('active', name === 'cadre');
     if (bar) bar.classList.toggle('active', name === 'archive');
     if (name === 'cadre') { try { renderCadre(); } catch (e) {} }
-    if (name === 'archive') { try { renderArchive(); } catch (e) {} }
+    if (name === 'archive') { try { renderArchive(); } catch (e) {} try { if (window.renderArchiveDocs) renderArchiveDocs(); } catch (e) {} }
     // Filtre « par loueur » + astuce de réorganisation = pertinents seulement sur Leasing. Sur Leasing
     // on délègue la visibilité à populateLeasingLoueurFilter (règle « ≥ 2 loueurs ») ; ailleurs on masque.
     if (name === 'leasing') { try { populateLeasingLoueurFilter(); } catch (e) {} }
@@ -3686,6 +3737,172 @@
     document.addEventListener('fp:data-ready', () => { try { if (isArchiveTab() && OA()) { OA().load().then(() => { if (isArchiveTab()) render(); }); } } catch (e) {} });
     // Premier rendu si on ouvre directement sur Archive.
     try { if (isArchiveTab()) render(); } catch (e) {}
+  })();
+
+  // ====== 📂 COFFRE-FORT DE DOCUMENTS (sous-onglet Archive) ======
+  // Dépôt de fichiers (relevés d'information, attestations, courriers…) → stockage Supabase (bucket scans,
+  // dossier 'archives') + métadonnées dans settings.archiveDocs (map par id, protégée COLLECTION_KEYS →
+  // fusion fine multi-appareils). Recherche/filtre par catégorie & année, renommage, Voir/Télécharger/Suppr.
+  (function archiveDocsModule(){
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => (FP.esc ? FP.esc(s) : String(s == null ? '' : s));
+    const CATS = ["Relevé d'information", 'Attestation assurance', 'Contrat', 'Facture', 'Courrier', 'Autre'];
+    const canEdit = () => (FP.isAdmin && FP.isAdmin()) || (FP.isGestionnaire && FP.isGestionnaire());
+    const st = { search: '', cat: 'all', year: 'all' };
+    let pending = [];
+
+    const allDocs = () => { try { const m = FP.settings.get().archiveDocs; return (m && typeof m === 'object') ? Object.values(m) : []; } catch (e) { return []; } };
+    const iconFor = (n) => /\.pdf(\?|$)/i.test(n || '') ? 'file-text' : 'image';
+    const guessYear = (n) => { const m = String(n || '').match(/20\d{2}/); return m ? +m[0] : new Date().getFullYear(); };
+
+    function fillFilters() {
+      const years = [...new Set(allDocs().map(d => d.annee).filter(Boolean))].sort((a, b) => b - a);
+      const catSel = $('arcdoc-f-cat');
+      if (catSel) { const cur = st.cat; catSel.innerHTML = '<option value="all">Toutes catégories</option>' + CATS.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join(''); catSel.value = [...catSel.options].some(o => o.value === cur) ? cur : 'all'; }
+      const ySel = $('arcdoc-f-year');
+      if (ySel) { const cur = st.year; ySel.innerHTML = '<option value="all">Toutes les années</option>' + years.map(y => `<option value="${y}">${y}</option>`).join(''); ySel.value = [...ySel.options].some(o => o.value === String(cur)) ? cur : 'all'; }
+    }
+    function render() {
+      const host = $('arcdoc-list'); if (!host) return;
+      fillFilters();
+      const drop = $('arcdoc-drop'); if (drop) drop.style.display = canEdit() ? '' : 'none';
+      const q = st.search.toLowerCase().trim();
+      let list = allDocs().filter(d => {
+        if (st.cat !== 'all' && (d.categorie || 'Autre') !== st.cat) return false;
+        if (st.year !== 'all' && String(d.annee || '') !== String(st.year)) return false;
+        if (q && !((d.name || '') + ' ' + (d.categorie || '') + ' ' + (d.vehicule || '') + ' ' + (d.annee || '')).toLowerCase().includes(q)) return false;
+        return true;
+      });
+      const cnt = $('arcdoc-count'); if (cnt) cnt.textContent = list.length ? (list.length + ' document' + (list.length > 1 ? 's' : '')) : '';
+      if (!list.length) { host.innerHTML = '<div class="text-sm text-slate-400 py-4 text-center">' + (allDocs().length ? 'Aucun document pour ce filtre.' : 'Aucun document archivé — dépose ton premier fichier ci-dessus.') + '</div>'; return; }
+      // Groupé par année (décroissante)
+      list.sort((a, b) => (b.annee || 0) - (a.annee || 0) || String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+      const byYear = {};
+      list.forEach(d => { const y = d.annee || '—'; (byYear[y] = byYear[y] || []).push(d); });
+      host.innerHTML = Object.keys(byYear).sort((a, b) => (+b || 0) - (+a || 0)).map(y => {
+        return '<div class="arcdoc-yeargrp">' + esc(y) + '</div>' + byYear[y].map(d => rowHTML(d)).join('');
+      }).join('');
+      if (window.lucide) try { lucide.createIcons(); } catch (e) {}
+    }
+    function rowHTML(d) {
+      const sub = [d.categorie || 'Autre', d.vehicule ? ('🚗 ' + d.vehicule) : ''].filter(Boolean).join(' · ');
+      return '<div class="arcdoc-row" data-ad="' + esc(d.id) + '">'
+        + '<span class="ad-ic"><i data-lucide="' + iconFor(d.fileName || d.url) + '" class="w-4 h-4"></i></span>'
+        + '<div class="min-w-0 flex-1"><div class="text-sm font-medium text-slate-800 truncate">' + esc(d.name || d.fileName || 'Document') + '</div>'
+        + '<div class="text-xs text-slate-500 truncate">' + esc(sub) + '</div></div>'
+        + '<div class="flex items-center gap-1 flex-shrink-0">'
+        + '<button type="button" class="btn btn-outline !py-1 !px-2.5 text-xs" data-ad-open="' + esc(d.id) + '" title="Ouvrir"><i data-lucide="eye" class="w-3.5 h-3.5"></i></button>'
+        + '<button type="button" class="btn btn-outline !py-1 !px-2 text-xs" data-ad-dl="' + esc(d.id) + '" title="Télécharger"><i data-lucide="download" class="w-3.5 h-3.5"></i></button>'
+        + (canEdit() ? '<button type="button" class="btn btn-outline !py-1 !px-2 text-xs" data-ad-ren="' + esc(d.id) + '" title="Renommer"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>'
+          + '<button type="button" class="p-1.5 hover:bg-red-50 rounded text-slate-300 hover:text-red-600" data-ad-del="' + esc(d.id) + '" title="Supprimer"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>' : '')
+        + '</div></div>';
+    }
+    const findDoc = (id) => allDocs().find(d => String(d.id) === String(id));
+
+    // ---- Dépôt ----
+    function openDeposit(files) {
+      if (!canEdit()) { alert("Seuls l'administrateur et le gestionnaire peuvent déposer des documents."); return; }
+      pending = Array.from(files || []).filter(Boolean); if (!pending.length) return;
+      $('arcdoc-nfiles').textContent = pending.length + ' fichier' + (pending.length > 1 ? 's' : '');
+      const cat = $('arcdoc-cat'); if (cat) cat.innerHTML = CATS.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+      const yr = $('arcdoc-year'); if (yr) yr.value = guessYear(pending[0] && pending[0].name);
+      const vs = $('arcdoc-veh');
+      if (vs) { const vl = (window.FP_DATA && Array.isArray(FP_DATA.vehicules)) ? FP_DATA.vehicules.slice().sort((a, b) => String(a.immat || '').localeCompare(String(b.immat || ''))) : []; vs.innerHTML = '<option value="">— Aucun —</option>' + vl.map(v => `<option value="${esc(v.immat || '')}">${esc(v.immat || '')}${v.marque ? ' · ' + esc(v.marque) : ''}</option>`).join(''); }
+      $('arcdoc-files').innerHTML = pending.map((f, i) => {
+        const base = String(f.name || 'document').replace(/\.[a-z0-9]+$/i, '');
+        return '<div class="flex items-center gap-2"><i data-lucide="' + iconFor(f.name) + '" class="w-4 h-4 text-slate-400 flex-shrink-0"></i>'
+          + '<input class="arcdoc-name field-input !py-1 !text-sm" data-idx="' + i + '" value="' + esc(base) + '" style="flex:1"></div>';
+      }).join('');
+      const stt = $('arcdoc-status'); if (stt) stt.textContent = '';
+      $('arcdoc-ov').classList.add('open');
+      if (window.lucide) try { lucide.createIcons(); } catch (e) {}
+    }
+    async function doDeposit() {
+      if (!pending.length) return;
+      const categorie = ($('arcdoc-cat') || {}).value || 'Autre';
+      const annee = parseInt(($('arcdoc-year') || {}).value, 10) || new Date().getFullYear();
+      const vehicule = ($('arcdoc-veh') || {}).value || '';
+      const names = {}; document.querySelectorAll('#arcdoc-files .arcdoc-name').forEach(inp => { names[inp.getAttribute('data-idx')] = (inp.value || '').trim(); });
+      if (!(FP.uploadScan && FP.supabase && FP.supabase.storage)) { alert('Stockage indisponible. Recharge la page (Ctrl+Maj+R) et réessaie.'); return; }
+      const saveBtn = $('arcdoc-save'); if (saveBtn) saveBtn.disabled = true;
+      const bz = FP.busy ? FP.busy('Dépôt… 0/' + pending.length) : null;
+      let ok = 0, ko = 0; const added = {};
+      for (let i = 0; i < pending.length; i++) {
+        const f = pending[i];
+        if (bz) bz.update('Dépôt… ' + i + '/' + pending.length);
+        try {
+          const url = await FP.uploadScan(f, 'archives');
+          if (!url) throw new Error('upload vide');
+          const id = 'ARCH-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7);
+          added[id] = { id, name: names[i] || String(f.name || 'Document').replace(/\.[a-z0-9]+$/i, ''), categorie, annee, vehicule, url, fileName: f.name || '', createdAt: new Date().toISOString() };
+          ok++;
+        } catch (e) { console.error('[archiveDocs]', e); ko++; }
+      }
+      // Une seule écriture pour tout le lot (évite N courses CAS sur les réglages).
+      if (ok) { const s = FP.settings.get(); s.archiveDocs = (s.archiveDocs && typeof s.archiveDocs === 'object') ? s.archiveDocs : {}; Object.assign(s.archiveDocs, added); FP.settings.save(s); }
+      const resume = '📂 ' + ok + ' document(s) déposé(s)' + (ko ? ' · ⚠️ ' + ko + ' échec(s)' : '');
+      if (bz) { if (ko) bz.fail(resume); else bz.done(resume); } else if (FP.toast) FP.toast(resume);
+      if (saveBtn) saveBtn.disabled = false;
+      pending = [];
+      $('arcdoc-ov').classList.remove('open');
+      render();
+    }
+
+    // ---- Actions sur un document ----
+    async function openDoc(id, download) {
+      const d = findDoc(id); if (!d) return;
+      let url = d.url;
+      try { if (FP.signedScanUrl) url = await FP.signedScanUrl(d.url, 3600); } catch (e) {}
+      if (download) {
+        try {
+          const resp = await fetch(url); const blob = await resp.blob();
+          const ext = (d.fileName && d.fileName.match(/\.[a-z0-9]+$/i)) ? d.fileName.match(/\.[a-z0-9]+$/i)[0] : (/pdf/i.test(blob.type) ? '.pdf' : '');
+          const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = (d.name || 'document') + ext; document.body.appendChild(a); a.click(); a.remove();
+          setTimeout(() => URL.revokeObjectURL(a.href), 4000); return;
+        } catch (e) { /* repli : ouvrir */ }
+      }
+      window.open(url, '_blank');
+    }
+    async function renameDoc(id) {
+      const d = findDoc(id); if (!d) return;
+      const nv = FP.prompt ? await FP.prompt('Nouveau nom du document :', d.name || '') : window.prompt('Nouveau nom :', d.name || '');
+      if (nv == null) return; const name = String(nv).trim(); if (!name) return;
+      const s = FP.settings.get(); if (s.archiveDocs && s.archiveDocs[id]) { s.archiveDocs[id].name = name; FP.settings.save(s); render(); }
+    }
+    async function delDoc(id) {
+      const d = findDoc(id); if (!d) return;
+      if (FP.confirm && !(await FP.confirm('Supprimer « ' + (d.name || 'ce document') + ' » ?\n\nLe fichier sera retiré définitivement des archives.'))) return;
+      try { const r = FP._storageRef ? FP._storageRef(d.url) : null; if (r && FP.supabase && FP.supabase.storage) await FP.supabase.storage.from(r.bucket).remove([r.path]); } catch (e) { console.warn('[archiveDocs del storage]', e); }
+      const s = FP.settings.get(); if (s.archiveDocs) { delete s.archiveDocs[id]; FP.settings.save(s); }
+      if (FP.toast) FP.toast('Document supprimé'); render();
+    }
+
+    // ---- Wiring ----
+    const drop = $('arcdoc-drop'), fileInput = $('arcdoc-file');
+    if (drop && fileInput) {
+      $('arcdoc-browse') && $('arcdoc-browse').addEventListener('click', (e) => { e.stopPropagation(); fileInput.click(); });
+      drop.addEventListener('click', () => fileInput.click());
+      fileInput.addEventListener('change', (e) => { openDeposit(e.target.files); e.target.value = ''; });
+      ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('drag'); }));
+      ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, (e) => { e.preventDefault(); if (ev === 'dragleave' && drop.contains(e.relatedTarget)) return; drop.classList.remove('drag'); }));
+      drop.addEventListener('drop', (e) => { const fs = e.dataTransfer && e.dataTransfer.files; if (fs && fs.length) openDeposit(fs); });
+    }
+    { const c = $('arcdoc-close'); if (c) c.addEventListener('click', () => $('arcdoc-ov').classList.remove('open')); }
+    { const c = $('arcdoc-cancel'); if (c) c.addEventListener('click', () => $('arcdoc-ov').classList.remove('open')); }
+    { const ov = $('arcdoc-ov'); if (ov) ov.addEventListener('click', (e) => { if (e.target === ov) ov.classList.remove('open'); }); }
+    { const b = $('arcdoc-save'); if (b) b.addEventListener('click', () => doDeposit().catch(e => { console.error(e); alert('Erreur pendant le dépôt.'); const sb = $('arcdoc-save'); if (sb) sb.disabled = false; })); }
+    { const s = $('arcdoc-search'); if (s) s.addEventListener('input', (e) => { st.search = e.target.value || ''; render(); }); }
+    { const c = $('arcdoc-f-cat'); if (c) c.addEventListener('change', (e) => { st.cat = e.target.value; render(); }); }
+    { const y = $('arcdoc-f-year'); if (y) y.addEventListener('change', (e) => { st.year = e.target.value; render(); }); }
+    { const host = $('arcdoc-list'); if (host) host.addEventListener('click', (e) => {
+        const o = e.target.closest('[data-ad-open]'); if (o) { openDoc(o.getAttribute('data-ad-open'), false); return; }
+        const dl = e.target.closest('[data-ad-dl]'); if (dl) { openDoc(dl.getAttribute('data-ad-dl'), true); return; }
+        const rn = e.target.closest('[data-ad-ren]'); if (rn) { renameDoc(rn.getAttribute('data-ad-ren')); return; }
+        const de = e.target.closest('[data-ad-del]'); if (de) { delDoc(de.getAttribute('data-ad-del')); return; }
+    }); }
+    window.renderArchiveDocs = render;
+    document.addEventListener('fp:data-ready', () => { try { render(); } catch (e) {} });
+    try { render(); } catch (e) {}
   })();
 
   { const bl = document.getElementById('ctab-leasing'), ba = document.getElementById('ctab-assurance');

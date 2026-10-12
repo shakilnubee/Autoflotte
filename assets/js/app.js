@@ -5622,6 +5622,10 @@ FP.settings = {
       //   ce sont des maps/tableaux de DONNÉES → fusion fine multi-appareils (mergeMap/mergeArr), sinon un
       //   appareil au cache en retard les écrase EN BLOC (même profil que la perte des congés/loueurs).
       'zoneNotes', 'prestataires', 'corbeille',
+      // — Coffre-fort de documents archivés (Contrats → Archive) : map { id → {name, categorie, annee,
+      //   url, vehicule, fileName, createdAt} }. Collection qui GROSSIT (beaucoup de dépôts) → fusion fine
+      //   par clé obligatoire, sinon un appareil en retard écraserait des documents déposés ailleurs.
+      'archiveDocs',
       // — Correction MANUELLE « est-ce une révision ? » par facture (map { factureId → 'oui' | 'non' }) :
       //   l'utilisateur tranche quand l'auto-détection se trompe → à protéger comme les autres maps.
       'revisionOverride',
