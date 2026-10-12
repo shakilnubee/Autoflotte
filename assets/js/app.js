@@ -4837,6 +4837,178 @@ FP.ensureJsPDF = function () {
   } catch (e) {}
 })();
 
+// === EXPÉRIENCE « VRAIE APPLI » SUR MOBILE ==================================
+// Regroupe 4 touches qui transforment la perception « site » → « appli » :
+//   1) FP.haptic  : petites vibrations (retour tactile) sur actions clés (désactivable).
+//   2) Bandeau « 📲 Installer l'appli » : prompt natif Android/Chrome + mini-tuto iPhone,
+//      affiché UNE fois (repli au bout de 30 j), jamais si l'appli est déjà installée.
+//   3) Écran de lancement (splash) marine + logo quand on ouvre l'icône (mode standalone)
+//      → fini le flash blanc au démarrage.
+//   4) Gestes : glisser depuis le bord gauche = retour · tirer vers le bas (en haut) = rafraîchir.
+// Tout est 100 % côté client, sans dépendance, et se dégrade proprement sur les appareils
+// qui ne gèrent pas une fonctionnalité (ex. iPhone n'a pas l'API vibration).
+
+// 1) RETOUR HAPTIQUE — source unique. `FP.haptic('tap'|'light'|'success'|'warn'|'error')`.
+// Respecte un réglage par APPAREIL (localStorage 'fp_haptics' ; 'off' = coupé) — c'est une
+// préférence matérielle locale (un téléphone vibre, un PC non), donc pas de synchro serveur.
+FP.haptic = (function () {
+  const PATT = { tap: 8, light: 12, success: [14, 50, 14], warn: [20, 60, 20], error: [30, 40, 30, 40, 30] };
+  return function (kind) {
+    try {
+      if (!('vibrate' in navigator)) return;                       // iPhone/desktop → ignoré proprement
+      if ((localStorage.getItem('fp_haptics') || 'on') === 'off') return;
+      navigator.vibrate(PATT[kind] || PATT.tap);
+    } catch (e) {}
+  };
+})();
+
+// 2) BANDEAU D'INSTALLATION (« Ajouter à l'écran d'accueil ») ------------------
+(function installBanner() {
+  try {
+    const base = location.pathname.indexOf('/pages/') !== -1 ? '../' : './';
+    const isStandalone = () => (window.navigator.standalone === true) ||
+      (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+    if (isStandalone()) return;                                    // déjà installée → rien
+    const DISMISS_KEY = 'fp_install_dismissed';
+    const snoozed = () => { try { const t = +localStorage.getItem(DISMISS_KEY) || 0; return t && (Date.now() - t) < 30 * 864e5; } catch (e) { return false; } };
+    if (snoozed()) return;
+    let deferred = null;
+    const ua = navigator.userAgent || '';
+    const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const isMobile = isIOS || /Android/i.test(ua);
+    if (!isMobile) return;                                         // bandeau = mobile uniquement
+
+    const show = (mode) => {
+      if (document.getElementById('fp-install-banner')) return;
+      const st = document.createElement('style'); st.id = 'fp-install-style';
+      st.textContent = '@keyframes fp-inst-up{from{opacity:0;transform:translate(-50%,16px)}to{opacity:1;transform:translate(-50%,0)}}';
+      document.head.appendChild(st);
+      const b = document.createElement('div');
+      b.id = 'fp-install-banner';
+      b.style.cssText = 'position:fixed;left:50%;bottom:calc(72px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:99990;width:calc(100vw - 24px);max-width:420px;background:#0F1E3D;color:#fff;border:1px solid rgba(255,255,255,.14);border-radius:16px;box-shadow:0 18px 40px -14px rgba(0,0,0,.55);padding:.85rem .95rem;display:flex;align-items:center;gap:.8rem;animation:fp-inst-up .25s ease;font:500 14px/1.35 system-ui,-apple-system,"Segoe UI",sans-serif';
+      const txt = mode === 'ios'
+        ? '<b>Installe Parc Pilot</b> sur ton iPhone : appuie sur <b>Partager</b> (le carré avec la flèche ↑) puis <b>« Sur l’écran d’accueil »</b>.'
+        : '<b>Installer Parc Pilot</b> sur ton téléphone pour l’ouvrir comme une appli (plein écran, hors-ligne).';
+      b.innerHTML =
+        '<span style="flex:none;width:40px;height:40px;border-radius:11px;background:#F97316;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px">P</span>' +
+        '<div style="flex:1;min-width:0">' + txt + '</div>' +
+        (mode === 'android' ? '<button id="fp-inst-go" style="flex:none;background:#F97316;color:#fff;border:none;border-radius:10px;padding:.5rem .85rem;font-weight:700;cursor:pointer">Installer</button>' : '') +
+        '<button id="fp-inst-x" aria-label="Fermer" style="flex:none;background:transparent;color:rgba(255,255,255,.65);border:none;font-size:1.1rem;line-height:1;cursor:pointer;padding:.2rem">✕</button>';
+      document.body.appendChild(b);
+      const close = () => { try { localStorage.setItem(DISMISS_KEY, String(Date.now())); } catch (e) {} b.remove(); };
+      b.querySelector('#fp-inst-x').addEventListener('click', close);
+      const go = b.querySelector('#fp-inst-go');
+      if (go) go.addEventListener('click', async () => {
+        FP.haptic('tap');
+        if (!deferred) { close(); return; }
+        try { deferred.prompt(); await deferred.userChoice; } catch (e) {}
+        deferred = null; close();
+      });
+    };
+
+    // Android/Chrome : on capte l'évènement natif → bouton « Installer » qui déclenche le vrai prompt.
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault(); deferred = e;
+      setTimeout(() => show('android'), 1500);
+    });
+    // iPhone (pas d'évènement natif) : on affiche le mini-tuto Partager → écran d'accueil.
+    if (isIOS) setTimeout(() => { if (!isStandalone()) show('ios'); }, 2500);
+  } catch (e) {}
+})();
+
+// 3) ÉCRAN DE LANCEMENT (standalone uniquement) -------------------------------
+(function splashScreen() {
+  try {
+    const standalone = (window.navigator.standalone === true) ||
+      (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+    if (!standalone) return;                                       // seulement l'appli installée
+    if (sessionStorage.getItem('fp_splash_done')) return;          // une fois par session d'appli
+    const s = document.createElement('div');
+    s.id = 'fp-splash';
+    s.style.cssText = 'position:fixed;inset:0;z-index:2147483646;background:#0F1E3D;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.2rem;transition:opacity .4s ease';
+    s.innerHTML =
+      '<div style="width:84px;height:84px;border-radius:22px;background:#F97316;display:flex;align-items:center;justify-content:center;font:800 42px/1 system-ui,-apple-system,sans-serif;color:#fff;box-shadow:0 14px 34px -10px rgba(249,115,22,.6)">P</div>' +
+      '<div style="font:700 20px/1 system-ui,-apple-system,sans-serif;color:#fff;letter-spacing:.02em">Parc Pilot</div>' +
+      '<div style="width:22px;height:22px;border:2.5px solid rgba(255,255,255,.3);border-top-color:#F97316;border-radius:50%;animation:fp-splash-spin .7s linear infinite"></div>' +
+      '<style>@keyframes fp-splash-spin{to{transform:rotate(360deg)}}</style>';
+    (document.body || document.documentElement).appendChild(s);
+    const hide = () => { try { sessionStorage.setItem('fp_splash_done', '1'); } catch (e) {} s.style.opacity = '0'; setTimeout(() => s.remove(), 420); };
+    const t = setTimeout(hide, 2200);                              // filet : jamais bloqué > 2,2 s
+    const ready = () => { clearTimeout(t); setTimeout(hide, 350); };
+    window.addEventListener('fp:data-ready', ready, { once: true });
+    window.addEventListener('load', () => setTimeout(() => { if (document.getElementById('fp-splash')) ready(); }, 400), { once: true });
+  } catch (e) {}
+})();
+
+// 4) GESTES NATIFS — glisser-retour (bord gauche) + tirer-rafraîchir (en haut) --
+// Prudent par construction : tactile uniquement, seuils larges, jamais à l'intérieur d'une
+// modale / feuille / zone défilante ; on ne bloque JAMAIS le défilement (pas de preventDefault).
+(function nativeGestures() {
+  try {
+    if (!('ontouchstart' in window)) return;
+    const OPEN_SEL = '.fiche-ov.open,.fp-qa-sheet.open,.fp-fsheet.open,.fp-msearch.open,.fp-dlg-backdrop';
+    const anyOverlayOpen = () => !!document.querySelector(OPEN_SEL);
+    let x0 = 0, y0 = 0, mode = '', active = false, ind = null;
+
+    const makeInd = () => {
+      if (ind) return ind;
+      ind = document.createElement('div');
+      ind.style.cssText = 'position:fixed;top:calc(env(safe-area-inset-top,0px) + 6px);left:50%;transform:translateX(-50%) scale(.6);z-index:99980;width:38px;height:38px;border-radius:50%;background:#0F1E3D;box-shadow:0 6px 18px -6px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .12s,transform .12s;pointer-events:none';
+      ind.innerHTML = '<span id="fp-ptr-spin" style="width:18px;height:18px;border:2.5px solid rgba(255,255,255,.3);border-top-color:#F97316;border-radius:50%;display:block"></span>';
+      document.body.appendChild(ind);
+      return ind;
+    };
+
+    document.addEventListener('touchstart', (e) => {
+      if (e.touches.length !== 1 || anyOverlayOpen()) { mode = ''; active = false; return; }
+      const t = e.touches[0]; x0 = t.clientX; y0 = t.clientY; mode = ''; active = true;
+      // Une zone défilante horizontale (tableau) sous le doigt → on désactive le geste retour.
+      active = !(e.target.closest && e.target.closest('.overflow-x-auto,[data-noswipe],table'));
+    }, { passive: true });
+
+    document.addEventListener('touchmove', (e) => {
+      if (!active || e.touches.length !== 1) return;
+      const t = e.touches[0], dx = t.clientX - x0, dy = t.clientY - y0;
+      if (!mode) {
+        if (x0 < 26 && dx > 14 && Math.abs(dy) < 22) mode = 'back';                 // depuis le bord gauche
+        else if (dy > 14 && Math.abs(dx) < 18 && (window.scrollY || 0) <= 0) mode = 'pull'; // en haut, vers le bas
+        else if (Math.abs(dx) > 14 || Math.abs(dy) > 14) { active = false; return; } // autre geste → on lâche
+      }
+      if (mode === 'pull') {
+        const p = Math.min(Math.max(dy - 14, 0), 90);
+        const el = makeInd();
+        el.style.opacity = String(Math.min(p / 70, 1));
+        el.style.transform = 'translateX(-50%) scale(' + (0.6 + Math.min(p / 90, 1) * 0.4) + ')';
+        el.querySelector('#fp-ptr-spin').style.transform = 'rotate(' + (p * 3) + 'deg)';
+      } else if (mode === 'back') {
+        const el = makeInd();
+        el.style.left = '0'; el.style.top = '50%';
+        el.style.opacity = String(Math.min(dx / 90, 1));
+        el.style.transform = 'translateX(' + Math.min(dx - 30, 10) + 'px) scale(.8)';
+        el.querySelector('#fp-ptr-spin').style.cssText = 'width:0;height:0';
+        el.innerHTML = '<span style="color:#fff;font-size:20px;font-weight:800">‹</span>';
+      }
+    }, { passive: true });
+
+    document.addEventListener('touchend', (e) => {
+      if (!active) { if (ind) ind.style.opacity = '0'; return; }
+      const t = (e.changedTouches && e.changedTouches[0]) || null;
+      const dx = t ? t.clientX - x0 : 0, dy = t ? t.clientY - y0 : 0;
+      if (mode === 'back' && dx > 80 && Math.abs(dy) < 60) {
+        FP.haptic('light');
+        if (history.length > 1) history.back();
+      } else if (mode === 'pull' && dy > 72) {
+        FP.haptic('success');
+        if (ind) { const sp = ind.querySelector('#fp-ptr-spin'); if (sp) sp.style.animation = 'fp-splash-spin .7s linear infinite'; ind.style.opacity = '1'; ind.style.transform = 'translateX(-50%) scale(1)'; }
+        setTimeout(() => { try { location.reload(); } catch (err) {} }, 180);
+        mode = ''; active = false; return;
+      }
+      if (ind) { ind.style.opacity = '0'; ind.style.transform = ind.style.transform.replace(/scale\([^)]*\)/, 'scale(.6)'); }
+      mode = ''; active = false;
+    }, { passive: true });
+  } catch (e) {}
+})();
+
 // === NOTIFICATIONS PUSH (Web Push / VAPID) ==================================
 // Permet à un gestionnaire/admin de recevoir une notification sur son téléphone ou
 // son ordinateur — MÊME appli fermée — quand un conducteur soumet quelque chose via
@@ -5152,7 +5324,7 @@ FP.qrScans = {
           b.type = 'button'; b.className = 'fp-tab fp-tab-add'; b.setAttribute('aria-label', 'Ajouter');
           // Pas de libellé « Ajouter » sous le ➕ (demande utilisateur) : bouton flottant seul, surélevé.
           b.innerHTML = '<span class="fp-tab-plus"><i data-lucide="plus"></i></span>';
-          b.addEventListener('click', openQuickAdd);
+          b.addEventListener('click', () => { try { FP.haptic && FP.haptic('tap'); } catch (e) {} openQuickAdd(); });
           bar.appendChild(b); return;
         }
         if (t.key === '__menu__') {
@@ -5163,13 +5335,14 @@ FP.qrScans = {
           const menuActive = directs.indexOf(cur) === -1;
           b.type = 'button'; b.className = 'fp-tab' + (menuActive ? ' active' : ''); b.setAttribute('aria-label', 'Menu');
           b.innerHTML = '<i data-lucide="' + t.ic + '"></i><span class="fp-tab-lb">' + t.lb + '</span>';
-          b.addEventListener('click', drawerOpen);
+          b.addEventListener('click', () => { try { FP.haptic && FP.haptic('tap'); } catch (e) {} drawerOpen(); });
           bar.appendChild(b); return;
         }
         const a = document.createElement('a');
         a.className = 'fp-tab' + (cur === t.key ? ' active' : '');
         a.href = hrefFor(t.key);
         a.innerHTML = '<i data-lucide="' + t.ic + '"></i><span class="fp-tab-lb">' + t.lb + '</span>';
+        a.addEventListener('click', () => { try { FP.haptic && FP.haptic('tap'); } catch (e) {} });
         bar.appendChild(a);
       });
       document.body.appendChild(bar);
@@ -9761,6 +9934,7 @@ FP.notifyError = (msg) => {
 // FP.toast('✓ Enregistré')  ou  FP.toast('Amende payée', { actionLabel:'Annuler', onAction: fn })
 FP.toast = (msg, opts) => {
   opts = opts || {};
+  try { if (FP.haptic) FP.haptic(opts.haptic || 'light'); } catch (e) {}   // petit retour tactile sur mobile
   const old = document.getElementById('fp-toast'); if (old) old.remove();
   const el = document.createElement('div');
   el.id = 'fp-toast';
