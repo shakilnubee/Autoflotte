@@ -13385,6 +13385,22 @@ FP.docsFolder = {
     catch (e) { return []; }
   },
   _driveId(url) { const m = String(url || '').match(/\/d\/([A-Za-z0-9_-]{20,})/) || String(url || '').match(/[?&]id=([A-Za-z0-9_-]{20,})/); return m ? m[1] : null; },
+  // URL ouvrable d'une FACTURE (table `factures`) : fileId = URL http (stockage) OU id Drive. 'IMP-…' = pas de fichier.
+  _factUrl(f) { const id = (f && (f.fileId || f.fileUrl || f.url)) || ''; if (!id || /^IMP-/.test(id)) return ''; if (/^https?:\/\//.test(id)) return id; return 'https://drive.google.com/file/d/' + encodeURIComponent(id) + '/view'; },
+  // Factures DÉJÀ saisies (fiche véhicule / page Factures) à RELIER automatiquement à une ligne de la
+  // checklist de vente → on ne redemande pas de re-téléverser. Mapping { clé checklist → types de facture }.
+  _FACT_LINK: { 'facture-achat': ['achat'] },
+  _linkedFactures(veh, key) {
+    try {
+      const types = this._FACT_LINK[key]; if (!types) return [];
+      const list = (window.FP_DATA && Array.isArray(FP_DATA.factures)) ? FP_DATA.factures : [];
+      const k = FP.normImmat ? FP.normImmat(veh.immat) : String(veh.immat || '').toUpperCase();
+      return list.filter(f => f && types.indexOf(String(f.type || '').toLowerCase()) >= 0
+          && (FP.normImmat ? FP.normImmat(f.vehiculeImmat) : String(f.vehiculeImmat || '').toUpperCase()) === k
+          && this._factUrl(f))
+        .map(f => ({ _fact: true, type: key, url: this._factUrl(f), label: (f.fournisseur ? ('Facture ' + f.fournisseur) : "Facture d'achat") + (f.date ? ' · ' + (FP.dateNum ? FP.dateNum(f.date) : f.date) : '') }));
+    } catch (e) { return []; }
+  },
   async _open(url) {
     // ⚠️ On ouvre l'onglet IMMÉDIATEMENT (dans le geste de clic) puis on y pose l'URL signée une fois
     //    résolue. Sinon le window.open APRÈS un await perd le « geste utilisateur » → l'onglet s'ouvre
@@ -13447,9 +13463,19 @@ FP.docsFolder = {
         + '<button type="button" class="fp-docs-del" data-id="' + esc(d.id) + '" title="Supprimer" style="background:none;border:none;color:#dc2626;font-size:.95rem;cursor:pointer;flex:none">🗑</button>'
       + '</div>';
     }
+    // Ligne « reliée depuis Factures » (ex. facture d'achat déjà saisie) : lecture seule (pas de suppression
+    // ici, elle appartient à la page Factures).
+    function docRowFact(d) {
+      return '<div style="display:flex;align-items:center;gap:8px;margin-top:5px">'
+        + '<span style="font-size:.95rem;flex:none">🧾</span>'
+        + '<div style="flex:1;min-width:0;font-size:.83rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(d.label) + ' <span style="color:var(--fp-muted,#94a3b8);font-size:.72rem">· depuis Factures</span></div>'
+        + '<button type="button" class="fp-docs-open" data-url="' + esc(d.url || '') + '" style="background:none;border:1px solid var(--fp-border,#e5e7eb);border-radius:7px;padding:3px 9px;font-size:.72rem;font-weight:700;cursor:pointer;color:var(--fp-primary,#0F1E3D)">Ouvrir</button>'
+      + '</div>';
+    }
     function lineBlock(item) {
       const mine = docs.filter(d => d.type === item.key);
-      const ok = mine.length > 0;
+      const linked = self._linkedFactures(veh, item.key);   // ex. facture d'achat déjà dans Factures → reliée auto
+      const ok = mine.length > 0 || linked.length > 0;
       const dot = ok
         ? '<span style="flex:none;width:20px;height:20px;border-radius:9999px;background:#16a34a;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:.8rem">✓</span>'
         : '<span style="flex:none;width:20px;height:20px;border-radius:9999px;border:2px solid var(--fp-border,#cbd5e1);display:inline-block"></span>';
@@ -13460,12 +13486,13 @@ FP.docsFolder = {
           + '<button type="button" class="fp-docs-addline" data-type="' + esc(item.key) + '" style="flex:none;background:none;border:1px solid var(--fp-border,#e5e7eb);border-radius:8px;padding:4px 10px;font-size:.74rem;font-weight:700;cursor:pointer;color:var(--fp-primary,#0F1E3D)">📎 ' + (ok ? 'Ajouter' : 'Joindre') + '</button>'
         + '</div>'
         + mine.map(docRow).join('')
+        + linked.map(docRowFact).join('')
       + '</div>';
     }
     function renderAll() {
       const box = q('#fp-docs-list'); if (!box) return;
       const checklistKeys = self.CHECKLIST.map(c => c.key);
-      const done = self.CHECKLIST.filter(c => docs.some(d => d.type === c.key)).length;
+      const done = self.CHECKLIST.filter(c => docs.some(d => d.type === c.key) || self._linkedFactures(veh, c.key).length).length;
       const suivi = q('#fp-docs-suivi'); if (suivi) suivi.textContent = 'Suivi : ' + done + ' / ' + self.CHECKLIST.length + ' documents clés';
       let html = self.CHECKLIST.map(lineBlock).join('');
       const autres = docs.filter(d => checklistKeys.indexOf(d.type) < 0);
