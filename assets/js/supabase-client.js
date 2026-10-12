@@ -239,6 +239,17 @@
       if (!m || !(m[1] in payload)) return res;          // autre erreur, ou colonne déjà absente → on rend la main
       delete payload[m[1]];
       try { console.warn(`[FP.db ${table}] colonne inconnue « ${m[1]} » ignorée (schéma en retard sur le code) — la ligne est quand même enregistrée.`); } catch (e) {}
+      // ⚠️ M7 — la perte d'un champ ne doit PAS être SILENCIEUSE (règle 0-perte ③). La ligne est
+      // sauvée, mais l'utilisateur doit SAVOIR qu'un champ n'a pas pu être enregistré (base à mettre
+      // à jour). On le signale visiblement, une seule fois par champ/table (anti-spam).
+      try {
+        const _k = table + ':' + m[1];
+        window.__fpColWarned = window.__fpColWarned || {};
+        if (window.FP && FP.notifyError && !window.__fpColWarned[_k]) {
+          window.__fpColWarned[_k] = 1;
+          FP.notifyError('Un champ (« ' + m[1] + ' ») n\'a pas pu être enregistré : la base n\'est pas à jour. La fiche est sauvegardée sans ce champ — préviens le support pour l\'ajouter.');
+        }
+      } catch (e) {}
       if (!Object.keys(payload).length) return res;        // plus rien à écrire → on arrête
     }
     return res;
@@ -466,6 +477,10 @@
              + '#' + (d.factures || []).map(x => (x.id || '') + ':' + ((x.pieces || []).length) + ':' + ((x.pieces || []).map(p => (p && (p.id || p.url)) || '').join(','))).join(';')
              + '#' + f(d.conducteurs, ['key','name','nom','prenom','masque','dateNaissance','poste','tel','email','adresse','permisNumero','permisExpiration','permisObtention','permisType','note']);
       };
+      // ⚠️ Anti « revenant » (M1) : avant de comparer/afficher/cacher, on applique à ces données
+      // FRAÎCHES du serveur les écritures locales encore EN FILE (suppressions/ajouts/éditions pas
+      // encore synchronisées). Sinon une suppression suivie d'une navigation immédiate reviendrait.
+      try { if (window.FP && FP.persist && FP.persist.applyTo) FP.persist.applyTo(data); } catch (e) {}
       const sigBefore = sig(window.FP_DATA);
       const sigAfter  = sig(data);
       // Remplace les contenus in-place

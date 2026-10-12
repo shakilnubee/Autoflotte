@@ -1226,18 +1226,20 @@ FP.primeVeh = (v) => {
 FP.assuranceAnnuelle = (vehicules) => {
   const s = (FP.settings && FP.settings.get) ? (FP.settings.get() || {}) : {};
   const primes = (s.assurancePrimes && typeof s.assurancePrimes === 'object') ? s.assurancePrimes : {};
-  const owned = (vehicules || []).filter(v => !FP.estVendu(v));
+  const owned = (vehicules || []).filter(v => !FP.horsFlotte(v));
   if (Object.keys(primes).length) {
     let t = 0; owned.forEach(v => { t += FP.primeVeh(v); });
     if (t > 0) return t;
   }
   const flotte = Number(s.assurancePrimeAnnuelle); return Number.isFinite(flotte) ? flotte : 0;
 };
-// ⚠️ HELPER CANONIQUE — total annuel TVS de la flotte POSSÉDÉE (exclut les vendus, MÊME périmètre
-// que FP.assuranceAnnuelle). tvsDetail renvoie déjà 0 si non applicable (élec, hors-catégorie…).
+// ⚠️ HELPER CANONIQUE — total annuel TVS de la flotte POSSÉDÉE. MÊME périmètre que le leasing et
+// que FP.assuranceAnnuelle : on exclut tout véhicule HORS FLOTTE (vendu, cédé, restitué, archivé,
+// hors service) via FP.horsFlotte — un véhicule qu'on ne possède plus n'engendre plus ni assurance
+// ni TVS. tvsDetail renvoie déjà 0 si non applicable (élec, hors-catégorie…).
 // À utiliser PARTOUT où l'on somme la TVS de la flotte (dashboard, budget, stats, contrats, écran,
 // recherche) — un seul périmètre, plus de reduce recopié à la main dans chaque page.
-FP.tvsAnnuelleFlotte = (vehicules) => (vehicules || []).filter(v => !FP.estVendu(v))
+FP.tvsAnnuelleFlotte = (vehicules) => (vehicules || []).filter(v => !FP.horsFlotte(v))
   .reduce((s, v) => { const d = FP.tvsDetail(v); return s + (d && d.applicable && d.total != null ? d.total : 0); }, 0);
 
 // ============================================================================
@@ -1831,6 +1833,10 @@ FP.echeanceStatut = function (dateOrISO, kind) {
   // → une SEULE vérité pour la couleur/urgence du CT : tableau Véhicules, fiche, Contrats, Alertes.
   let S;
   if (kind === 'ct' && FP.notifCfg) { const I = (FP.notifCfg().ctJours || 90); S = { urgent: Math.round(I / 3), bientot: Math.round(I * 2 / 3) }; }
+  // PERMIS + PIÈCE D'IDENTITÉ : seuils = réglage configurable `notifCfg().docAlerteJours` (bientôt = X j,
+  // urgent = X/2), EXACTEMENT comme les Alertes et Renouvellements. Avant : seuils figés 30/90 ici → la
+  // fiche conducteur affichait « valide » quand les Alertes affichaient déjà « à renouveler ». Une seule vérité.
+  else if ((kind === 'permis' || kind === 'piece' || kind === 'pièce') && FP.notifCfg) { const W = (FP.notifCfg().docAlerteJours || 120); S = { urgent: Math.round(W / 2), bientot: W }; }
   else S = FP.ECHEANCE_SEUILS[kind] || FP.ECHEANCE_SEUILS.defaut;
   let statut = 'valide';
   if (j < 0) statut = 'expire'; else if (j <= S.urgent) statut = 'urgent'; else if (j <= S.bientot) statut = 'bientot';
@@ -8639,6 +8645,18 @@ FP.contratsCadre = {
 };
 // Coût ANNUEL normalisé d'un contrat cadre (mensuel → ×12). 0 si pas de montant. Source unique des totaux.
 FP.contratCadreCoutAnnuel = (c) => { const m = Number(c && c.montant); if (!Number.isFinite(m) || m <= 0) return 0; return String(c.periode) === 'mois' ? m * 12 : m; };
+// ⚠️ ANTI DOUBLE-COMPTAGE — types de contrat-cadre DÉJÀ comptés dans un AUTRE poste budgétaire :
+//  assurance → poste « Assurance » (primes) ; maintenance → « Entretien » (factures) ;
+//  carte-carburant & badge-péage → « Carburant & péages » (factures Total/Ulys).
+//  Seuls « télématique » et « autre » sont des abonnements SANS poste dédié → eux seuls s'ajoutent
+//  au Budget et à la trésorerie. (Le KPI « Coût annuel total » de la page Contrats, lui, somme TOUS
+//  les contrats — c'est une vue contrats, pas un total budgétaire.)
+FP.CONTRAT_CADRE_DEJA_COMPTE = ['assurance', 'maintenance', 'carte-carburant', 'badge-peage'];
+// SOURCE UNIQUE du total annuel des contrats-cadres « abonnements » à injecter dans Budget/trésorerie
+// (jamais la somme brute de TOUS les contrats, qui doublerait assurance/entretien/carburant).
+FP.contratsCadreAbonnementsAnnuel = () => (FP.contratsCadre ? FP.contratsCadre.list() : [])
+  .filter(c => c && !FP.CONTRAT_CADRE_DEJA_COMPTE.includes(c.type))
+  .reduce((s, c) => s + FP.contratCadreCoutAnnuel(c), 0);
 // DATE LIMITE DE RÉSILIATION = date de fin − préavis (mois). null si pas de préavis/pas de date de fin.
 // Un contrat-cadre se reconduit souvent tacitement : c'est CETTE date qu'il faut respecter pour résilier.
 FP.contratCadreDateLimite = (c) => {
@@ -11173,6 +11191,27 @@ FP.persist = {
   _enqueue(item) { const q = this._loadQ(); item.ts = Date.now(); item.tries = 0; if (!item._uid) item._uid = this._uid(); q.push(item); this._saveQ(q); return item._uid; },
   // Retire un item précis de la file (par son _uid) — appelé quand SON écriture réseau a réussi.
   _removeUid(uid) { if (!uid) return; const q = this._loadQ(); const n = q.filter(it => it._uid !== uid); if (n.length !== q.length) this._saveQ(n); },
+  // ⚠️ RÉCONCILIATION DONNÉES ⇄ FILE D'ATTENTE (anti « revenant » — M1) : applique à des données
+  // FRAÎCHES du serveur les écritures locales PAS ENCORE synchronisées (suppressions/ajouts/éditions
+  // en file). Sinon un `loadAll` déclenché juste après une suppression (avant que la file soit vidée)
+  // ré-écrase l'élément supprimé avec la version serveur → il « revient » jusqu'à un F5. Même principe
+  // que _reconcileServerSettings pour les réglages. Appelé par loadAll avant la signature/cache.
+  applyTo(data, q) {
+    if (!data) return data;
+    try {
+      q = q || this._loadQ();
+      const TABLES = ['vehicules', 'amendes', 'factures', 'conducteurs'];
+      for (const it of q) {
+        if (!it || TABLES.indexOf(it.table) < 0 || !Array.isArray(data[it.table])) continue;
+        const arr = data[it.table];
+        if (it.op === 'delete') { const i = arr.findIndex(r => r && r.id === it.id); if (i >= 0) arr.splice(i, 1); }
+        else if (it.op === 'insert') { if (it.row && !arr.some(r => r && r.id === it.row.id)) arr.push(it.row); }
+        else if (it.op === 'update') { const r = arr.find(x => x && x.id === it.id); if (r) Object.assign(r, it.fields || {}); }
+        else if (it.op === 'upsert') { if (it.row) { const r = arr.find(x => x && x.id === it.row.id); if (r) Object.assign(r, it.row); else arr.push(it.row); } }
+      }
+    } catch (e) {}
+    return data;
+  },
   // ⚠️ FILE OPTIMISTE (anti-perte des écritures « en vol ») : on met l'écriture dans la file locale
   // AVANT l'appel réseau, puis on la retire à la réussite. Si la page est quittée / l'onglet tué
   // pendant l'envoi (fetch avorté → le catch ne s'exécute jamais), l'item RESTE dans la file et
@@ -12891,6 +12930,7 @@ FP.edl = {
               });
             }
           } catch (e) {}
+          let photoKo = 0;
           for (let pi = 0; pi < data.photos.length; pi++) {
             const p = data.photos[pi];
             try {
@@ -12907,9 +12947,11 @@ FP.edl = {
               // Nom DÉTERMINISTE (empreinte) → upsert : au ré-essai, la même image écrase le même fichier
               // au lieu d'en créer un nouveau, et l'insert ci-dessous est sauté (plus d'accumulation).
               const purl = await FP.uploadScan(new File([arr], 'edl.' + ext, { type: mime }), 'documents', { name: 'edl-' + motLbl + '-' + sensLabel.toLowerCase() + '-h' + h });
-              if (purl) await FP.persist.insert('documents', { id: 'D' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), vehiculeId: veh.id, type: 'etat-des-lieux', label: sensLabel, url: purl, driveId: null });
-            } catch (e) {}
+              if (purl) await FP.persist.insert('documents', { id: 'D' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), vehiculeId: veh.id, type: 'etat-des-lieux', label: sensLabel, url: purl, driveId: null }); else photoKo++;
+            } catch (e) { photoKo++; }
           }
+          // ⚠️ M8 — photos EDL non enregistrées = feedback VISIBLE (plus de drop silencieux, règle 0-perte ③).
+          if (photoKo > 0) { try { if (FP.notifyError) FP.notifyError(photoKo + " photo(s) de l'état des lieux non enregistrée(s) (connexion ?). Le PDF est OK — réessaie pour joindre les photos."); } catch (e) {} }
         }
         const b64 = doc.output('datauristring').split(',')[1];
         // (smode / willSign déjà calculés plus haut — avant l'ajout conditionnel aux Documents)

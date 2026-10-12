@@ -1,0 +1,34 @@
+name: CI — contrôles bloquants avant fusion
+
+# Lance les contrôles RAPIDES et SANS DÉPENDANCE (aucun npm install) sur chaque Pull Request vers main
+# et sur chaque push de branche de travail. Si un contrôle échoue, le job échoue → avec la protection de
+# branche « Require status checks » activée sur main, la PR ne peut PAS être fusionnée (donc pas déployée
+# sur GitHub Pages). C'est le garde-fou « déploiement autorisé seulement si les contrôles passent ».
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches-ignore: [main]   # feedback aussi sur les branches de dev (pas besoin de re-checker main après fusion)
+  workflow_dispatch: {}        # bouton « Run workflow » à la demande
+
+jobs:
+  controles:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v4
+
+      - name: Installer Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # 1) Contrôle statique : syntaxe JS (fichiers + scripts inline des pages), cache ?v= cohérent,
+      #    liens internes, RGPD data.js (0 PII), et garde-fou .min.js à jour. Zéro dépendance.
+      - name: Contrôle statique (check-bugs)
+        run: node scripts/check-bugs.mjs .
+
+      # 2) Tests unitaires des calculs métier (montant dû, assurance/TVS, contrats-cadres, échéances,
+      #    réconciliation file d'attente…). Zéro dépendance. Prouve qu'une régression de calcul casse le build.
+      - name: Tests unitaires des calculs
+        run: node scripts/test-calculs.mjs
