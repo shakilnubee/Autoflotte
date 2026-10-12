@@ -13383,8 +13383,17 @@ FP.docsFolder = {
   },
   _driveId(url) { const m = String(url || '').match(/\/d\/([A-Za-z0-9_-]{20,})/) || String(url || '').match(/[?&]id=([A-Za-z0-9_-]{20,})/); return m ? m[1] : null; },
   async _open(url) {
-    try { let u = url; if (FP.signedScanUrl && /\/scans\//.test(String(url || ''))) u = await FP.signedScanUrl(url, 604800); window.open(u || url, '_blank', 'noopener'); }
-    catch (e) { window.open(url, '_blank', 'noopener'); }
+    // ⚠️ On ouvre l'onglet IMMÉDIATEMENT (dans le geste de clic) puis on y pose l'URL signée une fois
+    //    résolue. Sinon le window.open APRÈS un await perd le « geste utilisateur » → l'onglet s'ouvre
+    //    EN ARRIÈRE-PLAN (derrière la fenêtre / le dossier). On ne met pas 'noopener' pour garder la main
+    //    sur l'onglet, et on coupe `opener` nous-mêmes (sécurité).
+    let w = null; try { w = window.open('about:blank', '_blank'); if (w) { try { w.opener = null; } catch (e) {} } } catch (e) {}
+    try {
+      let u = url; if (FP.signedScanUrl && /\/scans\//.test(String(url || ''))) u = await FP.signedScanUrl(url, 604800);
+      if (w) { try { w.location.href = u || url; } catch (e) { window.open(u || url, '_blank'); } }
+      else window.open(u || url, '_blank');
+    }
+    catch (e) { if (w) { try { w.location.href = url; } catch (e2) {} } else window.open(url, '_blank'); }
   },
   // Ouvre le dossier d'un véhicule (checklist de documents de vente). opts.title facultatif.
   open(veh, opts) {
@@ -13415,7 +13424,7 @@ FP.docsFolder = {
           + '</div>'
           + '<button type="button" id="fp-docs-add" class="btn btn-outline" style="width:100%;margin-top:6px;padding:9px;font-size:.85rem">📎 Ajouter ce document</button>'
         + '</div>'
-        + '<input id="fp-docs-file" type="file" accept="application/pdf,image/*" style="display:none">'
+        + '<input id="fp-docs-file" type="file" accept="application/pdf,image/*" multiple style="display:none">'
       + '</div>'
     + '</div>';
     document.body.appendChild(ov);
@@ -13482,26 +13491,36 @@ FP.docsFolder = {
 
     // Upload (ligne de la checklist OU ajout libre) → table documents, même format que la fiche.
     fileInp.addEventListener('change', async (e) => {
-      const f = e.target.files && e.target.files[0]; e.target.value = ''; if (!f) return;
+      const files = Array.from(e.target.files || []); e.target.value = ''; if (!files.length) return;
       const type = pending.type || 'autre';
-      const name = (pending.name || '').trim();
-      try {
-        const url = await FP.uploadScan(f, 'documents/' + (FP.normImmat ? FP.normImmat(veh.immat || 'veh') : 'veh'));
-        if (!url) throw new Error('upload vide');
-        // Catégorie « une seule par véhicule » → on remplace l'ancien (même règle que la fiche, pas de doublon).
-        if (self.SINGLE.has(type)) {
-          const olds = docs.filter(d => d.type === type);
-          for (const o of olds) { try { if (FP.db && FP.db.delete) await FP.db.delete('documents', o.id); else if (FP.persist && FP.persist.delete) FP.persist.delete('documents', o.id); } catch (e2) {} }
-          docs = docs.filter(d => d.type !== type);
-        }
-        // id avec suffixe ALÉATOIRE (pas seulement la ms) → jamais de collision/écrasement entre 2 ajouts rapides.
-        const doc = { id: 'D' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), vehiculeId: veh.id, type, label: name || self._typeLabel(type), url, driveId: self._driveId(url) };
-        if (FP.persist && FP.persist.available && FP.persist.available()) FP.persist.insert('documents', doc);
-        else if (FP.db && FP.db.insert) { const r = await FP.db.insert('documents', doc); if (r && r.error) throw r.error; }
-        docs.push(doc); renderAll(); self._changed(veh.id);
-        const nm = q('#fp-docs-name'); if (nm) nm.value = '';
-        if (FP.toast) FP.toast('✓ Document ajouté');
-      } catch (err) { if (FP.notifyError) FP.notifyError('Échec de l\'ajout du document'); else alert('Échec : ' + (err && err.message || err)); }
+      const baseName = (pending.name || '').trim();
+      const folder = 'documents/' + (FP.normImmat ? FP.normImmat(veh.immat || 'veh') : 'veh');
+      // Catégorie « une seule par véhicule » : on remplace l'ancien UNE fois (pas à chaque fichier) — on
+      // garde donc le DERNIER fichier déposé pour ces types (carte grise, etc.).
+      let singleCleared = false;
+      let ok = 0, ko = 0;
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        try {
+          const url = await FP.uploadScan(f, folder);
+          if (!url) throw new Error('upload vide');
+          if (self.SINGLE.has(type) && !singleCleared) {
+            const olds = docs.filter(d => d.type === type);
+            for (const o of olds) { try { if (FP.db && FP.db.delete) await FP.db.delete('documents', o.id); else if (FP.persist && FP.persist.delete) FP.persist.delete('documents', o.id); } catch (e2) {} }
+            docs = docs.filter(d => d.type !== type); singleCleared = true;
+          }
+          // Nom : si l'utilisateur a saisi un nom ET qu'il y a plusieurs fichiers, on numérote pour les distinguer.
+          const lbl = baseName ? (files.length > 1 ? (baseName + ' (' + (i + 1) + ')') : baseName) : (f.name ? f.name.replace(/\.[a-z0-9]+$/i, '') : self._typeLabel(type));
+          const doc = { id: 'D' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5) + i, vehiculeId: veh.id, type, label: lbl, url, driveId: self._driveId(url) };
+          if (FP.persist && FP.persist.available && FP.persist.available()) FP.persist.insert('documents', doc);
+          else if (FP.db && FP.db.insert) { const r = await FP.db.insert('documents', doc); if (r && r.error) throw r.error; }
+          docs.push(doc); ok++;
+        } catch (err) { console.error('[dossier doc]', err); ko++; }
+      }
+      renderAll(); self._changed(veh.id);
+      const nm = q('#fp-docs-name'); if (nm) nm.value = '';
+      if (ok && FP.toast) FP.toast('✓ ' + ok + ' document' + (ok > 1 ? 's' : '') + ' ajouté' + (ok > 1 ? 's' : ''));
+      if (ko) { if (FP.notifyError) FP.notifyError(ko + ' document(s) en échec — réessaie.'); else alert(ko + ' document(s) en échec.'); }
     });
     // Ajout libre (type choisi + nom facultatif).
     const addBtn = q('#fp-docs-add');
