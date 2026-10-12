@@ -17716,6 +17716,26 @@ document.addEventListener('DOMContentLoaded', () => {
   FP.mobileCardify(document);
   window.addEventListener('fp:data-ready', () => { try { FP.mobileCardify(document); } catch (e) {} });
   window.addEventListener('resize', () => { try { FP.mobileCardify(document); } catch (e) {} });
+  // ⚠️ Les pages RE-GÉNÈRENT leur <tbody> après coup (filtre, bascule d'onglet, refresh live des
+  // données…) → les nouvelles lignes perdent leurs libellés de colonne en vue CARTE sur mobile.
+  // Un observateur (débouncé) relance mobileCardify dès qu'un <tbody> de .fp-table change → les cartes
+  // restent toujours étiquetées, sur TOUTES les pages, sans avoir à modifier chaque fonction de rendu.
+  // On n'observe QUE les childList (ajout/retrait de lignes) : poser data-label est une mutation
+  // d'ATTRIBUT, donc ça ne se re-déclenche pas soi-même (pas de boucle).
+  (function () {
+    if (!('MutationObserver' in window)) return;
+    let t = 0;
+    const run = () => { t = 0; try { FP.mobileCardify(document); } catch (e) {} };
+    const obs = new MutationObserver((muts) => {
+      for (let i = 0; i < muts.length; i++) {
+        const m = muts[i];
+        if (m.type === 'childList' && m.target && m.target.closest && m.target.closest('table.fp-table')) {
+          if (t) clearTimeout(t); t = setTimeout(run, 120); return;
+        }
+      }
+    });
+    try { obs.observe(document.body, { childList: true, subtree: true }); } catch (e) {}
+  })();
   // Tour guidé + pop « nouveauté » : UNIQUEMENT après le 1er chargement des données (jamais pendant la
   // fenêtre de chargement, où le compte paraît vide → c'est ce qui faisait « surgir les premiers pas »).
   (function () {
