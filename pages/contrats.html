@@ -991,7 +991,10 @@
     const sel = $('leasing-loueur-filter'); if (!sel) return;
     const cur = leasingLoueurFilter;
     const noms = [...new Set(getLoueurs().map(l => (l.nom || '').trim()).filter(Boolean))];
-    let hasLoc = false; try { hasLoc = getLocalease().length > 0; } catch (e) {}
+    // ⚠️ L'option « Leasing (LLD) » = bac des contrats SANS loueur nommé. On ne l'affiche QUE s'il existe
+    // vraiment un tel contrat (loueur vide) — sinon elle apparaissait même quand tous les contrats LLD ont
+    // un loueur (ex. AYVENS), et cliquer dessus donnait une « page vide » trompeuse.
+    let hasLoc = false; try { hasLoc = getLocalease().some(c => c && !((c.loueur || '').toString().trim())); } catch (e) {}
     let html = '<option value="all">Tous les loueurs</option>' + noms.map(n => `<option value="${escC(n)}">${escC(n)}</option>`).join('');
     if (hasLoc) html += `<option value="${LOCALEASE_VAL}">${escC(localeaseLabel())}</option>`;
     sel.innerHTML = html;
