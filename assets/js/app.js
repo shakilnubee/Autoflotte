@@ -6175,6 +6175,21 @@ FP.searchMatch = (text, q) => {
 };
 // Échappement HTML — À UTILISER pour toute donnée saisie/OCR injectée en innerHTML (anti-XSS).
 FP.esc = (s) => (s == null ? '' : String(s)).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+// ⚠️ SOURCE UNIQUE — URL issue d'une SAISIE LIBRE → À ASSAINIR avant de l'injecter dans un href.
+// Anti-XSS : bloque les schémas dangereux (javascript:, data:, vbscript:…) qui s'exécuteraient au
+// clic dans le navigateur d'un CEO/admin (vol du jeton de session). N'autorise que http(s) et
+// préfixe https:// un domaine nu (ex. « exemple.fr »). Renvoie '' si ce n'est pas un lien web sûr
+// → l'appelant n'affiche alors PAS le lien. À utiliser pour TOUT href construit depuis une donnée
+// utilisateur (tâches, garages, documents…). L'échappement HTML (FP.esc) reste nécessaire EN PLUS.
+FP.safeUrl = (u) => {
+  let url = (u == null ? '' : String(u)).trim();
+  if (!url) return '';
+  if (!/^https?:\/\//i.test(url)) {
+    if (/^[\w.-]+\.[a-z]{2,}/i.test(url)) url = 'https://' + url; // ressemble à un domaine → on préfixe
+    else return ''; // schéma non http(s) (javascript:, data:…) ou valeur non-URL → rejeté
+  }
+  return url;
+};
 
 // ---- REPLI DES LONGUES LISTES (helper GLOBAL) ----
 // Replie une liste de lignes à N (5 par défaut) et ajoute un bouton « Voir tout (X de plus) ↓ »
