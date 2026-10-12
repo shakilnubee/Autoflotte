@@ -5246,11 +5246,13 @@ FP.qrScans = {
       if (!ov) {
         ov = document.createElement('div');
         ov.className = 'fp-msearch'; ov.hidden = true;
-        ov.innerHTML = '<div class="fp-msearch-bar">'
-          + '<div class="fp-global-search fp-msearch-gs"><span class="fp-msearch-ic">🔍</span>'
-          + '<input type="text" class="fp-search-input" placeholder="Rechercher (plaque, amende, conducteur, facture…)" autocomplete="off" autocapitalize="off" autocorrect="off">'
-          + '<div class="fp-search-results"></div></div>'
-          + '<button type="button" class="fp-msearch-close" aria-label="Fermer">Fermer</button></div>';
+        ov.innerHTML = '<button type="button" class="fp-msearch-close" aria-label="Fermer">Fermer</button>'
+          + '<div class="fp-global-search fp-msearch-gs">'
+          + '<div class="fp-msearch-inputrow"><span class="fp-msearch-ic">🔍</span>'
+          + '<input type="text" class="fp-search-input" placeholder="Rechercher (plaque, amende, conducteur, facture…)" autocomplete="off" autocapitalize="off" autocorrect="off"></div>'
+          + '<div class="fp-search-results"></div>'
+          + '<div class="fp-msearch-hint">Tape une plaque, un nom de conducteur, un n° d\'amende ou de facture…</div>'
+          + '</div>';
         document.body.appendChild(ov);
       }
       const closeSearch = () => { ov.hidden = true; const i = ov.querySelector('.fp-search-input'); if (i) i.value = ''; const r = ov.querySelector('.fp-search-results'); if (r) { r.innerHTML = ''; r.classList.remove('open'); r.style.display = ''; } };
