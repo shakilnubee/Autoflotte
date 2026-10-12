@@ -1,5 +1,61 @@
 # Parc Pilot — Batterie d'audits (à relancer de temps en temps)
 
+> ## 🧭 SYSTÈME v2 — 25 auditeurs, 4 niveaux de contrôle, audit CIBLÉ (2026-10-12)
+>
+> Principe (validé par l'utilisateur) : **des contrôles systématiques et ciblés, pas 25 agents qui
+> relisent tout à chaque fois.** On choisit les auditeurs selon ce qui est modifié, et un déploiement
+> n'est autorisé que si les **contrôles bloquants** passent.
+>
+> ### Les 4 niveaux
+> | Niveau | Quand | Quoi | Outil |
+> |---|---|---|---|
+> | **1. Avant chaque commit** | automatique (hook pré-push) | syntaxe, cache `?v=`, liens, RGPD, `.min` à jour **+ tests unitaires des calculs** | `node scripts/check-bugs.mjs .` · `node scripts/test-calculs.mjs` |
+> | **2. Avant déploiement** | GitHub Actions (`.github/workflows/ci.yml`) | les mêmes contrôles sur chaque PR → **bloque une fusion cassée** | CI |
+> | **3. Audit profond** | manuel (« fais l'audit ») | les 25 auditeurs en parallèle (findings vérifiés, NE PAS modifier) | agents |
+> | **4. Audit ciblé** | manuel | seulement les auditeurs liés aux fichiers modifiés | `node scripts/audit-router.mjs` |
+>
+> ### Routeur (fichier modifié → auditeurs) — `scripts/audit-router.mjs`
+> OCR/scan → **8, 9, 17, 21** · TCO/calculs → **3, 4, 19, 20** · Supabase/données → **1, 2, 5, 13, 16** ·
+> Interface → **6, 10, 15, 24**. (Le routeur ajoute toujours #10 régression.)
+>
+> ### Les 25 auditeurs (périmètre · critère de réussite)
+> 1. **Sécurité & accès** — secrets/XSS/rôles/auth · aucune donnée non échappée, restriction tenue serveur.
+> 2. **Isolation sociétés & RGPD** — caches/filtres par société, PII `data.js` · 0 fuite, grep PII = 0.
+> 3. **Calculs financiers** — un coût remonte dans TOUS les totaux · pas de double-compte, pas de /0.
+> 4. **Cohérence inter-pages** — même concept = même helper `FP.*` · aucun écran qui diverge.
+> 5. **Synchro / perte de données** — mapping base, écriture non avalée · une saisie se retrouve après rechargement.
+> 6. **Rafraîchissement d'état** — compteurs/caches à jour, pas de « revenant » · tout se met à jour sans F5.
+> 7. **Échecs silencieux** — uploads/écritures avalées · tout échec a un retour visible.
+> 8. **Lecture OCR/IA & doublons** — jamais `Math.max`, HT+TVA=TTC, `FP.dupe` · montants exacts, pas de doublon.
+> 9. **Remplissage auto & rapprochements** — auto-fill, ne jamais inventer un nom · bons champs, bon conducteur.
+> 10. **Régression / perte après merge** — feature présente en historique mais disparue · rien ne « re-disparaît ».
+> 11. **Performance** — O(n²), rechargements redondants · pas de lag, index `Map` réutilisés.
+> 12. **Suppression/édition répercutée** — orphelins, KPI figés · une action se répercute partout.
+> 13. **Concurrence & modifs simultanées** — 2 utilisateurs en même temps · aucune écriture perdue.
+> 14. **Sessions & permissions** — expiration, déconnexion, changement de rôle · jamais d'accès après logout.
+> 15. **PWA / service worker / cache** — `sw.js`, MAJ, hors-ligne · pas d'ancienne version servie après déploiement.
+> 16. **Intégrité des données & relations** — dépendances (véhicule↔factures/amendes…) · pas d'orphelin (= #12 élargi).
+> 17. **Connecteurs & API externes** — Edge Functions (IA/Resend/Drive) · échec géré + visible, jamais de perte.
+> 18. **Automatisations & notifications** — fonctions planifiées, alertes, push · se déclenchent, idempotentes.
+> 19. **Précision financière & arrondis** — centimes, arrondis cumulés · HT+TVA=TTC au centime partout.
+> 20. **Dates / échéances / fuseaux** — fuseau, UTC, changement d'heure · `FP.joursRestants` jamais décalé d'un jour.
+> 21. **Robustesse imports & fichiers** — CSV/PDF/HEIC malformés, gros fichiers · jamais de crash ni de perte muette.
+> 22. **Charge & volumétrie** — test ×10 données FICTIVES isolées · pages < 2 s, pas d'O(n²).
+> 23. **Sauvegarde / restauration** — export de secours, reprise · une restauration redonne l'état exact.
+> 24. **Parcours réels & accessibilité** — bout-en-bout + WCAG (skill `accessibility`) · parcours critiques OK.
+> 25. **Fiabilité des tests** — méta : les tests sont-ils bons ? que reste-t-il NON testé ? · liste honnête des trous.
+>
+> ### Tests destructifs / charge / simulation d'erreurs
+> UNIQUEMENT en **environnement isolé avec données FICTIVES** (jamais la prod, jamais les RLS/fonctions métier).
+>
+> ### Format du rapport centralisé
+> Critiques / Majeurs / Mineurs · tests réussis/échoués · éléments NON testés · risques de régression ·
+> recommandations par priorité. Chaque problème : `fichier:ligne` + preuve + conséquence + (bug confirmé /
+> risque potentiel / non vérifié).
+>
+> ---
+
+
 **Comment lancer :** ouvre Claude sur ce projet et dis simplement **« fais l'audit »**
 (ou « lance les audits »). Claude lance les auditeurs ci-dessous **en parallèle**
 (un par domaine), vérifie chaque trouvaille dans le code réel, puis corrige les
