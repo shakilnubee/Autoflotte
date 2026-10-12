@@ -466,6 +466,10 @@
              + '#' + (d.factures || []).map(x => (x.id || '') + ':' + ((x.pieces || []).length) + ':' + ((x.pieces || []).map(p => (p && (p.id || p.url)) || '').join(','))).join(';')
              + '#' + f(d.conducteurs, ['key','name','nom','prenom','masque','dateNaissance','poste','tel','email','adresse','permisNumero','permisExpiration','permisObtention','permisType','note']);
       };
+      // ⚠️ Anti « revenant » (M1) : avant de comparer/afficher/cacher, on applique à ces données
+      // FRAÎCHES du serveur les écritures locales encore EN FILE (suppressions/ajouts/éditions pas
+      // encore synchronisées). Sinon une suppression suivie d'une navigation immédiate reviendrait.
+      try { if (window.FP && FP.persist && FP.persist.applyTo) FP.persist.applyTo(data); } catch (e) {}
       const sigBefore = sig(window.FP_DATA);
       const sigAfter  = sig(data);
       // Remplace les contenus in-place

@@ -31,6 +31,22 @@ function extract(name) {
   return SRC.slice(m.index, i + 1);
 }
 
+// --- Extracteur de MÉTHODE d'objet (ex. « applyTo(data, q) { … } ») → fonction autonome. ---
+function extractMethod(signature, argList) {
+  const i0 = SRC.indexOf(signature);
+  if (i0 < 0) throw new Error('méthode introuvable : ' + signature);
+  let i = SRC.indexOf('{', i0); const start = i; let depth = 0, inStr = null, prev = '';
+  for (; i < SRC.length; i++) {
+    const c = SRC[i];
+    if (inStr) { if (c === inStr && prev !== '\\') inStr = null; prev = c; continue; }
+    if (c === '"' || c === "'" || c === '`') { inStr = c; prev = c; continue; }
+    if (c === '{') depth++;
+    else if (c === '}') { depth--; if (depth === 0) { i++; break; } }
+    prev = c;
+  }
+  return new Function(...argList, SRC.slice(start + 1, i - 1));
+}
+
 // --- Bac à sable : un FP minimal + stubs, puis on évalue les helpers extraits dedans. ---
 function makeFP(settings) {
   const FP = {};
@@ -77,6 +93,20 @@ function ok(cond, label) { eq(!!cond, true, label); }
   eq(FP.contratCadreCoutAnnuel({ montant: 100, periode: 'mois' }), 1200, 'contrat mensuel 100€ = 1200€/an');
   eq(FP.contratCadreCoutAnnuel({ montant: 1200, periode: 'an' }), 1200, 'contrat annuel 1200€ = 1200€/an');
   eq(FP.contratCadreCoutAnnuel({ montant: 0 }), 0, 'contrat 0€ = 0');
+}
+
+// --- M1 : réconciliation données serveur ⇄ file d'attente (anti « revenant ») ---
+{
+  const applyTo = extractMethod('applyTo(data, q)', ['data', 'q']);
+  const data = { vehicules: [], amendes: [{ id: 'a1' }, { id: 'a2' }, { id: 'a3' }], factures: [], conducteurs: [] };
+  applyTo(data, [{ op: 'delete', table: 'amendes', id: 'a2' }]);
+  eq(data.amendes.map(x => x.id), ['a1', 'a3'], 'M1 — suppression en file retirée des données serveur (pas de revenant)');
+  const data2 = { amendes: [{ id: 'a1' }], vehicules: [], factures: [], conducteurs: [] };
+  applyTo(data2, [{ op: 'insert', table: 'amendes', row: { id: 'a9' } }]);
+  eq(data2.amendes.map(x => x.id), ['a1', 'a9'], 'M1 — ajout en file présent dans les données');
+  const data3 = { amendes: [{ id: 'a1', statut: 'à payer' }], vehicules: [], factures: [], conducteurs: [] };
+  applyTo(data3, [{ op: 'update', table: 'amendes', id: 'a1', fields: { statut: 'payée' } }]);
+  eq(data3.amendes[0].statut, 'payée', 'M1 — édition en file appliquée');
 }
 
 // --- M4 : permis — la fiche suit le réglage docAlerteJours (comme les Alertes), plus de seuil figé ---

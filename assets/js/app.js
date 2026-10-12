@@ -11191,6 +11191,27 @@ FP.persist = {
   _enqueue(item) { const q = this._loadQ(); item.ts = Date.now(); item.tries = 0; if (!item._uid) item._uid = this._uid(); q.push(item); this._saveQ(q); return item._uid; },
   // Retire un item précis de la file (par son _uid) — appelé quand SON écriture réseau a réussi.
   _removeUid(uid) { if (!uid) return; const q = this._loadQ(); const n = q.filter(it => it._uid !== uid); if (n.length !== q.length) this._saveQ(n); },
+  // ⚠️ RÉCONCILIATION DONNÉES ⇄ FILE D'ATTENTE (anti « revenant » — M1) : applique à des données
+  // FRAÎCHES du serveur les écritures locales PAS ENCORE synchronisées (suppressions/ajouts/éditions
+  // en file). Sinon un `loadAll` déclenché juste après une suppression (avant que la file soit vidée)
+  // ré-écrase l'élément supprimé avec la version serveur → il « revient » jusqu'à un F5. Même principe
+  // que _reconcileServerSettings pour les réglages. Appelé par loadAll avant la signature/cache.
+  applyTo(data, q) {
+    if (!data) return data;
+    try {
+      q = q || this._loadQ();
+      const TABLES = ['vehicules', 'amendes', 'factures', 'conducteurs'];
+      for (const it of q) {
+        if (!it || TABLES.indexOf(it.table) < 0 || !Array.isArray(data[it.table])) continue;
+        const arr = data[it.table];
+        if (it.op === 'delete') { const i = arr.findIndex(r => r && r.id === it.id); if (i >= 0) arr.splice(i, 1); }
+        else if (it.op === 'insert') { if (it.row && !arr.some(r => r && r.id === it.row.id)) arr.push(it.row); }
+        else if (it.op === 'update') { const r = arr.find(x => x && x.id === it.id); if (r) Object.assign(r, it.fields || {}); }
+        else if (it.op === 'upsert') { if (it.row) { const r = arr.find(x => x && x.id === it.row.id); if (r) Object.assign(r, it.row); else arr.push(it.row); } }
+      }
+    } catch (e) {}
+    return data;
+  },
   // ⚠️ FILE OPTIMISTE (anti-perte des écritures « en vol ») : on met l'écriture dans la file locale
   // AVANT l'appel réseau, puis on la retire à la réussite. Si la page est quittée / l'onglet tué
   // pendant l'envoi (fetch avorté → le catch ne s'exécute jamais), l'item RESTE dans la file et
