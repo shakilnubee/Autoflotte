@@ -1140,23 +1140,31 @@
   function mensualiteFixe(immat) { const a = leasingByVeh[FP.normImmat ? FP.normImmat(immat || '') : immat]; return a ? median(a.amounts) : null; }
   // Détail des frais de pénalité de dépassement km : km projetés hors forfait × coût du km sup.
   // Affiché sous le badge « Risque de dépassement / À surveiller ». Renvoie '' si pas de dépassement.
+  // ⚠️ COMPACT : le détail de pénalité ne doit PAS agrandir la ligne. On renvoie une petite puce « ⓘ »
+  // INLINE (à côté du badge) : le détail complet est dans son title (survol) ET accessible au clic/tap
+  // (data-pen → dialogue, pour le mobile sans survol). Source unique du calcul (inchangée).
   function penaltyHtml(overKm, kmSupp, editAttr, tolKm) {
     if (!(overKm > 0)) return '';
     const kmR = Math.round(overKm);
     const tol = (tolKm != null && tolKm !== '' && Number(tolKm) > 0) ? Number(tolKm) : 0;
     const billable = overKm - tol;                          // km réellement facturés (après tolérance offerte)
     const rate = (kmSupp != null && kmSupp !== '') ? Number(kmSupp) : null;
+    const esc = FP.esc || (x => String(x == null ? '' : x));
+    const chip = (color, label, detail, extra) => ` <span class="lease-pen-i" data-pen="${esc(detail)}" title="${esc(detail)}" style="color:${color};font-size:.72rem;font-weight:600;cursor:pointer;white-space:nowrap;vertical-align:middle">${esc(label)} <span style="opacity:.75">ⓘ</span></span>${extra || ''}`;
     if (tol > 0 && billable <= 0) {
-      return `<div class="text-xs mt-1 text-slate-500">≈ +${FP.num(kmR)} km projetés — dans la tolérance de ${FP.num(tol)} km, pas de pénalité</div>`;
+      return chip('#64748b', 'dans la tolérance', '≈ +' + FP.num(kmR) + ' km projetés — dans la tolérance de ' + FP.num(tol) + ' km, pas de pénalité');
     }
     if (rate != null && rate > 0) {
       const billR = Math.round(billable); const rateStr = String(rate).replace('.', ',');
-      const tolNote = tol > 0 ? ` <span class="text-slate-400">(sur ${FP.num(kmR)} km, après tolérance ${FP.num(tol)} km)</span>` : '';
-      return `<div class="text-xs mt-1" style="color:#B91C1C">Pénalité estimée : ${FP.num(billR)} km × ${rateStr} €/km = <b>${FP.euro(billR * rate)}</b>${tolNote}</div>`;
+      const tolNote = tol > 0 ? (' (sur ' + FP.num(kmR) + ' km, après tolérance ' + FP.num(tol) + ' km)') : '';
+      const detail = 'Pénalité estimée : ' + FP.num(billR) + ' km × ' + rateStr + ' €/km = ' + FP.euro(billR * rate) + tolNote;
+      return chip('#B91C1C', 'pénalité ~' + FP.euro(billR * rate), detail);
     }
-    const link = editAttr ? ` <button type="button" ${editAttr} class="underline decoration-dotted" style="color:var(--fp-accent)">renseigner le €/km</button>` : ' (à saisir dans le forfait)';
-    return `<div class="text-xs mt-1 text-slate-500">≈ ${FP.num(kmR)} km hors forfait — <span style="color:#B45309">coût du km sup. non renseigné</span>${link}</div>`;
+    const link = editAttr ? ` <button type="button" ${editAttr} class="underline decoration-dotted" style="color:var(--fp-accent);font-size:.72rem">€/km ?</button>` : '';
+    return chip('#B45309', 'km sup.', '≈ ' + FP.num(kmR) + ' km hors forfait — coût du km sup. non renseigné' + (editAttr ? ' (clique « €/km ? » pour le saisir)' : ''), link);
   }
+  // Clic/tap sur la puce « ⓘ » de pénalité (mobile sans survol) → affiche le détail dans un dialogue. Lié UNE fois.
+  if (!window.__penInfoBound) { window.__penInfoBound = true; document.addEventListener('click', (e) => { const s = e.target.closest('[data-pen]'); if (s) { e.stopPropagation(); const t = s.getAttribute('data-pen'); if (t) { if (FP.alert) FP.alert(t); else alert(t); } } }); }
   // Nb de mensualités THÉORIQUES = mois écoulés depuis le début du contrat (plafonné à la durée).
   function moisTheoriques(l) {
     if (!l || !l.debut || isNaN(l.debut)) return null;
@@ -1920,8 +1928,8 @@
       const pct = Math.round(l.ratio * 100);
       const pctKm = l.kmContrat ? (l.km / l.kmContrat * 100) : 0; // consommé réel (pour la barre)
       const pen = (l.niveau === 'danger' || l.niveau === 'warn') ? penaltyHtml(l.depassementProjete, l.kmSupp, immat ? `data-edit-lease="${FP.esc(immat)}"` : '', l.kmTolerance) : '';
-      if (l.niveau === 'danger') return `<span class="badge" style="background:#FEE2E2;color:#991B1B">⚠️ Risque dépassement (${pct}%)</span>${kmBar(pctKm, 'var(--fp-danger)')}${pen}`;
-      if (l.niveau === 'warn')   return `<span class="badge" style="background:#FEF3C7;color:#92400E">À surveiller (${pct}%)</span>${kmBar(pctKm, 'var(--fp-warn)')}${pen}`;
+      if (l.niveau === 'danger') return `<span class="badge" style="background:#FEE2E2;color:#991B1B">⚠️ Risque dépassement (${pct}%)</span>${pen}${kmBar(pctKm, 'var(--fp-danger)')}`;
+      if (l.niveau === 'warn')   return `<span class="badge" style="background:#FEF3C7;color:#92400E">À surveiller (${pct}%)</span>${pen}${kmBar(pctKm, 'var(--fp-warn)')}`;
       return `<span class="badge badge-ok">OK (${pct}%)</span>${kmBar(pctKm, 'var(--fp-accent)')}`;
     };
     const tbody = $('tbody-leasing');
