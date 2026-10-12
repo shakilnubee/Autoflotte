@@ -1226,18 +1226,20 @@ FP.primeVeh = (v) => {
 FP.assuranceAnnuelle = (vehicules) => {
   const s = (FP.settings && FP.settings.get) ? (FP.settings.get() || {}) : {};
   const primes = (s.assurancePrimes && typeof s.assurancePrimes === 'object') ? s.assurancePrimes : {};
-  const owned = (vehicules || []).filter(v => !FP.estVendu(v));
+  const owned = (vehicules || []).filter(v => !FP.horsFlotte(v));
   if (Object.keys(primes).length) {
     let t = 0; owned.forEach(v => { t += FP.primeVeh(v); });
     if (t > 0) return t;
   }
   const flotte = Number(s.assurancePrimeAnnuelle); return Number.isFinite(flotte) ? flotte : 0;
 };
-// ⚠️ HELPER CANONIQUE — total annuel TVS de la flotte POSSÉDÉE (exclut les vendus, MÊME périmètre
-// que FP.assuranceAnnuelle). tvsDetail renvoie déjà 0 si non applicable (élec, hors-catégorie…).
+// ⚠️ HELPER CANONIQUE — total annuel TVS de la flotte POSSÉDÉE. MÊME périmètre que le leasing et
+// que FP.assuranceAnnuelle : on exclut tout véhicule HORS FLOTTE (vendu, cédé, restitué, archivé,
+// hors service) via FP.horsFlotte — un véhicule qu'on ne possède plus n'engendre plus ni assurance
+// ni TVS. tvsDetail renvoie déjà 0 si non applicable (élec, hors-catégorie…).
 // À utiliser PARTOUT où l'on somme la TVS de la flotte (dashboard, budget, stats, contrats, écran,
 // recherche) — un seul périmètre, plus de reduce recopié à la main dans chaque page.
-FP.tvsAnnuelleFlotte = (vehicules) => (vehicules || []).filter(v => !FP.estVendu(v))
+FP.tvsAnnuelleFlotte = (vehicules) => (vehicules || []).filter(v => !FP.horsFlotte(v))
   .reduce((s, v) => { const d = FP.tvsDetail(v); return s + (d && d.applicable && d.total != null ? d.total : 0); }, 0);
 
 // ============================================================================
