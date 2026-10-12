@@ -56,9 +56,13 @@
   input.f, select.f { width:100%; box-sizing:border-box; border:1px solid var(--border); border-radius:12px; padding:12px 13px; font-size:1.02rem; font-family:inherit; color:var(--txt); background:#fff; }
   input.f:focus, select.f:focus { outline:none; border-color:var(--acc); box-shadow:0 0 0 3px rgba(249,115,22,.18); }
   input.f::placeholder { color:#9aa6b8; }
-  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:0 12px; }
-  .grid3 { display:grid; grid-template-columns:.7fr 1fr; gap:0 12px; }
-  @media (max-width:460px){ .grid2, .grid3 { grid-template-columns:1fr; } }
+  .grid2 { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:0 12px; }
+  .grid3 { display:grid; grid-template-columns:minmax(0,.7fr) minmax(0,1fr); gap:0 12px; }
+  /* ⚠️ iOS : un champ `type=date` garde sa largeur intrinsèque et déborde de la grille/carte si on ne
+     force pas min-width:0 (sur la cellule) + appearance:none → ici il reste bien DANS le cadre. */
+  .grid2 > div, .grid3 > div { min-width:0; }
+  input.f[type=date] { -webkit-appearance:none; appearance:none; min-width:0; max-width:100%; }
+  @media (max-width:460px){ .grid2, .grid3 { grid-template-columns:minmax(0,1fr); } }
   /* Choix du type d'acheteur */
   .types { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
   .type-opt { border:2px solid var(--border); border-radius:14px; padding:16px 12px; text-align:center; cursor:pointer; font-weight:800; color:var(--nav); background:#fff; transition:all .12s; font-size:1.02rem; }
@@ -112,13 +116,13 @@
       <p class="sec-title">La société</p>
       <label class="f">Raison sociale <span class="req">*</span></label>
       <input class="f" id="f-raisonSociale" placeholder="Nom de la société" />
-      <label class="f">SIREN</label>
+      <label class="f">SIREN <span class="req">*</span></label>
       <input class="f" id="f-siren" inputmode="numeric" placeholder="9 chiffres" />
       <div class="grid2">
         <div><label class="f">Nom du représentant <span class="req">*</span></label><input class="f" id="f-repNom" placeholder="Nom" /></div>
-        <div><label class="f">Prénom du représentant</label><input class="f" id="f-repPrenom" placeholder="Prénom" /></div>
+        <div><label class="f">Prénom du représentant <span class="req">*</span></label><input class="f" id="f-repPrenom" placeholder="Prénom" /></div>
       </div>
-      <label class="f">Qualité</label>
+      <label class="f">Qualité <span class="req">*</span></label>
       <input class="f" id="f-qualite" placeholder="ex. Gérant, Président…" />
     </div>
 
@@ -132,12 +136,12 @@
       <label class="f">Prénom(s) <span class="req">*</span></label>
       <input class="f" id="f-prenom" placeholder="Prénom(s)" />
       <div class="grid2">
-        <div><label class="f">Date de naissance</label><input class="f" id="f-dateNaissance" type="date" /></div>
-        <div><label class="f">Sexe</label>
+        <div><label class="f">Date de naissance <span class="req">*</span></label><input class="f" id="f-dateNaissance" type="date" /></div>
+        <div><label class="f">Sexe <span class="req">*</span></label>
           <select class="f" id="f-sexe"><option value="">—</option><option value="Masculin">Masculin</option><option value="Féminin">Féminin</option></select>
         </div>
       </div>
-      <label class="f">Lieu de naissance</label>
+      <label class="f">Lieu de naissance <span class="req">*</span></label>
       <input class="f" id="f-lieuNaissance" placeholder="Ville (et pays si étranger)" />
     </div>
 
@@ -145,16 +149,16 @@
     <div class="card enter">
       <p class="sec-title" id="adr-title">Votre adresse</p>
       <div class="grid3">
-        <div><label class="f">N°</label><input class="f" id="f-adrNumero" placeholder="12" /></div>
-        <div><label class="f">Nom de voie</label><input class="f" id="f-adrNomVoie" placeholder="Rue du Bel Air" /></div>
+        <div><label class="f">N° <span class="req">*</span></label><input class="f" id="f-adrNumero" placeholder="12" /></div>
+        <div><label class="f">Nom de voie <span class="req">*</span></label><input class="f" id="f-adrNomVoie" placeholder="Rue du Bel Air" /></div>
       </div>
       <label class="f">Complément d'adresse</label>
       <input class="f" id="f-adrComplement" placeholder="Bâtiment, étage, lieu-dit… (facultatif)" />
       <div class="grid3">
-        <div><label class="f">Code postal</label><input class="f" id="f-codePostal" inputmode="numeric" placeholder="75001" /></div>
-        <div><label class="f">Ville</label><input class="f" id="f-ville" placeholder="Ville" /></div>
+        <div><label class="f">Code postal <span class="req">*</span></label><input class="f" id="f-codePostal" inputmode="numeric" placeholder="75001" /></div>
+        <div><label class="f">Ville <span class="req">*</span></label><input class="f" id="f-ville" placeholder="Ville" /></div>
       </div>
-      <label class="f">Pays</label>
+      <label class="f">Pays <span class="req">*</span></label>
       <input class="f" id="f-pays" value="France" placeholder="Pays" />
     </div>
 
@@ -270,16 +274,39 @@
       raisonSociale: val('f-raisonSociale'), siren: val('f-siren'),
       repNom: val('f-repNom'), repPrenom: val('f-repPrenom'), qualite: val('f-qualite')
     };
-    // Validation côté client (le serveur revalide).
+    // Validation côté client (le serveur revalide) : tous les champs obligatoires (*).
+    function focusEmpty(id){ var el = $(id); if (el) { try { el.focus(); el.scrollIntoView({ behavior:'smooth', block:'center' }); } catch(x){} } }
+    var requis;
     if (type === 'societe') {
-      if (!ach.raisonSociale) { showErr('Indiquez la raison sociale.'); return; }
-      if (!ach.repNom) { showErr('Indiquez le nom du représentant.'); return; }
+      requis = [
+        ['f-raisonSociale', 'Indiquez la raison sociale.'],
+        ['f-siren', 'Indiquez le SIREN de la société.'],
+        ['f-repNom', 'Indiquez le nom du représentant.'],
+        ['f-repPrenom', 'Indiquez le prénom du représentant.'],
+        ['f-qualite', 'Indiquez la qualité du représentant (ex. Gérant).']
+      ];
     } else {
-      if (!ach.nom) { showErr('Indiquez votre nom.'); return; }
-      if (!ach.prenom) { showErr('Indiquez votre prénom.'); return; }
+      requis = [
+        ['f-nom', 'Indiquez votre nom.'],
+        ['f-prenom', 'Indiquez votre prénom.'],
+        ['f-dateNaissance', 'Indiquez votre date de naissance.'],
+        ['f-sexe', 'Indiquez votre sexe.'],
+        ['f-lieuNaissance', 'Indiquez votre lieu de naissance.']
+      ];
     }
-    if (!ach.telephone) { showErr('Indiquez un numéro de téléphone.'); return; }
-    if (!ach.email || ach.email.indexOf('@') < 0) { showErr('Indiquez un e-mail valide.'); return; }
+    // Adresse + contact : obligatoires dans les deux cas.
+    requis = requis.concat([
+      ['f-adrNumero', 'Indiquez le numéro de voie.'],
+      ['f-adrNomVoie', 'Indiquez le nom de la voie.'],
+      ['f-codePostal', 'Indiquez le code postal.'],
+      ['f-ville', 'Indiquez la ville.'],
+      ['f-pays', 'Indiquez le pays.'],
+      ['f-telephone', 'Indiquez un numéro de téléphone.']
+    ]);
+    for (var i = 0; i < requis.length; i++) {
+      if (!val(requis[i][0])) { showErr(requis[i][1]); focusEmpty(requis[i][0]); return; }
+    }
+    if (!ach.email || ach.email.indexOf('@') < 0) { showErr('Indiquez un e-mail valide.'); focusEmpty('f-email'); return; }
 
     var b = $('send'); b.disabled = true; var old = b.textContent; b.textContent = '… envoi';
     fetch(FN, { method: 'POST', headers: headers(), body: JSON.stringify({ action: 'submit', t: token, typeAcheteur: type, acheteur: ach }) })
