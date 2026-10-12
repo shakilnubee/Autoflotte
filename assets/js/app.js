@@ -6503,30 +6503,51 @@ FP.applyNavVisibility = () => {
     a.style.display = (set.has(k) && !FP.NAV_ALWAYS_VISIBLE.includes(k)) ? 'none' : '';
   });
 };
-// Onglets de la section « Compte » (bas de la sidebar) — le reste = « Espace de travail ».
-FP.NAV_ACCOUNT = ['guide.html', 'aide.html', 'parametres.html', 'brochure.html', 'prix.html'];
-// Libellés des sections (éditables plus tard via réglages si besoin).
+// Onglets de la section « Compte » (bas de la sidebar).
+FP.NAV_ACCOUNT = ['guide.html', 'manuel.html', 'aide.html', 'parametres.html', 'brochure.html', 'prix.html'];
+// Familles thématiques de l'espace de travail (façon SaaS) — regroupe les onglets par thème pour
+// un menu LISIBLE (4 petits paquets) au lieu d'un mur de 15 lignes à plat. L'ordre DANS une famille
+// suit navOrder (ordre DOM), donc la personnalisation de l'ordre reste possible à l'intérieur d'un
+// paquet. Pour déplacer un onglet d'une famille à l'autre, changer la liste ci-dessous.
+FP.NAV_FAMILIES = [
+  { key: 'pilotage', label: 'Pilotage',        items: ['dashboard.html', 'notifications.html', 'taches.html', 'statistiques.html'] },
+  { key: 'parc',     label: 'Parc',            items: ['vehicules.html', 'a-vendre.html', 'emprunts.html', 'conducteurs.html'] },
+  { key: 'vie',      label: 'Vie du véhicule', items: ['entretiens.html', 'controle.html', 'sinistres.html', 'amendes.html'] },
+  { key: 'finances', label: 'Finances',        items: ['factures.html', 'contrats.html', 'budget.html'] },
+];
+// Libellés des sections (compat ; « workspace » n'est plus affiché tel quel, remplacé par les familles).
 FP.NAV_GROUP_LABELS = { workspace: 'Espace de travail', compte: 'Compte' };
-// Range les onglets en 2 sections (Espace de travail / Compte) façon SaaS.
-// ⚠️ Robuste : on NE déplace PAS les liens dans le DOM (ça se faisait casser par le
-// ré-ordonnancement / le prefetch → les 2 titres finissaient collés en haut). On utilise
-// `order` (CSS, nav en flex-column) : Espace=order 0, liens workspace=1, Compte=2, liens
-// compte=3. L'ordre DANS un groupe suit l'ordre DOM (donc navOrder). La catégorie est FIXE
-// (FP.NAV_ACCOUNT). Un ré-ordonnancement du DOM ne peut plus casser l'affichage.
-// Idempotent (réutilise les mêmes 2 titres via data-grp) → sûr à ré-exécuter.
+// Range les onglets en 5 sections (4 familles de travail + Compte) façon SaaS.
+// ⚠️ Robuste : on NE déplace PAS les liens dans le DOM (ça se faisait casser par le ré-ordonnancement /
+// le prefetch). On utilise `order` (CSS, nav en flex-column) : chaque famille = un en-tête d'ordre PAIR
+// suivi de ses liens d'ordre IMPAIR (pilotage 0/1, parc 2/3, vie 4/5, finances 6/7, Compte 8/9). L'ordre
+// DANS une famille suit l'ordre DOM (donc navOrder). Idempotent (réutilise les en-têtes via data-grp).
 FP.applyNavGroups = () => {
+  const famOrder = {}; // dataNav -> ordre CSS du lien
+  FP.NAV_FAMILIES.forEach((f, i) => { f.items.forEach(k => { famOrder[k] = (i * 2 + 1); }); });
+  const ACC_ORDER = FP.NAV_FAMILIES.length * 2 + 1; // liens Compte
   document.querySelectorAll('aside nav').forEach(nav => {
     const links = Array.from(nav.querySelectorAll('a[data-nav]'));
     if (!links.length) return;
-    let hasAc = false;
-    links.forEach(a => { const acc = FP.NAV_ACCOUNT.includes(a.dataset.nav); a.style.order = acc ? '3' : '1'; if (acc && a.style.display !== 'none') hasAc = true; });
-    const ensure = (key, txt, ord) => {
+    // Nettoie l'ancien en-tête unique « Espace de travail » (data-grp="ws") s'il traîne.
+    const legacy = nav.querySelector('.fp-nav-group[data-grp="ws"]'); if (legacy) legacy.remove();
+    const present = {}; let hasAc = false;
+    links.forEach(a => {
+      const k = a.dataset.nav;
+      const ord = FP.NAV_ACCOUNT.includes(k) ? ACC_ORDER : (famOrder[k] != null ? famOrder[k] : 1 /* repli : 1re famille */);
+      a.style.order = String(ord);
+      // Le sous-menu déroulant éventuel reste collé sous son parent (même ordre CSS).
+      const bx = a.nextElementSibling;
+      if (bx && bx.classList && bx.classList.contains('fp-subnav')) bx.style.order = String(ord);
+      if (a.style.display !== 'none') { if (ord === ACC_ORDER) hasAc = true; else present[ord] = true; }
+    });
+    const ensure = (key, txt, ord, visible) => {
       let d = nav.querySelector('.fp-nav-group[data-grp="' + key + '"]');
       if (!d) { d = document.createElement('div'); d.className = 'fp-nav-group'; d.setAttribute('data-grp', key); nav.appendChild(d); }
-      d.textContent = txt; d.style.order = ord; return d;
+      d.textContent = txt; d.style.order = String(ord); d.style.display = visible ? '' : 'none'; return d;
     };
-    ensure('ws', FP.NAV_GROUP_LABELS.workspace, '0');
-    ensure('ac', FP.NAV_GROUP_LABELS.compte, '2').style.display = hasAc ? '' : 'none';
+    FP.NAV_FAMILIES.forEach((f, i) => ensure(f.key, f.label, i * 2, !!present[i * 2 + 1]));
+    ensure('ac', FP.NAV_GROUP_LABELS.compte, FP.NAV_FAMILIES.length * 2, hasAc);
   });
 };
 
