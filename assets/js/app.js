@@ -8641,6 +8641,18 @@ FP.contratsCadre = {
 };
 // Coût ANNUEL normalisé d'un contrat cadre (mensuel → ×12). 0 si pas de montant. Source unique des totaux.
 FP.contratCadreCoutAnnuel = (c) => { const m = Number(c && c.montant); if (!Number.isFinite(m) || m <= 0) return 0; return String(c.periode) === 'mois' ? m * 12 : m; };
+// ⚠️ ANTI DOUBLE-COMPTAGE — types de contrat-cadre DÉJÀ comptés dans un AUTRE poste budgétaire :
+//  assurance → poste « Assurance » (primes) ; maintenance → « Entretien » (factures) ;
+//  carte-carburant & badge-péage → « Carburant & péages » (factures Total/Ulys).
+//  Seuls « télématique » et « autre » sont des abonnements SANS poste dédié → eux seuls s'ajoutent
+//  au Budget et à la trésorerie. (Le KPI « Coût annuel total » de la page Contrats, lui, somme TOUS
+//  les contrats — c'est une vue contrats, pas un total budgétaire.)
+FP.CONTRAT_CADRE_DEJA_COMPTE = ['assurance', 'maintenance', 'carte-carburant', 'badge-peage'];
+// SOURCE UNIQUE du total annuel des contrats-cadres « abonnements » à injecter dans Budget/trésorerie
+// (jamais la somme brute de TOUS les contrats, qui doublerait assurance/entretien/carburant).
+FP.contratsCadreAbonnementsAnnuel = () => (FP.contratsCadre ? FP.contratsCadre.list() : [])
+  .filter(c => c && !FP.CONTRAT_CADRE_DEJA_COMPTE.includes(c.type))
+  .reduce((s, c) => s + FP.contratCadreCoutAnnuel(c), 0);
 // DATE LIMITE DE RÉSILIATION = date de fin − préavis (mois). null si pas de préavis/pas de date de fin.
 // Un contrat-cadre se reconduit souvent tacitement : c'est CETTE date qu'il faut respecter pour résilier.
 FP.contratCadreDateLimite = (c) => {

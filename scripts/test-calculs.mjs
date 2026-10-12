@@ -79,6 +79,20 @@ function ok(cond, label) { eq(!!cond, true, label); }
   eq(FP.contratCadreCoutAnnuel({ montant: 0 }), 0, 'contrat 0€ = 0');
 }
 
+// --- M3 : contrats-cadres « abonnements » dans les totaux SANS double-compter ---
+{
+  const settings = { contratsCadre: [
+    { type: 'telematique', montant: 100, periode: 'mois' },   // 1200/an — à compter
+    { type: 'autre',       montant: 600, periode: 'an' },      // 600/an — à compter
+    { type: 'assurance',   montant: 5000, periode: 'an' },     // déjà dans poste Assurance — NE PAS compter
+    { type: 'maintenance', montant: 3000, periode: 'an' },     // déjà dans poste Entretien — NE PAS compter
+    { type: 'carte-carburant', montant: 240, periode: 'an' },  // déjà dans Carburant — NE PAS compter
+  ] };
+  const { FP, load } = makeFP(settings);
+  load(['contratsCadre', 'contratCadreCoutAnnuel', 'CONTRAT_CADRE_DEJA_COMPTE', 'contratsCadreAbonnementsAnnuel']);
+  eq(FP.contratsCadreAbonnementsAnnuel(), 1800, 'M3 — abonnements = télématique 1200 + autre 600 = 1800 (exclut assurance/maintenance/carburant)');
+}
+
 // --- M2 : un véhicule « cédé » ne doit PLUS être facturé (assurance + TVS) ---
 //   Ces tests encodent le comportement CORRECT. Sur le code actuel (filtre !estVendu),
 //   un véhicule « cédé » est encore compté → ces tests ÉCHOUENT (= preuve du bug M2).

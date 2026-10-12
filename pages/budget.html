@@ -248,6 +248,10 @@
     { key: 'leasing', label: 'Leasing', annuel: true, reel: () => leasingTotal() },
     { key: 'assurance', label: 'Assurance', annuel: true, reel: () => assuranceTotal() },
     { key: 'tvs', label: 'TVS', annuel: true, reel: () => tvsTotal() },
+    // Contrats-cadres « abonnements » (télématique, autre) — source unique anti double-comptage :
+    // FP.contratsCadreAbonnementsAnnuel exclut assurance/maintenance/carte-carburant/badge (déjà
+    // comptés dans Assurance / Entretien / Carburant). Avant : ces abonnements ne remontaient nulle part.
+    { key: 'contrats', label: 'Contrats & abonnements', annuel: true, reel: () => (FP.contratsCadreAbonnementsAnnuel ? FP.contratsCadreAbonnementsAnnuel() : 0) },
     { key: 'amendes', label: 'Amendes', reel: (y) => amendesYear(y).reduce((s, a) => s + (FP.montantDu ? FP.montantDu(a) : (+a.montant || 0)), 0) },
     // Sinistres au RESTE À CHARGE réel (après remboursement assureur, devis exclus) — MÊME source que la
     // TCO Statistiques (FP.resteChargeSinistre). Les factures 'sinistre' ne tombent dans aucun autre poste
@@ -403,10 +407,12 @@
 
     // Prévision de trésorerie 12 mois : sorties connues (leasing/assurance/TVS) + estim. carburant/entretien du budget.
     const leas = Math.round(leasingTotal()), assur = Math.round(assuranceTotal()), tvs = Math.round(tvsTotal());
+    const abos = Math.round(FP.contratsCadreAbonnementsAnnuel ? FP.contratsCadreAbonnementsAnnuel() : 0);
     const items = [
       ['Leasing (loyers)', leas],
       ['Assurance', assur],
       ['TVS', tvs],
+      ['Contrats & abonnements', abos],
       ['Carburant (estimation budget)', Number(bud.carburant) || 0],
       ['Entretien (estimation budget)', Number(bud.entretien) || 0],
     ].filter(x => x[1] > 0);
