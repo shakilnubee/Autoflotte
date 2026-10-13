@@ -8098,6 +8098,34 @@ FP.affectations = {
       return did;
     } catch (e) { return false; }
   },
+  // ⚠️ LIEN DIRECT EDL → PÉRIODE (demande utilisateur) : le km TAPÉ dans l'état des lieux (celui du PDF
+  // SIGNÉ par les 2 parties = valeur SÛRE) devient directement le km de la période, SANS scan. Gère le cas
+  // « nouveau collègue » (plusieurs périodes) : on applique à la période OUVERTE (la plus récente sans fin).
+  //  - remise (Entrée)   → kmDebut de la période ouverte (= km de prise en main) + date de début si vide.
+  //  - restitution (Sortie) → kmFin de la période ouverte (= km de rendu).
+  // La valeur est marquée « manuelle » (signée) → plus jamais écrasée par un ré-ancrage auto.
+  applyEdlKm(vehId, sens, km, date) {
+    try {
+      if (vehId == null) return false;
+      const k = this._km(km);
+      const s = FP.settings.get();
+      const list = (s.affectations && Array.isArray(s.affectations[vehId])) ? s.affectations[vehId] : null;
+      if (!list || !list.length) return false;
+      let idx = -1; for (let i = list.length - 1; i >= 0; i--) { if (!list[i].fin) { idx = i; break; } }
+      if (idx < 0) idx = list.length - 1;                              // repli : la dernière période
+      const sv = String(sens || '').toLowerCase();
+      const isSortie = sv.indexOf('resti') >= 0 || sv.indexOf('sort') >= 0;
+      let did = false;
+      if (k != null) {
+        if (isSortie) { if (list[idx].kmFin !== k) { list[idx].kmFin = k; did = true; } list[idx].kmFinManuel = true; }
+        else { if (list[idx].kmDebut !== k) { list[idx].kmDebut = k; did = true; } list[idx].kmDebutManuel = true; }
+      }
+      const d = (date && /^\d{4}-\d{2}-\d{2}$/.test(String(date).slice(0, 10))) ? String(date).slice(0, 10) : null;
+      if (!isSortie && d && !list[idx].debut) { list[idx].debut = d; did = true; }   // date de début si manquante
+      if (did || k != null) FP.settings.save(s);                       // on persiste aussi le marqueur « manuel »
+      return did;
+    } catch (e) { return false; }
+  },
   // Renomme un conducteur dans tout l'historique (suit un renommage de fiche).
   rename(oldName, newName) {
     const from = this._norm(oldName).toLowerCase(); const to = this._norm(newName);
@@ -12929,7 +12957,10 @@ FP.edl = {
         try {
           if (FP.affectations && FP.affectations.ensureInspection) {
             FP.affectations.ensureInspection(veh.id, { sens: data.sens, date: data.date, km: data.km });
-            if (FP.affectations.reanchorCurrent) FP.affectations.reanchorCurrent(veh.id);
+            // 🔗 Le km TAPÉ dans l'EDL (= PDF signé, valeur sûre) pilote DIRECTEMENT la période, sans scan :
+            // remise → kmDebut ; restitution → kmFin ; gère le cas « nouveau conducteur » (période ouverte).
+            if (FP.affectations.applyEdlKm) FP.affectations.applyEdlKm(veh.id, data.sens, data.km, data.date);
+            if (FP.affectations.reanchorCurrent) FP.affectations.reanchorCurrent(veh.id);   // complète la DATE (km déjà verrouillé ci-dessus)
           }
         } catch (e) {}
         // ⚠️ L'état des lieux ne fait que LIRE / ENREGISTRER le km (inspection datée + ré-ancrage de la
