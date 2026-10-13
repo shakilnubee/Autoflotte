@@ -4932,29 +4932,42 @@ FP.haptic = (function () {
     const s = document.createElement('div');
     s.id = 'fp-splash';
     s.style.cssText = 'position:fixed;inset:0;z-index:2147483646;background:radial-gradient(120% 80% at 50% 18%,#15254a,#0B1424 70%);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1rem;transition:opacity .45s ease;overflow:hidden';
+    // ⚠️ VRAI LOGO Parc Pilot (demande utilisateur) : le MÊME mark que la sidebar — 3 traits orange
+    // (lignes de vitesse) + le mot « ParcPilot » (Parc en blanc, Pilot en orange), PAS un « P » générique.
+    // Animations ORANGE : les 3 traits se tracent l'un après l'autre (gauche→droite), le mot apparaît,
+    // puis halo orange qui pulse + barre de chargement orange.
     s.innerHTML =
       '<div class="fps-aura"></div>' +
-      '<div class="fps-logo-wrap"><div class="fps-logo">P<span class="fps-shine"></span></div></div>' +
-      '<div class="fps-name">Parc Pilot</div>' +
+      '<div class="fps-logo-wrap">' +
+        '<svg class="fps-logo-svg" viewBox="0 0 154 36" xmlns="http://www.w3.org/2000/svg" aria-label="Parc Pilot" style="overflow:visible">' +
+          '<line class="fps-ln fps-l1" x1="2" y1="10" x2="24" y2="10" stroke="#FB923C"/>' +
+          '<line class="fps-ln fps-l2" x1="0" y1="18" x2="28" y2="18" stroke="#F97316"/>' +
+          '<line class="fps-ln fps-l3" x1="6" y1="26" x2="22" y2="26" stroke="#FB923C"/>' +
+          '<text class="fps-word" x="34" y="26" font-size="20" font-weight="900" font-style="italic"><tspan fill="#fff">Parc</tspan><tspan fill="#F97316">Pilot</tspan></text>' +
+        '</svg>' +
+      '</div>' +
       '<div class="fps-sub">Pilotage de flotte</div>' +
       '<div class="fps-bar"><span></span></div>' +
       '<style>' +
-      '.fps-aura{position:absolute;inset:-25%;z-index:0;pointer-events:none;background:radial-gradient(38% 28% at 32% 34%,rgba(249,115,22,.26),transparent 60%),radial-gradient(44% 30% at 70% 62%,rgba(56,130,246,.20),transparent 60%);filter:blur(12px);animation:fps-drift 9s ease-in-out infinite alternate}' +
-      '@keyframes fps-drift{to{transform:translate(4%,3%) scale(1.12)}}' +
-      '.fps-logo-wrap{position:relative;z-index:1;animation:fps-float 3.4s ease-in-out .8s infinite}' +
-      '@keyframes fps-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}' +
-      '.fps-logo{position:relative;width:94px;height:94px;border-radius:24px;background:linear-gradient(145deg,#FB923C,#F97316);display:flex;align-items:center;justify-content:center;font:900 47px/1 system-ui,-apple-system,sans-serif;color:#fff;overflow:hidden;transform-origin:50% 62%;box-shadow:0 22px 54px -14px rgba(249,115,22,.7),inset 0 2px 0 rgba(255,255,255,.4);animation:fps-pop .78s cubic-bezier(.2,.9,.3,1.35) both,fps-glow 2.6s ease-in-out .95s infinite}' +
-      '@keyframes fps-pop{0%{opacity:0;transform:perspective(700px) rotateX(40deg) scale(.58) translateY(18px)}60%{opacity:1}100%{opacity:1;transform:perspective(700px) rotateX(0) scale(1) translateY(0)}}' +
-      '@keyframes fps-glow{0%,100%{box-shadow:0 22px 54px -14px rgba(249,115,22,.5),inset 0 2px 0 rgba(255,255,255,.4)}50%{box-shadow:0 26px 68px -10px rgba(249,115,22,.95),inset 0 2px 0 rgba(255,255,255,.45)}}' +
-      '.fps-shine{position:absolute;inset:0;background:linear-gradient(105deg,transparent 35%,rgba(255,255,255,.55) 50%,transparent 65%);transform:translateX(-130%);animation:fps-shine 3.6s ease-in-out 1.5s infinite}' +
-      '@keyframes fps-shine{0%,30%{transform:translateX(-130%)}60%,100%{transform:translateX(130%)}}' +
-      '.fps-name{position:relative;z-index:1;font:800 23px/1 "Inter",system-ui,-apple-system,sans-serif;color:#fff;letter-spacing:.01em;animation:fps-rise .6s ease .38s both}' +
-      '.fps-sub{position:relative;z-index:1;font:700 11px/1 "Inter",system-ui,sans-serif;letter-spacing:.2em;text-transform:uppercase;color:#7C93B4;animation:fps-rise .6s ease .52s both}' +
+      '.fps-aura{position:absolute;inset:-25%;z-index:0;pointer-events:none;background:radial-gradient(40% 30% at 42% 40%,rgba(249,115,22,.30),transparent 60%),radial-gradient(44% 30% at 66% 60%,rgba(251,146,60,.18),transparent 60%);filter:blur(14px);animation:fps-drift 9s ease-in-out infinite alternate}' +
+      '@keyframes fps-drift{to{transform:translate(4%,3%) scale(1.14)}}' +
+      '.fps-logo-wrap{position:relative;z-index:1;animation:fps-float 3.6s ease-in-out 1.1s infinite}' +
+      '@keyframes fps-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}' +
+      '.fps-logo-svg{width:min(70vw,250px);height:auto;filter:drop-shadow(0 6px 16px rgba(249,115,22,.35));animation:fps-glow 2.6s ease-in-out 1.2s infinite}' +
+      '@keyframes fps-glow{0%,100%{filter:drop-shadow(0 5px 14px rgba(249,115,22,.30))}50%{filter:drop-shadow(0 8px 30px rgba(249,115,22,.75))}}' +
+      // Les 3 traits orange se TRACENT de gauche à droite, l\'un après l\'autre.
+      '.fps-ln{stroke-width:3.2;stroke-linecap:round;transform-box:fill-box;transform-origin:left center;animation:fps-draw .55s cubic-bezier(.2,.9,.3,1.25) both}' +
+      '.fps-l1{animation-delay:.12s}.fps-l2{animation-delay:.28s}.fps-l3{animation-delay:.44s}' +
+      '@keyframes fps-draw{from{opacity:0;transform:scaleX(0)}to{opacity:1;transform:scaleX(1)}}' +
+      // Le mot « ParcPilot » apparaît après les traits.
+      '.fps-word{opacity:0;transform-box:fill-box;transform-origin:left center;animation:fps-wordin .55s ease .6s both}' +
+      '@keyframes fps-wordin{from{opacity:0;transform:translateX(7px)}to{opacity:1;transform:translateX(0)}}' +
+      '.fps-sub{position:relative;z-index:1;margin-top:.9rem;font:700 11px/1 "Inter",system-ui,sans-serif;letter-spacing:.2em;text-transform:uppercase;color:#7C93B4;animation:fps-rise .6s ease .8s both}' +
       '@keyframes fps-rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}' +
-      '.fps-bar{position:relative;z-index:1;width:148px;height:4px;border-radius:9999px;background:rgba(255,255,255,.1);overflow:hidden;margin-top:.5rem;animation:fps-rise .6s ease .66s both}' +
+      '.fps-bar{position:relative;z-index:1;width:148px;height:4px;border-radius:9999px;background:rgba(255,255,255,.1);overflow:hidden;margin-top:.9rem;animation:fps-rise .6s ease .92s both}' +
       '.fps-bar span{position:absolute;top:0;left:-40%;height:100%;width:40%;border-radius:9999px;background:linear-gradient(90deg,#FB923C,#F97316);animation:fps-load 1.25s cubic-bezier(.4,0,.2,1) infinite}' +
       '@keyframes fps-load{0%{left:-40%}100%{left:100%}}' +
-      '@media (prefers-reduced-motion:reduce){.fps-aura,.fps-logo-wrap,.fps-logo,.fps-shine,.fps-name,.fps-sub,.fps-bar,.fps-bar span{animation:none!important}.fps-logo{transform:none}.fps-name,.fps-sub,.fps-bar{opacity:1}}' +
+      '@media (prefers-reduced-motion:reduce){.fps-aura,.fps-logo-wrap,.fps-logo-svg,.fps-ln,.fps-word,.fps-sub,.fps-bar,.fps-bar span{animation:none!important}.fps-word{opacity:1}.fps-ln{opacity:1;transform:none}.fps-sub,.fps-bar{opacity:1}}' +
       '</style>';
     (document.body || document.documentElement).appendChild(s);
     const hide = () => { try { sessionStorage.setItem('fp_splash_done', '1'); } catch (e) {} s.style.opacity = '0'; setTimeout(() => s.remove(), 420); };
