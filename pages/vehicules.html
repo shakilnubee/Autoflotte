@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261013l">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261013m">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20261013l"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20261013m"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20261013l">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20261013m">
 <style>
   /* Petites additions locales pour cette page */
   /* .filter-chip : style centralisé (modèle Style C) dans assets/css/styles.css */
@@ -1181,8 +1181,8 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20261013l"></script>
-<script src="../assets/js/supabase-client.js?v=20261013l"></script>
+<script src="../assets/js/vendor/supabase.js?v=20261013m"></script>
+<script src="../assets/js/supabase-client.js?v=20261013m"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -1198,13 +1198,13 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261013l"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261013m"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
-<script src="../assets/js/fleet-docs.js?v=20261013l"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20261013l"></script>
+<script src="../assets/js/fleet-docs.js?v=20261013m"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20261013m"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20261013l"></script>
+<script src="../assets/js/app.min.js?v=20261013m"></script>
 <script>
   lucide.createIcons();
 
@@ -1470,7 +1470,14 @@
         const r = await FP.scanEdlKm(file);
         // On enregistre dès qu'on a le km OU la date (la date ré-ancre le début même si le km est 0/absent).
         // On privilégie la date LUE sur le document (r.date) à la date du nom de fichier (FP.edlHisto.dateDe).
-        if (r && (r.km != null || r.date) && createEdlInspection(vehId, { sens: r.sens || FP.edlHisto.sensDe(d), date: r.date || FP.edlHisto.dateDe(d), km: r.km })) ok++; else fail++;
+        const made = !!(r && (r.km != null || r.date) && createEdlInspection(vehId, { sens: r.sens || FP.edlHisto.sensDe(d), date: r.date || FP.edlHisto.dateDe(d), km: r.km }));
+        // 🔗 km LU (0 compris) → appliqué DIRECTEMENT à la période du conducteur (remise→km début,
+        // restitution→km fin), sans dépendre du ré-ancrage par DATE (fragile quand la date de l'EDL est
+        // partielle, ex. « 2023 »). On ne le fait que s'il y a UNE seule période (cas simple, non ambigu).
+        if (r && r.km != null && FP.affectations && FP.affectations.applyEdlKm) {
+          try { const al = (FP.affectations.all && FP.affectations.all()[vehId]) || []; if (al.length === 1) FP.affectations.applyEdlKm(vehId, r.sens || FP.edlHisto.sensDe(d), r.km, r.date || FP.edlHisto.dateDe(d)); } catch (e) {}
+        }
+        if (made || (r && r.km != null)) ok++; else fail++;
       } catch (e) { fail++; }
     }
     reanchorVehEdl(vehId);
@@ -1512,7 +1519,14 @@
         const isPdf = /pdf/i.test(blob.type || '') || /\.pdf($|\?)/i.test(d.url || '');
         const file = new File([blob], isPdf ? 'edl.pdf' : 'edl.jpg', { type: blob.type || (isPdf ? 'application/pdf' : 'image/jpeg') });
         const r = await FP.scanEdlKm(file);
-        if (r && (r.km != null || r.date) && createEdlInspection(v.id, { sens: r.sens || FP.edlHisto.sensDe(d), date: r.date || FP.edlHisto.dateDe(d), km: r.km })) { ok++; touched.add(v.id); } else fail++;
+        const made = !!(r && (r.km != null || r.date) && createEdlInspection(v.id, { sens: r.sens || FP.edlHisto.sensDe(d), date: r.date || FP.edlHisto.dateDe(d), km: r.km }));
+        // 🔗 km LU (0 compris) → appliqué DIRECTEMENT à la période (remise→km début, restitution→km fin),
+        // sans dépendre du ré-ancrage par DATE (fragile si la date de l'EDL est partielle). Seulement s'il
+        // y a UNE seule période (cas simple, non ambigu) — même logique que la lecture unitaire.
+        if (r && r.km != null && FP.affectations && FP.affectations.applyEdlKm) {
+          try { const al = (FP.affectations.all && FP.affectations.all()[v.id]) || []; if (al.length === 1) FP.affectations.applyEdlKm(v.id, r.sens || FP.edlHisto.sensDe(d), r.km, r.date || FP.edlHisto.dateDe(d)); } catch (e) {}
+        }
+        if (made || (r && r.km != null)) { ok++; touched.add(v.id); } else fail++;
       } catch (e) { fail++; }
     }
     touched.forEach(vid => reanchorVehEdl(vid));
