@@ -7968,8 +7968,11 @@ FP.affectations = {
     if (!list || !list[index]) return;
     if ('debut' in patch) list[index].debut = patch.debut || null;
     if ('fin' in patch) list[index].fin = patch.fin || null;
-    if ('kmDebut' in patch) list[index].kmDebut = this._km(patch.kmDebut);
-    if ('kmFin' in patch) list[index].kmFin = this._km(patch.kmFin);
+    // ⚠️ VALEUR SAISIE À LA MAIN = VERROUILLÉE : on pose un marqueur « manuel » pour qu'AUCUN ré-ancrage
+    // automatique (reanchorCurrent/reanchorEdlOnce, lecture EDL) ne vienne l'écraser ensuite. (Mettre le
+    // champ à vide rend la main à l'auto.) C'est la règle anti-perte : une donnée saisie reste telle quelle.
+    if ('kmDebut' in patch) { list[index].kmDebut = this._km(patch.kmDebut); list[index].kmDebutManuel = (list[index].kmDebut != null); }
+    if ('kmFin' in patch) { list[index].kmFin = this._km(patch.kmFin); list[index].kmFinManuel = (list[index].kmFin != null); }
     if ('conducteur' in patch && this._norm(patch.conducteur)) list[index].conducteur = this._norm(patch.conducteur);
     FP.settings.save(s);
   },
@@ -7989,7 +7992,8 @@ FP.affectations = {
     const s = FP.settings.get();
     s.affectations = (s.affectations && typeof s.affectations === 'object') ? s.affectations : {};
     const list = Array.isArray(s.affectations[vehId]) ? s.affectations[vehId] : [];
-    list.push({ conducteur: nom, debut: debut || null, fin: fin || null, kmDebut: this._km(kmDebut), kmFin: this._km(kmFin) });
+    // Saisie à la main → km verrouillés (marqueur « manuel » : jamais écrasés par un ré-ancrage auto).
+    list.push({ conducteur: nom, debut: debut || null, fin: fin || null, kmDebut: this._km(kmDebut), kmFin: this._km(kmFin), kmDebutManuel: this._km(kmDebut) != null, kmFinManuel: this._km(kmFin) != null });
     s.affectations[vehId] = list;
     FP.settings.save(s);
   },
@@ -8051,7 +8055,7 @@ FP.affectations = {
       const rem = this._remise(v.id, null);                        // remise la plus ancienne (prise en main)
       if (rem.km == null && !rem.date) { noEdl++; return; }         // pas d'état des lieux → on ne touche à rien
       let did = false;
-      if (rem.km != null && this._km(rem.km) !== cur.kmDebut) { cur.kmDebut = this._km(rem.km); changed++; did = true; }
+      if (rem.km != null && !cur.kmDebutManuel && this._km(rem.km) !== cur.kmDebut) { cur.kmDebut = this._km(rem.km); changed++; did = true; }   // jamais sur une valeur saisie à la main
       if (rem.date && rem.date !== cur.debut) { cur.debut = rem.date; changed++; did = true; }
       if (did) touchedVeh++;
     });
@@ -8088,7 +8092,7 @@ FP.affectations = {
       const s = FP.settings.get(); const al = (s.affectations || {})[vehId];
       if (!Array.isArray(al) || al.length !== 1 || al[0].fin) return false;   // 1 seule période ouverte
       const rem = this._remise(vehId, null); let did = false;
-      if (rem.km != null && al[0].kmDebut !== this._km(rem.km)) { al[0].kmDebut = this._km(rem.km); did = true; }
+      if (rem.km != null && !al[0].kmDebutManuel && al[0].kmDebut !== this._km(rem.km)) { al[0].kmDebut = this._km(rem.km); did = true; }   // jamais sur une valeur saisie à la main
       if (rem.date && al[0].debut !== rem.date) { al[0].debut = rem.date; did = true; }
       if (did) FP.settings.save(s);
       return did;
