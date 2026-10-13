@@ -128,6 +128,18 @@ for (const h of htmlFiles()) {
   });
 }
 
+// 6) GARDE-FOU ANTI-PERTE (NON bloquant, warning seulement) : vérifie que le correctif de FOND du moteur
+//    de fusion (« une suppression de clé synchronisée est vraiment appliquée », pas de husk {} qui
+//    ressuscite l'entrée) est toujours présent dans mergeMap. S'il disparaissait, toute la famille de bugs
+//    « ça revient » (RDV garage, immobilisation, anomalies…) pourrait réapparaître. ⚠️ Enveloppé dans un
+//    try/catch et poussé dans `warn` (jamais `errors`) → NE PEUT PAS bloquer un déploiement.
+try {
+  const appTxt = readFileSync(join(ROOT, 'assets/js/app.js'), 'utf8');
+  if (!/if \(ov === undefined\) \{ delete out\[k\]; return; \}/.test(appTxt)) {
+    warn.push('Anti-perte : le correctif de fusion « suppression réelle » semble ABSENT de mergeMap (app.js) → risque de retour des bugs « ça revient ». Détails : node scripts/audit-persist.mjs');
+  }
+} catch (e) { /* jamais bloquant */ }
+
 // -- rapport --
 if (warn.length) for (const w of warn) console.log(`⚠️  ${w}`);
 if (errors.length) {
