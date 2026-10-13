@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261013e">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261013f">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20261013e"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20261013f"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20261013e">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20261013f">
 <style>
   .kpi-link { cursor: pointer; transition: transform .12s, box-shadow .12s; }
   .kpi-link:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(15,23,42,.10); }
@@ -491,8 +491,8 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20261013e"></script>
-<script src="../assets/js/supabase-client.js?v=20261013e"></script>
+<script src="../assets/js/vendor/supabase.js?v=20261013f"></script>
+<script src="../assets/js/supabase-client.js?v=20261013f"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -508,11 +508,11 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261013e"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261013f"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20261013e"></script>
+<script src="../assets/js/app.min.js?v=20261013f"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -2511,6 +2511,13 @@
     const upper = text.toUpperCase();
     const out = {};
 
+    // ⚠️ « 0 POINT » EXPLICITE (LIRE, JAMAIS DEVINER) : si l'avis écrit noir sur blanc qu'il n'y a PAS de
+    // retrait de point (section « Effet(s) sur le permis »), c'est la VÉRITÉ du document → ça PRIME sur le
+    // barème légal (ex. un excès <5 km/h où l'avis indique explicitement 0). On n'attrape PAS la mention
+    // « le paiement par le conducteur permet le retrait des points » (qui dit QUI perd les points, pas
+    // qu'il n'y en a aucun) : on exige « n'entraîne pas / aucun … retrait … point ».
+    out.zeroPointExplicite = /n['’]?\s*entra[iî]ne\s+(?:pas|aucun)[^.\n]{0,45}retrait[^.\n]{0,20}point/i.test(text);
+
     // Plaque d'immatriculation — format SIV (AA-123-AA), sinon ancien FNI
     let m = upper.match(/\b([A-Z]{2})\s*[-\s]\s*([0-9]{3})\s*[-\s]\s*([A-Z]{2})\b/);
     if (m) out.immat = `${m[1]}-${m[2]}-${m[3]}`;
@@ -2588,9 +2595,10 @@
     ];
     for (const [rx, label] of motifMap) { if (rx.test(text)) { out.motif = label; break; } }
 
-    // Points retirés — déduits du type d'infraction (et de l'excès de vitesse si lisible)
-    const pts = pointsRetrait(out.motif, text);
-    if (pts != null) out.points = pts;
+    // Points retirés — déduits du type d'infraction (et de l'excès de vitesse si lisible).
+    // ⚠️ Si l'avis dit EXPLICITEMENT « n'entraîne pas de retrait de point » → 0 (prime sur le barème).
+    if (out.zeroPointExplicite) { out.points = 0; }
+    else { const pts = pointsRetrait(out.motif, text); if (pts != null) out.points = pts; }
 
     return out;
   }
@@ -2700,7 +2708,11 @@
           // (4) repli OCR (pointsRetrait, déjà posé dans parsed.points par parseAvis).
           {
             let pts = null;
-            if (ia.vitesseRetenue != null && ia.vitesseLimite != null) pts = pointsExcesVitesse(ia.vitesseRetenue, ia.vitesseLimite);
+            // ⚠️ PRIORITÉ ABSOLUE : l'avis dit EXPLICITEMENT « n'entraîne pas de retrait de point » → 0.
+            // Le document fait foi, AVANT le barème vitesse (bug vécu : un excès <5 km/h, avis à 0 point,
+            // devenait 1 à cause du barème retenue−limite). On LIT ce qui est écrit, on ne devine pas.
+            if (parsed.zeroPointExplicite) pts = 0;
+            if (pts == null && ia.vitesseRetenue != null && ia.vitesseLimite != null) pts = pointsExcesVitesse(ia.vitesseRetenue, ia.vitesseLimite);
             if (pts == null && ia.points != null) pts = ia.points;
             if (pts == null) { const pm = pointsParMotif(ia.motif || parsed.motif); if (pm != null) pts = pm; }
             if (pts != null) parsed.points = pts;   // sinon on garde le repli OCR déjà dans parsed.points
