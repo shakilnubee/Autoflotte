@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261013b">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261013c">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20261013b"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20261013c"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20261013b">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20261013c">
 <style>
   /* Petites additions locales pour cette page */
   /* .filter-chip : style centralisé (modèle Style C) dans assets/css/styles.css */
@@ -1180,8 +1180,8 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20261013b"></script>
-<script src="../assets/js/supabase-client.js?v=20261013b"></script>
+<script src="../assets/js/vendor/supabase.js?v=20261013c"></script>
+<script src="../assets/js/supabase-client.js?v=20261013c"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -1197,13 +1197,13 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261013b"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261013c"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
-<script src="../assets/js/fleet-docs.js?v=20261013b"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20261013b"></script>
+<script src="../assets/js/fleet-docs.js?v=20261013c"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20261013c"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20261013b"></script>
+<script src="../assets/js/app.min.js?v=20261013c"></script>
 <script>
   lucide.createIcons();
 
@@ -1421,7 +1421,7 @@
     const sv = String(o.sens || '').toLowerCase();
     const sensNorm = (sv.indexOf('resti') >= 0 || sv.indexOf('sort') >= 0) ? 'Sortie' : 'Entrée';
     const d = (o.date && /^\d{4}-\d{2}-\d{2}$/.test(String(o.date).slice(0, 10))) ? String(o.date).slice(0, 10) : new Date().toISOString().slice(0, 10);
-    const kmN = (o.km != null && Number.isFinite(+o.km) && +o.km > 0) ? Math.round(+o.km) : null;
+    const kmN = (o.km != null && Number.isFinite(+o.km) && +o.km >= 0) ? Math.round(+o.km) : null;   // 0 km = valeur VALIDE (certains EDL sont à 0) — on ne la jette plus
     // ⚠️ km FACULTATIF : on enregistre l'inspection même SANS km (ex. état des lieux où le km saisi est 0
     // ou vide) — c'est la DATE qui ré-ancre le début d'affectation. Le km sera complété plus tard (facture
     // d'achat / saisie manuelle). On refuse seulement s'il n'y a NI km NI date exploitable.
@@ -3073,12 +3073,13 @@
       if (window.FP && FP.scanEdlKm && FP.edlHisto) {
         const _soc = (FP.activeSociete ? (FP.activeSociete() || '') : '') || 'PXP';
         const _flag = 'fp_edlkm_auto_' + _soc + '_' + id;
-        // ⚠️ On ne bloque PLUS définitivement après un seul essai : une lecture IA qui échoue (hors-ligne,
-        // PDF momentanément illisible) ne doit pas condamner la correction pour toujours. On RÉESSAIE jusqu'à
-        // 3 ouvertures de fiche TANT QU'il reste des états des lieux importés SANS km. Au-delà, on s'arrête
-        // (l'utilisateur garde le bouton « 🤖 Lire le km » pour relancer à la main).
+        // ⚠️ CRÉDITS DE SCAN (demande utilisateur) : on NE relit PLUS le PDF à chaque ouverture de fiche
+        // (ça consommait des crédits pour rien et pouvait faire « bouger » une valeur déjà captée). On tente
+        // la lecture auto UNE SEULE FOIS par véhicule ; ensuite la valeur captée RESTE, et l'utilisateur
+        // garde le bouton « 🤖 Lire le km » pour relancer manuellement si besoin. Une valeur déjà stockée
+        // (inspection présente) n'est de toute façon jamais re-scannée (filtre _todo ci-dessous).
         let _att = 0; try { _att = parseInt(localStorage.getItem(_flag) || '0', 10) || 0; } catch (e) {}
-        if (_att < 3) {
+        if (_att < 1) {
           const _docs = FP.edlHisto.docsDe(getVehDocs(id), id);
           const _inspL = (FP.settings.get().inspections || {})[id] || [];
           const _hasInsp = (dt, sn) => _inspL.some(x => x && x.date === dt && x.sens === sn);
