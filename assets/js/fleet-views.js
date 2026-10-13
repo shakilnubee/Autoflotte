@@ -1198,7 +1198,7 @@
       if (ok) { const key = ok.getAttribute('data-anom-ok'); const a = _tfAnomByKey[key]; if (a) { const m = tfAnomOk(); m[key] = { key, t: a.t, txt: a.txt, mois: a.mois || '', facnum: a.facnum || '', okAt: Date.now() }; tfAnomSaveOk(m); renderAnomList(); if (FP.toast) FP.toast('✓ Archivé'); } return; }
       // ↩ rouge : désarchiver (remettre à vérifier)
       const unok = e.target.closest('[data-anom-unok]');
-      if (unok) { const key = unok.getAttribute('data-anom-unok'); const m = tfAnomOk(); delete m[key]; tfAnomSaveOk(m); renderAnomList(); if (FP.toast) FP.toast('Remis à vérifier'); return; }
+      if (unok) { const key = unok.getAttribute('data-anom-unok'); const m = tfAnomOk(); m[key] = { unok: true }; tfAnomSaveOk(m); renderAnomList(); if (FP.toast) FP.toast('Remis à vérifier'); return; }
       // Toggle « Voir tout / Voir moins »
       const more = e.target.closest('#tf-anom-more');
       if (more) {
