@@ -5876,8 +5876,16 @@ FP.settings = {
       const ks = new Set([...(isPlain(objV) ? Object.keys(objV) : []), ...(isPlain(baseV) ? Object.keys(baseV) : [])]);
       ks.forEach(k => {
         const ov = isPlain(objV) ? objV[k] : undefined, bv = isPlain(baseV) ? baseV[k] : undefined, rv = out[k];
-        if (isPlain(ov) || isPlain(bv) || isPlain(rv)) { out[k] = mergeMap(rv, ov, bv); }         // sous-objet → récursion
-        else if (JSON.stringify(ov) !== JSON.stringify(bv)) { if (ov === undefined) delete out[k]; else out[k] = ov; }
+        // ⚠️⚠️ CORRECTIF DE FOND (cause commune de « ça revient ») : une clé qui était dans la base chargée
+        // mais que CE poste a RETIRÉE (ov === undefined) est VRAIMENT supprimée — même si sa valeur est un
+        // OBJET. Avant, on partait en récursion et on laissait un « husk » {} (truthy) qui ressuscitait
+        // l'entrée au rechargement (RDV garage, immobilisation, anomalie « remise à vérifier »…). ⚠️ Les
+        // clés présentes SEULEMENT côté serveur (ajoutées par un AUTRE appareil) ne sont PAS dans `ks`
+        // (= clés de objV ∪ baseV) → elles restent dans `out` (parti de {...remoteV}) et ne sont JAMAIS
+        // supprimées → l'anti-perte multi-appareils est préservé.
+        if (ov === undefined) { delete out[k]; return; }
+        if (isPlain(ov) || isPlain(bv) || isPlain(rv)) { out[k] = mergeMap(rv, ov, bv); return; }  // sous-objet → fusion fine
+        if (JSON.stringify(ov) !== JSON.stringify(bv)) out[k] = ov;                                // scalaire modifié
       });
       return out;
     };
