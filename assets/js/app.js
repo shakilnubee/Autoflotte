@@ -17406,8 +17406,25 @@ FP.rdvGarage = {
   get(vehId) { const r = this._map()[vehId]; return (r && typeof r === 'object' && r.date) ? r : null; },
   set(vehId, date, motif) {
     const s = FP.settings.get(); s.vehRdvGarage = (s.vehRdvGarage && typeof s.vehRdvGarage === 'object') ? s.vehRdvGarage : {};
-    if (!date) delete s.vehRdvGarage[vehId]; else s.vehRdvGarage[vehId] = { date: String(date).slice(0, 10), motif: String(motif || '').slice(0, 40) };
+    // ⚠️ Un nouveau RDV (date) = un rendez-vous À VENIR → on repart « non fait ». Pas de date = on retire.
+    if (!date) delete s.vehRdvGarage[vehId]; else s.vehRdvGarage[vehId] = { date: String(date).slice(0, 10), motif: String(motif || '').slice(0, 40), fait: false };
     FP.settings.save(s);
+  },
+  // « C'est fait » : on MARQUE le RDV comme fait au lieu de le SUPPRIMER. ⚠️ Une suppression de clé ne se
+  // propage pas de façon fiable (la fusion anti-perte PRÉSERVE les clés absentes → le RDV « revenait » au
+  // rechargement). Un CHANGEMENT de valeur (fait:true), lui, se synchronise correctement via mergeMap. Du
+  // coup : plus de retard, plus de tâche « à faire », et ça ne revient plus. Garde une trace (faitLe).
+  done(vehId) {
+    const s = FP.settings.get(); const m = (s.vehRdvGarage && typeof s.vehRdvGarage === 'object') ? s.vehRdvGarage : {};
+    const r = m[vehId]; if (!r || !r.date) return;
+    m[vehId] = { date: r.date, motif: r.motif || '', fait: true, faitLe: new Date().toISOString().slice(0, 10) };
+    s.vehRdvGarage = m; FP.settings.save(s);
+  },
+  // Ré-ouvrir un RDV marqué fait par erreur (le remet « à faire »).
+  rouvrir(vehId) {
+    const s = FP.settings.get(); const m = (s.vehRdvGarage && typeof s.vehRdvGarage === 'object') ? s.vehRdvGarage : {};
+    const r = m[vehId]; if (!r || !r.date) return;
+    m[vehId] = { date: r.date, motif: r.motif || '', fait: false }; s.vehRdvGarage = m; FP.settings.save(s);
   }
 };
 
@@ -17432,7 +17449,7 @@ FP.relances = {
   //    juste passé) n'a PLUS besoin d'être relancé : le rappel AUTOMATIQUE la veille s'en charge. Le
   //    relancer serait illogique (« la date est déjà prise »). On l'exclut donc des relances CT/révision.
   _rdvPris(v) {
-    try { const r = (FP.rdvGarage ? FP.rdvGarage._map() : {})[v && v.id]; if (!r || !r.date) return false; const j = this._jours(r.date); return j != null && j >= -1; } catch (e) { return false; }
+    try { const r = (FP.rdvGarage ? FP.rdvGarage._map() : {})[v && v.id]; if (!r || !r.date) return false; if (r.fait) return true; const j = this._jours(r.date); return j != null && j >= -1; } catch (e) { return false; }
   },
   entretiens() {
     const win = this._win(); const out = [];
@@ -17455,7 +17472,7 @@ FP.relances = {
     const map = (FP.rdvGarage ? FP.rdvGarage._map() : {});
     (data.vehicules || []).forEach(v => {
       if (FP.horsFlotte && FP.horsFlotte(v)) return;
-      const r = map[v.id]; if (!r || !r.date) return;
+      const r = map[v.id]; if (!r || !r.date || r.fait) return;   // RDV fait → plus rien à relancer
       const j = this._jours(r.date); if (j == null || j > win) return;
       const it = this._vehItem(v, 'garage', r.date, j); it.motif = r.motif || ''; out.push(it);
     });
