@@ -11869,6 +11869,10 @@ FP._parseDateLue = (raw) => {
   return null;
 };
 FP.scanEdlKm = async function (file) {
+  // ⚠️ POUR L'EDL, 0 km est une VALEUR VALIDE (certains états des lieux sont à 0 — ex. prise en main d'un
+  // véhicule neuf). On n'utilise donc PAS FP._parseKm (qui rejette 0, exprès, pour les factures d'achat) :
+  // ici on accepte 0. Un champ VIDE reste null.
+  const _km0 = (raw) => { const s = String(raw == null ? '' : raw).replace(/[^\d.]/g, ''); if (s === '') return null; const n = Math.round(Number(s)); return (Number.isFinite(n) && n >= 0) ? n : null; };
   const isPdf = (file && (file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '')));
   // 1) PDF À CHAMPS (AcroForm) : on LIT directement les valeurs saisies (km, date) — déterministe, fiable,
   //    là où l'IA « voit » souvent un formulaire vide (champs non rendus). On s'ancre sur le LIBELLÉ.
@@ -11877,7 +11881,7 @@ FP.scanEdlKm = async function (file) {
       const pairs = (FP.ocr && FP.ocr.pdfFormPairs) ? await FP.ocr.pdfFormPairs(file) : [];
       if (pairs && pairs.length) {
         const findVal = (re) => { const p = pairs.find(x => re.test(x.label || '')); return p ? p.value : ''; };
-        const km = FP._parseKm(findVal(/kilom|compteur|\bkm\b/i));
+        const km = _km0(findVal(/kilom|compteur|\bkm\b/i));
         const date = FP._parseDateLue(findVal(/date\s+de\s+(remise|restitution)/i) || findVal(/date/i));
         const labelsJoined = pairs.map(x => x.label || '').join(' ').toLowerCase();
         const sens = /restitution|retour|sortie/.test(labelsJoined) ? 'restitution' : 'remise';
@@ -11890,7 +11894,7 @@ FP.scanEdlKm = async function (file) {
   try {
     const f = await FP.scanIA(file, 'etat-des-lieux', FP.EDL_KM_PROMPT, { maxTokens: 600 });
     if (!f) return null;
-    const km = FP._parseKm(f.km);
+    const km = _km0(f.km);
     const date = FP._parseDateLue(f.date);
     const sv = String(f.sens || '').toLowerCase();
     const sens = (sv.indexOf('resti') >= 0 || sv.indexOf('sort') >= 0) ? 'restitution' : (f.sens ? 'remise' : null);
