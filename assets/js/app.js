@@ -4540,9 +4540,12 @@ FP.assuranceApplyScan = (fields, veh) => {
       for (const key in s.assureurVeh) { if (FP.normImmat(key) === k) delete s.assureurVeh[key]; }
       s.assureurVeh[immat] = a.id;
       const deb = String(fields.dateDebut || '').trim(), fin = String(fields.dateFin || '').trim();
-      if (deb || fin) {
+      if (deb || fin || police) {
         s.assuranceEcheance = (s.assuranceEcheance && typeof s.assuranceEcheance === 'object') ? s.assuranceEcheance : {};
-        s.assuranceEcheance[immat] = { debut: deb || '', fin: fin || '', police: police || '' };
+        // Fusion NON DESTRUCTIVE (anti-perte) : on ne REMPLACE une date/police que si la lecture en a une ;
+        // sinon on CONSERVE la valeur déjà saisie (un scan partiel n'efface plus une échéance renseignée).
+        const prev = s.assuranceEcheance[immat] || {};
+        s.assuranceEcheance[immat] = { debut: deb || prev.debut || '', fin: fin || prev.fin || '', police: police || prev.police || '' };
       }
     }
     FP.settings.save(s);
@@ -5821,6 +5824,9 @@ FP.settings = {
       // — Saisies manuelles / historique PAR VÉHICULE : masse (champ G → stationnement Paris + checklist),
       //   notes libres (historique, irrécupérable), restitution/EDL, dates entrée/cession, budget par véh.
       'vehMasse', 'vehNotes', 'vehRestit', 'vehEntree', 'vehCession', 'budgets', 'vehDin',
+      // — « lecture auto du km EDL déjà tentée » (par véhicule) : évite de re-scanner un EDL illisible
+      //   sur chaque appareil (sinon gaspillage de crédits). Map keyée par vehId → doit être synchronisée.
+      'edlAutoTried',
       // — Budget prévisionnel & objectifs (données financières keyées année/catégorie) :
       'budget', 'objectifs',
       // — Points de permis SAISIS À LA MAIN par conducteur (donnée perso non reconstituable) :
