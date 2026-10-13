@@ -428,15 +428,19 @@ FP.horsFlotte = (v) => ['vendu', 'vendue', 'cédé', 'cede', 'cédée', 'cedee',
 // pour marquer / lever une immobilisation — ne jamais réécrire vehImmobilise à la main ailleurs.
 FP.immobilise = {
   map() { try { const s = FP.settings.get(); return (s.vehImmobilise && typeof s.vehImmobilise === 'object') ? s.vehImmobilise : {}; } catch (e) { return {}; } },
-  is(id) { return !!this.map()[id]; },
-  since(id) { const im = this.map()[id]; return im && im.since ? im.since : null; },
+  // ⚠️ « Immobilisé » = entrée AVEC une date `since` ET SANS `leveLe`. On ne SUPPRIME plus l'entrée pour
+  // lever (une suppression de clé ne se propage pas de façon fiable — la fusion anti-perte la fait
+  // « revenir ») : on pose un marqueur `leveLe` (tombstone). Un CHANGEMENT de valeur, lui, se synchronise.
+  is(id) { const im = this.map()[id]; return !!(im && im.since && !im.leveLe); },
+  since(id) { const im = this.map()[id]; return (im && im.since && !im.leveLe) ? im.since : null; },
   jours(id) { const d = this.since(id); if (!d) return 0; const t0 = new Date(); t0.setHours(0, 0, 0, 0); return Math.max(0, Math.floor((t0 - new Date(d)) / 86400000)); },
   // on=true → marque immobilisé (depuis aujourd'hui) ; on=false → lève l'immobilisation. Persisté (Supabase).
   set(id, on) {
     try {
       const s = FP.settings.get(); s.vehImmobilise = (s.vehImmobilise && typeof s.vehImmobilise === 'object') ? s.vehImmobilise : {};
-      if (on) { if (!s.vehImmobilise[id]) s.vehImmobilise[id] = { since: new Date().toISOString().slice(0, 10) }; }
-      else { delete s.vehImmobilise[id]; }
+      const cur = s.vehImmobilise[id];
+      if (on) { if (!cur || !cur.since || cur.leveLe) s.vehImmobilise[id] = { since: new Date().toISOString().slice(0, 10) }; }   // (ré)immobilise : nouvelle date, sans leveLe
+      else { if (cur && cur.since) s.vehImmobilise[id] = { since: cur.since, leveLe: new Date().toISOString().slice(0, 10) }; else delete s.vehImmobilise[id]; }   // lève = marqueur (ne revient plus)
       return FP.settings.save(s);
     } catch (e) { return Promise.resolve(); }
   },
@@ -7206,7 +7210,11 @@ FP.tfAnomArchivee = function (a, ok) {
   if (!a) return false; ok = ok || {};
   // Reconnaît l'ANCIENNE clé (a.key, forme brute) ET la clé ROBUSTE (a.keyN, nom normalisé) →
   // ce qui a déjà été classé ne réapparaît pas, y compris après un réimport qui réécrit le nom.
-  return !!(ok[a.key] || (a.keyN && ok[a.keyN]) || ok[a.t + '|' + (a.facnum || '') + '|' + a.txt]);
+  // ⚠️ Un marqueur { unok:true } = « remis à vérifier » (on ne SUPPRIME plus l'entrée pour désarchiver —
+  // une suppression ne se propage pas de façon fiable et « revenait »). Une telle entrée NE compte PAS
+  // comme archivée. Une entrée « archivée » normale (objet sans unok) compte, comme avant.
+  const pick = ok[a.key] || (a.keyN && ok[a.keyN]) || ok[a.t + '|' + (a.facnum || '') + '|' + a.txt];
+  return !!(pick && !pick.unok);
 };
 // Anomalies NON archivées (exclut celles cochées « vérifié » dans les réglages tfAnomOk).
 FP.totalFleetAnomaliesActives = function (tx) {
@@ -9330,7 +9338,7 @@ FP.buildAlertes = (data) => {
     const items = [];
     (data.vehicules || []).forEach(v => {
       if (FP.horsFlotte(v)) return;
-      const im = immo[v.id]; if (!im || !im.since) return;
+      const im = immo[v.id]; if (!im || !im.since || im.leveLe) return;   // leveLe = immobilisation levée (tombstone)
       const j = Math.floor((t0 - new Date(im.since)) / 86400000);
       // immoId → la page Alertes affiche un bouton « Lever l'immobilisation » directement sur la ligne.
       if (j >= seuilJ) items.push({ label: `${v.immat} · ${v.marque} ${v.modele} — immobilisé depuis ${j} j`, target: `vehicules.html?immat=${encodeURIComponent(v.immat || '')}`, immoId: v.id });
