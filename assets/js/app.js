@@ -6928,13 +6928,17 @@ FP.setNavBadge = function (navFile, count, title) {
       if (!b) {
         b = document.createElement('span');
         b.className = 'fp-decl-badge';
-        b.style.cssText = 'background:#EF4444;color:#fff;font-size:.66rem;font-weight:800;min-width:1.1rem;height:1.1rem;line-height:1.1rem;text-align:center;padding:0 .32rem;border-radius:999px;margin-left:auto;box-shadow:0 1px 3px rgba(239,68,68,.5)';
+        // ⚠️ POINT ROUGE SANS CHIFFRE (demande utilisateur) : un nombre dans la pastille paraissait
+        // « faux » (il compte les nouveautés à traiter — demandes conducteur, signatures, scans QR… —
+        // pas les colonnes d'alertes affichées, d'où le décalage visuel) et pouvait sembler périmé. Un
+        // simple point « il y a du nouveau » ne peut jamais être un chiffre erroné. (La barre du bas
+        // mobile utilise déjà un point identique → cohérent.)
+        b.style.cssText = 'width:9px;height:9px;border-radius:50%;background:#EF4444;margin-left:auto;box-shadow:0 0 0 2px rgba(239,68,68,.25)';
         // Placé AVANT le chevron du sous-menu (sinon il se retrouve après la flèche → mal aligné).
         const chev = a.querySelector('.fp-nav-chev');
         if (chev) a.insertBefore(b, chev); else a.appendChild(b);
       }
-      b.title = title || (count + ' à traiter');
-      b.textContent = count > 99 ? '99+' : count;
+      b.title = 'Nouveautés à traiter';   // générique : jamais de chiffre (évite tout nombre « faux »)
     });
     // 📱 MOBILE : petite pastille rouge sur l'onglet correspondant de la barre du bas (fp-tabbar) →
     // « comme ça je vois que j'en ai » (demande utilisateur). Même source que le badge sidebar.
