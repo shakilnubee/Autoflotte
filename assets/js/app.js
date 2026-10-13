@@ -5179,11 +5179,11 @@ FP.push = {
       } else if (state === 'subscribed') {
         btn.textContent = '🔔 Activées — désactiver'; btn.disabled = false;
         btn.style.cssText = 'cursor:pointer;padding:10px 16px;border-radius:10px;border:1px solid #86EFAC;background:#DCFCE7;color:#166534;font-weight:700';
-        info.textContent = "Cet appareil reçoit les alertes conducteur (relevé km, sinistre, question, état des lieux).";
+        info.textContent = "Cet appareil reçoit les alertes conducteur (relevé km, sinistre, question, état des lieux) ET les rappels de tâches (résumé du jour + rappel quelques heures avant un rendez-vous).";
       } else {
         btn.textContent = '🔔 Activer sur cet appareil'; btn.disabled = false;
         btn.style.cssText = 'cursor:pointer;padding:10px 16px;border-radius:10px;border:1px solid #3B82F6;background:#EFF6FF;color:#1D4ED8;font-weight:700';
-        info.textContent = "Reçois une notification (même appli fermée) quand un conducteur t'envoie quelque chose.";
+        info.textContent = "Reçois une notification (même appli fermée) quand un conducteur t'envoie quelque chose — et les rappels de tes tâches (résumé du jour + quelques heures avant un rendez-vous).";
       }
     };
     paint(st);
@@ -7134,6 +7134,10 @@ FP.notifCfg = () => {
     carteExpJours: num(n.carteExpJours, 30),             // carte carburant / badge télépéage : alerte X j avant expiration
     sinistreRelanceJours: num(n.sinistreRelanceJours, 21), // sinistre sans réponse de l'assureur : relancer après X jours
     empruntRetardJours: num(n.empruntRetardJours, 2),    // emprunt non rendu : considéré « en retard » au-delà de X jours
+    // Rappel PUSH des tâches : combien d'heures AVANT un rendez-vous (à heure fixe) prévenir sur le
+    // téléphone (défaut 3 h ; 0 = pas de rappel anticipé). Le résumé du jour part, lui, le matin.
+    // (0 autorisé → on n'utilise pas `num` qui traiterait 0 comme « non renseigné ».)
+    tacheRappelHeures: (Number.isFinite(Number(n.tacheRappelHeures)) && Number(n.tacheRappelHeures) >= 0) ? Number(n.tacheRappelHeures) : 3,
   };
 };
 
@@ -8077,8 +8081,12 @@ FP.affectations = {
       const rem = this._remise(v.id, null);                        // remise la plus ancienne (prise en main)
       if (rem.km == null && !rem.date) { noEdl++; return; }         // pas d'état des lieux → on ne touche à rien
       let did = false;
-      if (rem.km != null && !cur.kmDebutManuel && this._km(rem.km) !== cur.kmDebut) { cur.kmDebut = this._km(rem.km); changed++; did = true; }   // jamais sur une valeur saisie à la main
-      if (rem.date && rem.date !== cur.debut) { cur.debut = rem.date; changed++; did = true; }
+      // ⚠️ FILL-ONLY STRICT (correctif « données qui partent et reviennent ») : on NE REMPLIT QUE LE VIDE.
+      // Jamais d'écrasement d'un km OU d'une date DÉJÀ présents — même issus d'un ancien ré-ancrage. Avant,
+      // la DATE était réécrite sans condition → un EDL d'une autre période (ex. 2019) faisait « basculer »
+      // la date de début (et donc les km parcourus) à chaque chargement = oscillation visible à l'écran.
+      if (rem.km != null && cur.kmDebut == null) { cur.kmDebut = this._km(rem.km); changed++; did = true; }
+      if (rem.date && !cur.debut) { cur.debut = rem.date; changed++; did = true; }
       if (did) touchedVeh++;
     });
     s._edlReanchorV1 = true;                                        // drapeau persistant → une seule fois
@@ -8114,8 +8122,10 @@ FP.affectations = {
       const s = FP.settings.get(); const al = (s.affectations || {})[vehId];
       if (!Array.isArray(al) || al.length !== 1 || al[0].fin) return false;   // 1 seule période ouverte
       const rem = this._remise(vehId, null); let did = false;
-      if (rem.km != null && !al[0].kmDebutManuel && al[0].kmDebut !== this._km(rem.km)) { al[0].kmDebut = this._km(rem.km); did = true; }   // jamais sur une valeur saisie à la main
-      if (rem.date && al[0].debut !== rem.date) { al[0].debut = rem.date; did = true; }
+      // ⚠️ FILL-ONLY STRICT (même correctif) : on complète UNIQUEMENT un km/une date ABSENTS. On ne
+      // réécrit JAMAIS un km ou une date déjà posés → plus d'oscillation « 42 000 / 2026 » ↔ « 0 / 2019 ».
+      if (rem.km != null && al[0].kmDebut == null) { al[0].kmDebut = this._km(rem.km); did = true; }
+      if (rem.date && !al[0].debut) { al[0].debut = rem.date; did = true; }
       if (did) FP.settings.save(s);
       return did;
     } catch (e) { return false; }
@@ -8138,9 +8148,13 @@ FP.affectations = {
       const sv = String(sens || '').toLowerCase();
       const isSortie = sv.indexOf('resti') >= 0 || sv.indexOf('sort') >= 0;
       let did = false;
+      // ⚠️ FILL-ONLY STRICT : le lien EDL → période ne REMPLIT QUE LE VIDE (km de début/fin absent). Il ne
+      // REMPLACE JAMAIS un km déjà présent (saisi à la main OU posé par un précédent EDL) — sinon un scan
+      // d'un EDL d'une autre période (ex. 0 km) écrasait la vraie valeur et faisait « revenir » les données.
+      // Une correction d'un km déjà posé se fait en cliquant sur le km de la période (saisie manuelle).
       if (k != null) {
-        if (isSortie) { if (list[idx].kmFin !== k) { list[idx].kmFin = k; did = true; } list[idx].kmFinManuel = true; }
-        else { if (list[idx].kmDebut !== k) { list[idx].kmDebut = k; did = true; } list[idx].kmDebutManuel = true; }
+        if (isSortie) { if (list[idx].kmFin == null) { list[idx].kmFin = k; list[idx].kmFinManuel = true; did = true; } }
+        else { if (list[idx].kmDebut == null) { list[idx].kmDebut = k; list[idx].kmDebutManuel = true; did = true; } }
       }
       const d = (date && /^\d{4}-\d{2}-\d{2}$/.test(String(date).slice(0, 10))) ? String(date).slice(0, 10) : null;
       if (!isSortie && d && !list[idx].debut) { list[idx].debut = d; did = true; }   // date de début si manquante
