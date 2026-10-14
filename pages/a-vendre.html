@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261013s">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261013t">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20261013s"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20261013t"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20261013s">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20261013t">
 <style>
   .pipeline { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; }
   .pipeline-col { background: #F8FAFC; border-radius: .85rem; padding: 1rem; min-height: 200px; }
@@ -172,8 +172,8 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20261013s"></script>
-<script src="../assets/js/supabase-client.js?v=20261013s"></script>
+<script src="../assets/js/vendor/supabase.js?v=20261013t"></script>
+<script src="../assets/js/supabase-client.js?v=20261013t"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -189,10 +189,10 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261013s"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261013t"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
-<script src="../assets/js/app.min.js?v=20261013s"></script>
+<script src="../assets/js/app.min.js?v=20261013t"></script>
 <script>
   lucide.createIcons();
   FP.loadVehicleOverrides();
@@ -223,6 +223,13 @@
   function pipelineOf(v) {
     if (estVendu(v)) return 'vendu';
     return v.pipelineStatut || 'a-publier';
+  }
+
+  let _offresVente = [];   // demandes d'achat reçues (remplies) — alimenté par loadOffresVente()
+  // Demandes d'achat (formulaire rempli) pour un véhicule : match par id OU plaque (tolérant tirets/casse).
+  function demandesPour(v) {
+    if (!v || !_offresVente.length) return [];
+    return _offresVente.filter(s => String(s.vehiculeId || '') === String(v.id) || (s.plaque && FP.immatEq && FP.immatEq(s.plaque, v.immat)));
   }
 
   function renderKPIs() {
@@ -268,6 +275,7 @@
               <select class="status-select" data-field="pipelineStatut" data-id="${v.id}">
                 ${PIPELINE.map(p => `<option value="${p.key}" ${pipelineOf(v) === p.key ? 'selected' : ''}>${p.label}</option>`).join('')}
               </select>
+              ${(() => { const dem = demandesPour(v); if (!dem.length) return ''; const nouv = dem.filter(s => s.statut === 'recu').length; const focus = dem.find(s => s.statut === 'recu') || dem[0]; return `<a href="contrats.html?ctab=archive&offre=${encodeURIComponent(focus.id)}" onclick="event.stopPropagation()" title="Voir la/les demande(s) d'achat reçue(s) pour ce véhicule" style="display:block;margin:8px 0 2px;padding:6px 10px;border-radius:8px;background:#FFF7ED;border:1px solid #FED7AA;color:#9A3412;font-size:12px;font-weight:700;text-decoration:none">📥 ${dem.length} demande${dem.length > 1 ? 's' : ''} reçue${dem.length > 1 ? 's' : ''}${nouv ? ` · <b>${nouv} nouvelle${nouv > 1 ? 's' : ''}</b>` : ''}</a>`; })()}
               <div class="av-actions">
                 <button type="button" class="av-btn primary" data-buyer="${FP.esc(v.id)}" title="Envoyer le formulaire acheteur par SMS, WhatsApp ou e-mail">📨 Formulaire acheteur</button>
                 <button type="button" class="av-btn" data-folder="${FP.esc(v.id)}" title="Ouvrir le dossier de vente du véhicule (Cerfa de cession, facture…) — rangé façon Drive, comme les documents de la fiche">📁 Dossier de vente</button>
@@ -404,6 +412,22 @@
   renderKPIs();
   renderPipeline();
   document.addEventListener('fp:data-ready', () => { renderKPIs(); renderPipeline(); });
+
+  // Demandes d'achat reçues (formulaire acheteur rempli) → accès DIRECT depuis la carte du véhicule.
+  // On charge les soumissions (table offres_achat) et on re-rend : chaque carte dont un véhicule a reçu
+  // au moins une demande affiche un bouton « 📥 N demande(s) reçue(s) » qui ouvre la demande dans Archive.
+  async function loadOffresVente() {
+    try {
+      if (!(window.FP && FP.offreAchat && FP.offreAchat.load)) return;
+      await FP.offreAchat.load();
+      _offresVente = (FP.offreAchat._submissions || []).filter(s => s && s.statut && s.statut !== 'lien');
+      renderPipeline();
+    } catch (e) {}
+  }
+  loadOffresVente();
+  // Au retour sur la page (ex. après avoir classé/supprimé une demande dans Contrats) → on rafraîchit.
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') loadOffresVente(); });
+  window.addEventListener('pageshow', (e) => { if (e && e.persisted) loadOffresVente(); });
 
   // ---------- Export CSV ----------
   FP.injectDataIO({
