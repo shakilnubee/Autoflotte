@@ -13105,7 +13105,11 @@ FP.edl = {
             const renderMail = (s) => {
               // Le lien porte le jeton PROPRE au signataire (sigToken) → le serveur sait qui signe sans se
               // fier au paramètre `who` (falsifiable). `who` reste dans l'URL pour l'affichage/compat.
-              const link = base + '?t=' + encodeURIComponent(s.sigToken || token) + '&who=' + s.role;
+              // ⚠️ LANGUE : on ajoute &lang=<langue du signataire> → la page signer.html s'ouvre DIRECTEMENT
+              // dans la bonne langue (profil du conducteur réglé sur sa fiche). L'employé obtient sa langue
+              // réelle (6 langues gérées par signer.html : fr/en/es/it/de/zh) ; le signataire société = FR.
+              const _plang = (s.role === 'societe') ? 'fr' : ((FP.condLangueRaw ? FP.condLangueRaw(s.nom) : 'fr') || 'fr');
+              const link = base + '?t=' + encodeURIComponent(s.sigToken || token) + '&who=' + s.role + '&lang=' + _plang;
               const prenomS = String(s.nom || '').trim().split(/\s+/)[0] || '';
               // Conducteur en anglais → modèle EN éditable + libellés EN (le signataire société reste FR).
               const _sen = (s.role !== 'societe') && !!(FP.condLangue && FP.condLangue(s.nom) === 'en');
