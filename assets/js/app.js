@@ -7992,7 +7992,9 @@ FP.affectations = {
     const s = FP.settings.get();
     const list = (s.affectations && Array.isArray(s.affectations[vehId])) ? s.affectations[vehId] : null;
     if (!list || !list[index]) return;
-    if ('debut' in patch) list[index].debut = patch.debut || null;
+    // Date de début SAISIE À LA MAIN = verrouillée (marqueur « manuel ») → jamais écrasée par le raccord
+    // auto de la date d'un état des lieux (vider le champ rend la main à l'auto). Même règle que le km.
+    if ('debut' in patch) { list[index].debut = patch.debut || null; list[index].debutManuel = !!patch.debut; }
     if ('fin' in patch) list[index].fin = patch.fin || null;
     // ⚠️ VALEUR SAISIE À LA MAIN = VERROUILLÉE : on pose un marqueur « manuel » pour qu'AUCUN ré-ancrage
     // automatique (reanchorCurrent/reanchorEdlOnce, lecture EDL) ne vienne l'écraser ensuite. (Mettre le
@@ -8012,14 +8014,17 @@ FP.affectations = {
     FP.settings.save(s);
   },
   // Ajoute une période à la main (backfill : conducteur connu à une date connue + km début/fin optionnels).
-  addEntry(vehId, conducteur, debut, fin, kmDebut, kmFin) {
+  addEntry(vehId, conducteur, debut, fin, kmDebut, kmFin, opts) {
     const nom = this._norm(conducteur);
     if (!vehId || !nom) return;
     const s = FP.settings.get();
     s.affectations = (s.affectations && typeof s.affectations === 'object') ? s.affectations : {};
     const list = Array.isArray(s.affectations[vehId]) ? s.affectations[vehId] : [];
     // Saisie à la main → km verrouillés (marqueur « manuel » : jamais écrasés par un ré-ancrage auto).
-    list.push({ conducteur: nom, debut: debut || null, fin: fin || null, kmDebut: this._km(kmDebut), kmFin: this._km(kmFin), kmDebutManuel: this._km(kmDebut) != null, kmFinManuel: this._km(kmFin) != null });
+    // `opts.debutManuel` = la DATE de début vient d'une saisie manuelle (ajout de période à la main) →
+    // on la verrouille aussi. Les créations AUTO (ensureCourante : date d'EDL ou mise en circulation)
+    // ne passent PAS ce drapeau → leur date reste raccordable à l'état des lieux de remise.
+    list.push({ conducteur: nom, debut: debut || null, fin: fin || null, kmDebut: this._km(kmDebut), kmFin: this._km(kmFin), kmDebutManuel: this._km(kmDebut) != null, kmFinManuel: this._km(kmFin) != null, debutManuel: !!(opts && opts.debutManuel) && !!debut });
     s.affectations[vehId] = list;
     FP.settings.save(s);
   },
@@ -8156,8 +8161,12 @@ FP.affectations = {
         if (isSortie) { if (list[idx].kmFin == null) { list[idx].kmFin = k; list[idx].kmFinManuel = true; did = true; } }
         else { if (list[idx].kmDebut == null) { list[idx].kmDebut = k; list[idx].kmDebutManuel = true; did = true; } }
       }
+      // 🔗 DATE DE REMISE (demande utilisateur) : la date de l'état des lieux de remise SIGNÉ devient la
+      // date de début de la période — comme le km. On l'applique quand elle est VALIDE (AAAA-MM-JJ complète)
+      // et qu'elle remplace une date AUTO (mise en circulation / estimation) ; on NE touche JAMAIS une date
+      // SAISIE À LA MAIN (debutManuel). Ainsi on est sûr de ne pas se tromper : c'est la date du document.
       const d = (date && /^\d{4}-\d{2}-\d{2}$/.test(String(date).slice(0, 10))) ? String(date).slice(0, 10) : null;
-      if (!isSortie && d && !list[idx].debut) { list[idx].debut = d; did = true; }   // date de début si manquante
+      if (!isSortie && d && !list[idx].debutManuel && list[idx].debut !== d) { list[idx].debut = d; did = true; }
       if (did || k != null) FP.settings.save(s);                       // on persiste aussi le marqueur « manuel »
       return did;
     } catch (e) { return false; }
