@@ -12765,6 +12765,9 @@ FP.edl = {
     const cond = String(opts.conducteur || veh.chauffeur || '').trim();
     const sens = String(opts.sens || 'remise') === 'restitution' ? 'restitution' : 'remise';
     let condEmail = ''; try { const c = (FP.conducteurs && FP.conducteurs.find) ? FP.conducteurs.find(cond) : null; condEmail = (c && c.email) || ''; } catch (e) {}
+    // Langue par défaut de l'EDL = celle du conducteur (sa fiche). Le gestionnaire peut la FORCER dans le
+    // formulaire (sélecteur ci-dessous) → PDF + e-mail + page de signature suivent ce choix.
+    const _condLang0 = (FP.condLangue ? FP.condLangue(cond) : 'fr');
     const km = FP.kmActuel ? FP.kmActuel(veh) : (veh.km || 0);
     const today = new Date().toISOString().slice(0, 10);
     const modele = ((veh.marque || '') + ' ' + (veh.modele || '')).trim();
@@ -12819,6 +12822,11 @@ FP.edl = {
         <div data-edl-thumbs style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px"></div>
         ${sec('Envoi')}
         ${infoRow('E-mail de l\'employé', inp('edl-to', condEmail, 'employe@exemple.fr'))}
+        ${infoRow('Langue du document', `<select data-edl-lang style="flex:1 1 180px;min-width:0;max-width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:6px 9px;font-size:13px;background:#fff">
+          <option value="fr" ${_condLang0 !== 'en' ? 'selected' : ''}>🇫🇷 Français</option>
+          <option value="en" ${_condLang0 === 'en' ? 'selected' : ''}>🇬🇧 English</option>
+        </select>`)}
+        <div style="font-size:11.5px;color:#94a3b8;margin:-2px 0 2px">Le PDF, l'e-mail de demande et la page de signature partent dans cette langue. Pré-réglé sur la langue de la fiche conducteur ; un conducteur non francophone reçoit en plus sa page de signature dans sa langue (6 langues).</div>
         <label style="display:block;font-size:12.5px;color:#334155;font-weight:700;margin-top:8px">✍️ Signature électronique</label>
         <select data-edl-signmode style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:7px 9px;font-size:12.5px;margin-top:3px">
           <option value="surplace">✍️ Signer maintenant, sur place — le conducteur (et toi) signez sur CE téléphone</option>
@@ -12953,8 +12961,9 @@ FP.edl = {
         acc, autres: val('edl-autres'), comAcc: val('edl-com-acc'), to: val('edl-to'), photos: edlPhotos.slice(), photosSrc: edlPhotoSrc.slice(),
         signMode: (ov.querySelector('[data-edl-signmode]') && ov.querySelector('[data-edl-signmode]').value) || 'integree',
         socSignNom: val('edl-soc-nom'), socSignEmail: val('edl-soc-email'),
-        // Langue du DOCUMENT = celle du conducteur (anglophone → PDF en anglais). Le formulaire reste FR.
-        lang: ((FP.condLangue && FP.condLangue(val('edl-employe') || cond) === 'en') ? 'en' : 'fr'),
+        // Langue du DOCUMENT = CHOIX du sélecteur (pré-réglé sur la langue du conducteur, forçable par le
+        // gestionnaire). Pilote le PDF, l'e-mail de demande ET la page de signature (le formulaire reste FR).
+        lang: (() => { const s = ov.querySelector('[data-edl-lang]'); const f = (s && s.value) || ''; if (f === 'fr' || f === 'en') return f; return ((FP.condLangue && FP.condLangue(val('edl-employe') || cond) === 'en') ? 'en' : 'fr'); })(),
       };
     };
     const showErr = (msg) => { const b = ov.querySelector('[data-edl-err]'); if (b) { b.style.display = ''; b.textContent = msg || ''; try { b.scrollIntoView({ block: 'nearest' }); } catch (e) {} } };
@@ -13105,14 +13114,20 @@ FP.edl = {
             const renderMail = (s) => {
               // Le lien porte le jeton PROPRE au signataire (sigToken) → le serveur sait qui signe sans se
               // fier au paramètre `who` (falsifiable). `who` reste dans l'URL pour l'affichage/compat.
-              // ⚠️ LANGUE : on ajoute &lang=<langue du signataire> → la page signer.html s'ouvre DIRECTEMENT
-              // dans la bonne langue (profil du conducteur réglé sur sa fiche). L'employé obtient sa langue
-              // réelle (6 langues gérées par signer.html : fr/en/es/it/de/zh) ; le signataire société = FR.
-              const _plang = (s.role === 'societe') ? 'fr' : ((FP.condLangueRaw ? FP.condLangueRaw(s.nom) : 'fr') || 'fr');
+              // ⚠️ LANGUE : pilotée par le CHOIX du formulaire (data.lang, pré-réglé sur la langue du
+              // conducteur). La page signer.html s'ouvre DIRECTEMENT dans la bonne langue via &lang=. Pour un
+              // document EN, la PAGE prend la langue NATIVE du conducteur si elle est gérée (6 langues :
+              // fr/en/es/it/de/zh) — ainsi un hispanophone lit sa page en espagnol même si le PDF est en EN.
+              // Le signataire société reste toujours en FR.
+              let _plang = 'fr';
+              if (s.role !== 'societe') {
+                const _raw = (FP.condLangueRaw ? FP.condLangueRaw(s.nom) : 'fr');
+                _plang = (data.lang === 'fr') ? 'fr' : ((_raw && _raw !== 'fr') ? _raw : 'en');
+              }
               const link = base + '?t=' + encodeURIComponent(s.sigToken || token) + '&who=' + s.role + '&lang=' + _plang;
               const prenomS = String(s.nom || '').trim().split(/\s+/)[0] || '';
-              // Conducteur en anglais → modèle EN éditable + libellés EN (le signataire société reste FR).
-              const _sen = (s.role !== 'societe') && !!(FP.condLangue && FP.condLangue(s.nom) === 'en');
+              // Document/e-mail en anglais (data.lang='en') → modèle EN éditable + libellés EN (société = FR).
+              const _sen = (s.role !== 'societe') && (data.lang === 'en');
               const _tplSign = (FP.mailModeleProfilL ? FP.mailModeleProfilL('mailModeleSignature', 'signature', _sen ? 'en' : 'fr') : tpl) || tpl;
               // La plaque ne doit JAMAIS se couper en deux lignes → span nowrap partout où elle apparaît.
               const plaqueHtml = '<span style="white-space:nowrap">' + esc(data.immat) + '</span>';
