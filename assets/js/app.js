@@ -5740,6 +5740,29 @@ FP.settings = {
   // ÉCRIT donc dans 'global' (et plus dans 'PXP') → l'écriture et la lecture visent la MÊME ligne,
   // sinon chaque sauvegarde « disparaît » au rechargement (bug systémique de perte de réglages).
   _effectiveId: null,
+  // ⚠️ SÉRIALISATION DES ÉCRITURES app_settings PAR LIGNE (id) — correctif « des coches rapides ne sont
+  // pas comptabilisées ». Chaque enregistrement fait un « lire serveur → fusionner → écrire » asynchrone ;
+  // si on en déclenche plusieurs coup sur coup (cocher vite plusieurs cases), ils se CHEVAUCHAIENT. On les
+  // fait maintenant passer l'un APRÈS l'autre (file par id). ⚠️ DÉFENSIF : chaque maillon libère TOUJOURS
+  // la file (le `.catch` sur la chaîne stockée) → un échec ne peut JAMAIS bloquer les écritures suivantes,
+  // et le repli durable (FP.persist, déposé AVANT le réseau) garantit qu'aucune saisie n'est perdue même si
+  // ce maillon échoue. Ne change PAS ce qui est écrit (même fusion/CAS), seulement l'ORDRE (jamais parallèle).
+  _pushChains: {},
+  _serialize(id, fn) {
+    const key = String(id || 'global');
+    const prev = this._pushChains[key] || Promise.resolve();
+    // Un maillon = l'écriture `fn`, bornée par un GARDE-FOU anti-blocage : si le réseau fige, on NE
+    // bloque JAMAIS la file — on la libère après 20 s (le repli durable FP.persist réessaiera tout seul
+    // cette écriture au prochain flush). `fn` a son propre try/catch ; ici on neutralise aussi toute
+    // erreur pour que la file continue quoi qu'il arrive.
+    const guarded = () => {
+      let p; try { p = Promise.resolve(fn()); } catch (e) { p = Promise.resolve(); }
+      return Promise.race([p.catch(() => {}), new Promise(res => setTimeout(res, 20000))]);
+    };
+    const next = prev.then(guarded, guarded);
+    this._pushChains[key] = next;
+    return next;
+  },
   _pushSettings(obj, prevLocal) {
     const self = this;
     let id; try { id = this._effectiveId || this._dbId(); } catch (e) { id = this._effectiveId || 'global'; }
@@ -5782,7 +5805,7 @@ FP.settings = {
       // Même filet anti-perte que le CAS : repli en file d'écriture AVANT le réseau, retiré à la réussite.
       let _settleUid0 = null;
       try { if (FP.persist && FP.persist._enqueue) _settleUid0 = FP.persist._enqueue({ op: 'upsert', table: 'app_settings', row: { id, data: obj } }); } catch (e) {}
-      (async () => {
+      self._serialize(id, async () => {
         try {
           const r = await FP.supabase.from('app_settings').select('data').eq('id', id).maybeSingle();
           const remote = (r && r.data && r.data.data && typeof r.data.data === 'object') ? r.data.data : null;
@@ -5792,7 +5815,7 @@ FP.settings = {
           try { if (_settleUid0 && FP.persist && FP.persist._removeUid) FP.persist._removeUid(_settleUid0); } catch (e) {}
           plainUpsert(merged);
         } catch (e) { try { if (_settleUid0 && FP.persist && FP.persist._removeUid) FP.persist._removeUid(_settleUid0); } catch (_) {} plainUpsert(obj); }   // échec de lecture → au moins mettre en file (ne pas perdre l'écriture)
-      })();
+      });
       return;
     }
     // Fusion « delta » : on repart de la version FRAÎCHE du serveur et on n'y applique QUE les clés que
@@ -5972,6 +5995,8 @@ FP.settings = {
     let _settleUid = null;
     try { if (FP.persist && FP.persist._enqueue) _settleUid = FP.persist._enqueue({ op: 'upsert', table: 'app_settings', row: { id, data: obj } }); } catch (e) {}
     const _dropSettle = () => { try { if (_settleUid && FP.persist && FP.persist._removeUid) FP.persist._removeUid(_settleUid); } catch (e) {} };
+    // (Le CAS ci-dessous est SÉRIALISÉ par id via self._serialize — voir plus bas — pour qu'il ne se
+    //  chevauche jamais avec un autre enregistrement de la même ligne.)
     // ⚠️⚠️⚠️ REPLI SÛR (correctif anti-perte MAJEUR) : TOUS les replis d'écriture passent par ICI, et
     // JAMAIS par un `plainUpsert(obj)` brut. Un upsert brut REMPLACE toute la colonne `data` par le cache
     // LOCAL → si ce cache est incomplet (rechargement, autre appareil, colonne `rev` absente = SQL de
@@ -5997,7 +6022,7 @@ FP.settings = {
         try { if (FP._syncBadge) FP._syncBadge(); } catch (_) {}
       }
     };
-    (async () => {
+    self._serialize(id, async () => {
       // Compare-and-swap sur la colonne `rev` (cf. supabase/app_settings-concurrence.sql) : on n'écrit
       // QUE si personne n'a écrit depuis notre lecture. Sinon (rev a bougé) on relit + refusionne +
       // réessaie → ferme la fenêtre de course entre le SELECT et l'UPDATE. Tout échec → écriture simple.
@@ -6027,7 +6052,7 @@ FP.settings = {
         // le cache local et pouvait effacer congés/assurance/leasing. C'est corrigé : plus de perte.
         await safeMergeUpsert();
       }
-    })();
+    });
   },
   reset() {
     localStorage.removeItem(this._key());
