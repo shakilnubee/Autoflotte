@@ -1608,6 +1608,63 @@ FP.dedupeFactures = (list) => {
 // ⚠️ HELPER CANONIQUE — coût d'exploitation d'un mois : factures dédoublonnées par n° + filtre exploit.
 // Même chiffre partout (dashboard, écran mural, rapport direction) — sinon un doublon de n° gonflait le mois.
 FP.coutMois = (data, ym) => (FP.dedupeFactures(((data && data.factures) || [])).filter(f => (f.date || '').slice(0, 7) === ym && FP.coutFactureExploit(f)).reduce((s, f) => s + (Number(f.montantTTC) || 0), 0));
+// ⚠️ HELPER CANONIQUE — télécharge en UN ZIP toutes les pièces jointes (PDF/scan) des factures d'un
+// véhicule + un récapitulatif CSV (« état des factures »). Utilisable sur CHAQUE véhicule (vendu ou non).
+//  • Les fichiers hébergés dans Supabase Storage sont RÉCUPÉRÉS et mis dans le ZIP (via URL signée).
+//  • Les rares fichiers Google Drive (non téléchargeables côté navigateur / CORS) sont LISTÉS dans
+//    liens-Drive.txt → rien n'est perdu, l'utilisateur les récupère depuis Drive. On n'invente rien.
+//  • Dédoublonnage par le helper canonique FP.dedupeFactures. Progression via FP.busy ; résumé honnête.
+FP.facturesZip = async function (veh) {
+  if (!veh || !veh.immat) { if (FP.toast) FP.toast('Véhicule inconnu.'); return; }
+  const data = (typeof window !== 'undefined' && window.FP_DATA) || {};
+  let list = (data.factures || []).filter(f => f && FP.immatEq(f.vehiculeImmat, veh.immat));
+  list = FP.dedupeFactures ? FP.dedupeFactures(list) : list;
+  list.sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+  if (!list.length) { if (FP.toast) FP.toast('Aucune facture pour ' + (veh.immat || 'ce véhicule') + '.'); else alert('Aucune facture pour ce véhicule.'); return; }
+  const busy = FP.busy ? FP.busy('Préparation des factures… 0/' + list.length) : null;
+  try {
+    if (!window.JSZip && FP.ocr && FP.ocr.loadScript) { try { await FP.ocr.loadScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'); } catch (e) {} }
+    if (!window.JSZip) { const m = 'Téléchargement ZIP indisponible (connexion requise).'; if (busy) busy.fail(m); else alert(m); return; }
+    const zip = new window.JSZip(), used = {};
+    let inc = 0, fail = 0, nofile = 0; const drive = [];
+    const rows = [['Date', 'Fournisseur', 'Description', 'N° facture', 'HT', 'TVA', 'TTC', 'Km', 'Fichier']];
+    const money = n => (n == null || n === '') ? '' : String(n).replace('.', ',');
+    const clean = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w .\-]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 70);
+    for (let i = 0; i < list.length; i++) {
+      const f = list[i];
+      if (busy) busy.update('Préparation des factures… ' + (i + 1) + '/' + list.length);
+      const url = FP._factUrl ? FP._factUrl(f) : '';
+      const isStore = /\/storage\/v1\/object\//.test(url) || /supabase\.co/.test(url);
+      const isDrive = /drive\.google\.com/.test(url) || (f.fileId && !/^https?:/i.test(f.fileId) && !/^IMP-/i.test(f.fileId));
+      const base = clean((f.date || '').slice(0, 10) + ' ' + (f.fournisseur || 'facture') + (f.montantTTC != null ? ' ' + f.montantTTC + 'EUR' : '')) || ('facture-' + (i + 1));
+      let fileCol = '';
+      if (url && isStore) {
+        try {
+          const signed = FP.signedScanUrl ? (await FP.signedScanUrl(url, 600)) : url;
+          const resp = await fetch(signed || url); if (!resp.ok) throw new Error('http ' + resp.status);
+          const blob = await resp.blob();
+          const ext = /pdf/i.test(blob.type) ? '.pdf' : (/jpe?g/i.test(blob.type) ? '.jpg' : (/png/i.test(blob.type) ? '.png' : '.pdf'));
+          let fn = base + ext, k = 1; while (used[fn]) { fn = base + ' (' + (++k) + ')' + ext; } used[fn] = 1;
+          zip.file(fn, blob); inc++; fileCol = fn;
+        } catch (e) { fail++; fileCol = '(échec du téléchargement) ' + url; }
+      } else if (url && isDrive) {
+        drive.push((f.date || '').slice(0, 10) + ' · ' + (f.fournisseur || '') + (f.montantTTC != null ? ' · ' + f.montantTTC + ' €' : '') + '  →  ' + url);
+        fileCol = '(lien Google Drive — voir liens-Drive.txt)';
+      } else { nofile++; fileCol = '(aucun fichier joint)'; }
+      rows.push([(f.date || '').slice(0, 10), f.fournisseur || '', String(f.description || '').replace(/[\r\n]+/g, ' '), f.numeroFacture || '', money(f.montantHT), money(f.montantTVA), money(f.montantTTC), f.km || '', fileCol]);
+    }
+    // Récap CSV « état des factures » (séparateur ; + BOM → s'ouvre proprement dans Excel FR).
+    const csv = '﻿' + rows.map(r => r.map(c => { const s = String(c == null ? '' : c); return /[;"\n]/.test(s) ? ('"' + s.replace(/"/g, '""') + '"') : s; }).join(';')).join('\r\n');
+    zip.file('etat-des-factures.csv', csv);
+    if (drive.length) zip.file('liens-Drive.txt', 'Factures hébergées sur Google Drive (à télécharger depuis Drive, non incluses dans le ZIP) :\n\n' + drive.join('\n'));
+    const out = await zip.generateAsync({ type: 'blob' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(out);
+    a.download = 'Factures-' + (FP.normImmat ? FP.normImmat(veh.immat) : veh.immat) + '.zip';
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => { try { URL.revokeObjectURL(a.href); } catch (e) {} }, 8000);
+    const msg = '✓ ' + inc + ' facture(s) dans le ZIP' + (drive.length ? ' · ' + drive.length + ' sur Drive (liens)' : '') + (nofile ? ' · ' + nofile + ' sans fichier' : '') + (fail ? ' · ' + fail + ' échec(s)' : '');
+    if (busy) busy.done(msg); else if (FP.toast) FP.toast(msg);
+  } catch (e) { const m = 'Erreur lors de la création du ZIP : ' + (e && e.message || e); if (busy) busy.fail(m); else alert(m); }
+};
 // ⚠️ HELPER CANONIQUE — amende « à payer » (statut tolérant aux accents/espaces/casse) : « à payer »,
 // « a payer », « À Payer » … sont tous reconnus, pour que dashboard, page Amendes et alertes comptent pareil.
 FP.estAPayer = (a) => { const s = ((a && a.statut) || '').toString().trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); return s === 'a payer'; };
