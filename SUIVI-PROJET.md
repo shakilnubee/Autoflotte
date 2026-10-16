@@ -86,13 +86,15 @@ Le mode d'emploi du staging est dans `supabase/staging/README.md`.
 - **Prouvé sur le staging** : 14 fuites avant correction, 0 après. PXP conserve l'accès à ses documents.
 - **En attente** : vérification visuelle dans l'application (accès en cours pour François), puis mise en production avec accord.
 
-### 16/10/2026 — Sauvegardes automatiques ⏳ (prêtes, en attente des clés et des accès)
+### 16/10/2026 — Sauvegardes automatiques 🟡 (validées sur le staging, en attente des accès de production)
 - **Chaque nuit**, copie complète de la base (rôles, structure, données, comptes) **et de tous les fichiers**, ainsi que des règles d'accès du stockage. Ces dernières ne figurent pas dans la copie standard de Supabase.
 - **Restauration d'essai automatique** à chaque sauvegarde, dans une base vide, avec comparaison du nombre de lignes de chaque table. Si un seul chiffre diffère, la sauvegarde échoue et GitHub envoie un e-mail.
 - **Chiffrement** de chaque archive : seuls François et Shakil, détenteurs d'une clé privée, pourront la lire.
 - **Conservation** dans les artefacts GitHub : 30 jours, et 90 jours pour la sauvegarde du 1er du mois. C'est le maximum de GitHub : un historique sur un an demandera un stockage externe.
 - **Mode d'emploi complet**, restauration pas à pas comprise : `docs/SAUVEGARDES.md`.
-- **En attente** : les clés publiques de chiffrement (François, Shakil) et les accès à la base et au stockage, à enregistrer comme secrets GitHub. Premier essai sur le staging, puis activation sur la production.
+- **Essai complet réussi sur le staging** : base copiée ; 4 règles du stockage sauvegardées et restaurées ; **restauration d'essai avec exactement le même nombre de lignes dans les 30 tables** ; fichier réel copié ; archive chiffrée et conservée.
+- Clé de chiffrement de François en place.
+- **En attente** : la clé de Shakil, et les accès de production à enregistrer comme secrets GitHub (adresse de la base et clés du stockage), avant l'activation nocturne sur la production.
 
 ### Corrections apportées à l'audit initial
 - L'organisation Supabase est bien sur le **plan Pro**, avec des sauvegardes quotidiennes. Elles n'incluent cependant **pas les fichiers**.
@@ -109,7 +111,7 @@ Le mode d'emploi du staging est dans `supabase/staging/README.md`.
 | #987 | Staging + test d'isolation | Prête ; à fusionner après #985 |
 | #988 | Cloisonnement des fichiers | Prête et testée ; à fusionner après #987, puis migration en prod |
 | #990 | Ce document de suivi | ✅ Fusionnée |
-| (à venir) | Sauvegardes automatiques | Prête ; en attente des clés et des secrets |
+| #991 | Sauvegardes automatiques | Validée sur le staging ; en attente des accès de production |
 
 ## 7. Prochaines étapes
 

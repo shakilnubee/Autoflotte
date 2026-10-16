@@ -164,10 +164,16 @@ jobs:
           nb_objets=$(grep '^storage.objects|' sauvegarde/base/comptes-source.txt | cut -d'|' -f2)
           nb_fichiers=$(cat sauvegarde/fichiers/nombre.txt)
           echo "Fichiers référencés en base : ${nb_objets:-?} — fichiers copiés : $nb_fichiers"
-          # Tolérance : la base peut référencer des entrées sans contenu (dossiers vides, fichiers de test).
-          if [ -n "$nb_objets" ] && [ "$nb_fichiers" -lt $(( nb_objets * 95 / 100 )) ]; then
-            echo "::error::Trop peu de fichiers copiés ($nb_fichiers pour $nb_objets référencés)."
-            exit 1
+          # Tolérance : la base peut référencer quelques entrées sans contenu (fichier supprimé, entrée de
+          # test). Au-delà de 5 % manquants (minimum toléré : 1), la sauvegarde est jugée incomplète.
+          if [ -n "$nb_objets" ]; then
+            manquants=$(( nb_objets - nb_fichiers )); [ "$manquants" -lt 0 ] && manquants=0
+            tolere=$(( nb_objets * 5 / 100 )); [ "$tolere" -lt 1 ] && tolere=1
+            echo "Fichiers manquants : $manquants (toléré : $tolere)"
+            if [ "$manquants" -gt "$tolere" ]; then
+              echo "::error::Trop de fichiers manquants ($manquants sur $nb_objets, toléré $tolere)."
+              exit 1
+            fi
           fi
 
       # ── 4) Chiffrement + conservation ──
