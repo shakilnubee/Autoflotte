@@ -426,7 +426,7 @@
           // écrites sous la clé figée au chargement (défaut PXP) → contamination croisée entre sociétés.
           try {
             const soc = (pr.data.is_admin !== true && pr.data.societe) ? pr.data.societe : (localStorage.getItem('fp_societe') || 'PXP');
-            window.FP_CACHE_KEY = 'fp_data_cache_v3_' + soc;
+            window.FP_CACHE_KEY = 'fp_data_cache_v4_' + soc;
           } catch (e) {}
         }
       }
@@ -437,22 +437,20 @@
     // économise un aller-retour réseau séquentiel (latence mobile) avant d'appliquer thème/réglages.
     let _settingsPromise = null;
     try {
-      const _sid = (FP.settings && FP.settings._dbId) ? FP.settings._dbId() : 'global';
+      const _sid = (FP.settings && FP.settings._dbId) ? FP.settings._dbId() : 'PXP';
       _settingsPromise = client.from('app_settings').select('data').eq('id', _sid).maybeSingle()
-        .then(async (sres) => {
-          let shared = sres && sres.data && sres.data.data;
-          let effId = _sid;                              // ligne d'où viennent RÉELLEMENT les réglages
-          if ((!shared || typeof shared !== 'object') && _sid === 'PXP') {
-            const sres2 = await client.from('app_settings').select('data').eq('id', 'global').maybeSingle();
-            const g = sres2 && sres2.data && sres2.data.data;
-            if (g && typeof g === 'object') { shared = g; effId = 'global'; }   // PXP historique = ligne 'global'
-          }
-          // ⚠️⚠️ ROOT-CAUSE PERTE DE RÉGLAGES : on ÉCRIT désormais dans la MÊME ligne que celle LUE.
-          // Avant, la lecture retombait sur 'global' (config PXP historique) mais l'écriture visait 'PXP'
-          // → chaque sauvegarde (loyers, « ✓ Vu », liens de fichiers, rafale…) atterrissait dans une AUTRE
-          // ligne que celle relue au chargement → au rechargement, on relisait 'global' (ancien) et tout
-          // « repartait ». En mémorisant la ligne effective, l'écriture et la lecture visent la même.
-          try { if (FP.settings) FP.settings._effectiveId = effId; } catch (e) {}
+        .then((sres) => {
+          // ⚠️⚠️ UNE SEULE LIGNE PAR SOCIÉTÉ (correctif « deux tiroirs », 16/10/2026) : les réglages d'une
+          // société vivent dans la ligne app_settings id = <société> — et NULLE PART AILLEURS. L'ancien repli
+          // sur la ligne historique 'global' (PXP) se déclenchait aussi quand la lecture ÉCHOUAIT (coupure
+          // réseau) → toute la session lisait ET écrivait dans 'global' pendant que les autres appareils
+          // écrivaient dans 'PXP' : deux copies divergentes, et des données qui « reviennent ». La ligne
+          // 'global' est désormais une archive gelée (supabase/migrations/…_geler_ligne_global.sql).
+          // Lecture en échec → on ne fixe PAS la ligne effective : les écritures visent _dbId() (= la société)
+          // et repartent en mode additif sûr (cf. FP.settings._pushSettings), la re-synchro réessaiera.
+          if (sres && sres.error) return null;
+          const shared = sres && sres.data && sres.data.data;
+          try { if (FP.settings) FP.settings._effectiveId = _sid; } catch (e) {}
           return shared;
         }).catch(() => null);
     } catch (e) { _settingsPromise = null; }
@@ -495,7 +493,7 @@
       // que le 1er affichage de chaque page corresponde EXACTEMENT au live → zéro "flash" de
       // chiffres. (data.js, lui, est un instantané figé qui devient périmé dès qu'on ajoute des
       // données ; le cache, lui, est rafraîchi à chaque visite.) Lecture ~10 ms : négligeable.
-      const CK = window.FP_CACHE_KEY || 'fp_data_cache_v3';
+      const CK = window.FP_CACHE_KEY || 'fp_data_cache_v4';
       try { localStorage.removeItem('fp_data_cache'); } catch (e0) {} // ancienne clé périmée
       try {
         localStorage.setItem(CK, JSON.stringify({ vehicules: data.vehicules, amendes: data.amendes, factures: data.factures, conducteurs: data.conducteurs }));
@@ -508,7 +506,7 @@
       // Re-appliquer les overrides locaux (cases cochées par l'utilisateur, etc.)
       if (FP.loadVehicleOverrides) FP.loadVehicleOverrides();
       // Charger les réglages PAR SOCIÉTÉ (apparence). Ligne app_settings = la société.
-      // Repli sur l'ancienne ligne 'global' pour PXP (compat config existante).
+      // Une seule ligne par société (plus de repli sur l'ancienne ligne 'global', gelée le 16/10/2026).
       // ⚠️ On mémorise si les réglages serveur DIFFÈRENT du cache local affiché : les données
       // « réglages » (congés `condConges`, badges/cartes `condBadgeUlys`/`condCarteTotal`,
       // km majorés, immobilisations, loueurs, assureurs, montants payés d'amendes…) vivent dans
@@ -529,7 +527,7 @@
           //   d'alerte « ✓ Vu » saisis localement ET on ré-applique les réglages ENCORE EN ATTENTE d'envoi
           //   (file durable) AVANT d'écraser le cache — sinon un pull serveur fait « revenir » une alerte
           //   cochée ou « repartir » un réglage saisi (mails, rappels km…).
-          shared = _reconcileServerSettings(shared, _prevSettingsRaw);
+          shared = _reconcileServerSettings(shared, _prevSettingsRaw, FP.settings && FP.settings._effectiveId);
           const _freshSettingsRaw = JSON.stringify(shared);
           settingsChanged = (_prevSettingsRaw !== _freshSettingsRaw);
           localStorage.setItem(key, _freshSettingsRaw);
@@ -586,7 +584,10 @@
   // Règle : (1) accusés d'alerte = UNION local∪serveur ; (2) écritures app_settings ENCORE EN ATTENTE de CE
   // poste (file durable) ré-appliquées PAR-DESSUS le serveur (objets = fusion champ par champ ; scalaires /
   // tableaux = valeur en attente). Non destructif : la file finit d'envoyer ces écritures juste après.
-  function _reconcileServerSettings(shared, prevRaw) {
+  // `rowId` = ligne app_settings qu'on vient de lire : seules les écritures en attente visant CETTE ligne
+  // sont ré-appliquées (une écriture restée en file pour une AUTRE ligne — ex. l'ancienne 'global' — ne doit
+  // JAMAIS être recopiée par-dessus les réglages de la société : ce serait réinjecter une vieille copie).
+  function _reconcileServerSettings(shared, prevRaw, rowId) {
     shared = (shared && typeof shared === 'object') ? shared : {};
     try {
       const lp = prevRaw ? JSON.parse(prevRaw) : null;
@@ -601,7 +602,8 @@
       let pend = null;   // dernière écriture app_settings EN ATTENTE = intention la plus récente de ce poste
       for (let i = q.length - 1; i >= 0; i--) {
         const it = q[i];
-        if (it && it.op === 'upsert' && it.table === 'app_settings' && it.row && it.row.data && typeof it.row.data === 'object') { pend = it.row.data; break; }
+        if (it && it.op === 'upsert' && it.table === 'app_settings' && it.row && it.row.data && typeof it.row.data === 'object'
+            && (!rowId || it.row.id === rowId)) { pend = it.row.data; break; }
       }
       if (pend) {
         Object.keys(pend).forEach(k => {
@@ -628,26 +630,20 @@
       if (FP._refreshingSettings) return Promise.resolve(false);
       FP._refreshingSettings = true;
       const release = (v) => { FP._refreshingSettings = false; return v; };
-      let sid = 'global';
-      try { sid = FP.settings._effectiveId || (FP.settings._dbId ? FP.settings._dbId() : 'global'); } catch (e) {}
-      const fetchOne = (id) => FP.supabase.from('app_settings').select('data').eq('id', id).maybeSingle();
-      return fetchOne(sid).then(async (r) => {
+      // Toujours la ligne de LA société (plus de repli 'global' : cf. correctif « deux tiroirs » au chargement).
+      let sid = 'PXP';
+      try { sid = FP.settings._dbId ? FP.settings._dbId() : 'PXP'; } catch (e) {}
+      return FP.supabase.from('app_settings').select('data').eq('id', sid).maybeSingle().then((r) => {
         if (r && r.error) throw r.error;
-        let shared = r && r.data && r.data.data;
-        let effId = sid;
-        if ((!shared || typeof shared !== 'object') && sid === 'PXP') {   // PXP historique = ligne 'global'
-          const r2 = await fetchOne('global');
-          const g = r2 && r2.data && r2.data.data;
-          if (g && typeof g === 'object') { shared = g; effId = 'global'; }
-        }
+        const shared = r && r.data && r.data.data;
         if (!shared || typeof shared !== 'object') return release(false);   // rien de fiable → on garde l'existant
-        try { FP.settings._effectiveId = effId; } catch (e) {}
+        try { FP.settings._effectiveId = sid; } catch (e) {}
         const key = FP.settings._key ? FP.settings._key() : 'auto_flotte_settings';
         let prev = null; try { prev = localStorage.getItem(key); } catch (e) {}
         // ⚠️ MÊME réconciliation qu'au chargement : ce refresh (focus / online / 3 s après load) écrasait
         //   le cache SANS préserver ni les accusés « ✓ Vu » (→ alertes qui reviennent) ni les réglages
         //   encore en attente d'envoi (→ mails / rappels km qui « repartent »). On réconcilie AVANT d'écraser.
-        shared = _reconcileServerSettings(shared, prev);
+        shared = _reconcileServerSettings(shared, prev, sid);
         const fresh = JSON.stringify(shared);
         const changed = (prev !== fresh);
         try { localStorage.setItem(key, fresh); } catch (e) {}
