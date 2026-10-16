@@ -426,7 +426,7 @@
           // écrites sous la clé figée au chargement (défaut PXP) → contamination croisée entre sociétés.
           try {
             const soc = (pr.data.is_admin !== true && pr.data.societe) ? pr.data.societe : (localStorage.getItem('fp_societe') || 'PXP');
-            window.FP_CACHE_KEY = 'fp_data_cache_v3_' + soc;
+            window.FP_CACHE_KEY = 'fp_data_cache_v4_' + soc;
           } catch (e) {}
         }
       }
@@ -495,7 +495,7 @@
       // que le 1er affichage de chaque page corresponde EXACTEMENT au live → zéro "flash" de
       // chiffres. (data.js, lui, est un instantané figé qui devient périmé dès qu'on ajoute des
       // données ; le cache, lui, est rafraîchi à chaque visite.) Lecture ~10 ms : négligeable.
-      const CK = window.FP_CACHE_KEY || 'fp_data_cache_v3';
+      const CK = window.FP_CACHE_KEY || 'fp_data_cache_v4';
       try { localStorage.removeItem('fp_data_cache'); } catch (e0) {} // ancienne clé périmée
       try {
         localStorage.setItem(CK, JSON.stringify({ vehicules: data.vehicules, amendes: data.amendes, factures: data.factures, conducteurs: data.conducteurs }));
