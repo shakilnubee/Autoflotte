@@ -114,9 +114,22 @@ jobs:
       - name: Copier les fichiers
         run: |
           mkdir -p sauvegarde/fichiers
+          # Un fichier référencé en base mais absent du stockage (supprimé, ou entrée de test sans contenu)
+          # ne doit pas bloquer TOUTE la sauvegarde : il est listé en avertissement. Le contrôle de l'étape
+          # de restauration fait échouer la sauvegarde si plus de 5 % des fichiers manquent.
+          set +e
           aws s3 sync "s3://scans" "sauvegarde/fichiers/scans" \
-            --endpoint-url "https://$REF.storage.supabase.co/storage/v1/s3" --only-show-errors
-          n=$(find sauvegarde/fichiers -type f | wc -l)
+            --endpoint-url "https://$REF.storage.supabase.co/storage/v1/s3" --only-show-errors 2> /tmp/s3-erreurs.txt
+          set -e
+          echxs=$(grep -c "download failed" /tmp/s3-erreurs.txt || true)
+          if [ "$echxs" -gt 0 ]; then
+            echo "::warning::$echxs fichier(s) référencé(s) introuvable(s) dans le stockage (liste dans sauvegarde/fichiers/introuvables.txt)."
+            grep "download failed" /tmp/s3-erreurs.txt | sed -E 's#^download failed: s3://scans/([^ ]+) to .*#\1#' > sauvegarde/fichiers/introuvables.txt
+          fi
+          if grep -v "download failed" /tmp/s3-erreurs.txt | grep -qiE "error|denied|forbidden"; then
+            echo "::error::Accès au stockage impossible :"; grep -v "download failed" /tmp/s3-erreurs.txt | head -5; exit 1
+          fi
+          n=$(find sauvegarde/fichiers -type f ! -name introuvables.txt | wc -l)
           echo "$n" > sauvegarde/fichiers/nombre.txt
           echo "Fichiers copiés : $n"
 
