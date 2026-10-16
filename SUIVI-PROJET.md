@@ -1,7 +1,7 @@
 # Parc Pilot — Suivi du projet de fiabilisation
 
 > Document de suivi partageable. **Tenu à jour à chaque étape** (voir « Comment ce document est tenu à jour » en bas).
-> Dernière mise à jour : **16/10/2026**
+> Dernière mise à jour : **16/10/2026** (sauvegardes automatiques préparées)
 >
 > ⚠️ Ce dépôt est **public** : ce document ne contient aucun secret ni donnée personnelle. Les failles **pas encore corrigées en production** n'y sont décrites qu'en termes généraux.
 
@@ -86,6 +86,16 @@ Le mode d'emploi du staging est dans `supabase/staging/README.md`.
 - **Prouvé sur le staging** : 14 fuites avant correction, 0 après. PXP conserve l'accès à ses documents.
 - **En attente** : vérification visuelle dans l'application (accès en cours pour François), puis mise en production avec accord.
 
+### 16/10/2026 — Sauvegardes automatiques 🟡 (validées sur le staging, en attente des accès de production)
+- **Chaque nuit**, copie complète de la base (rôles, structure, données, comptes) **et de tous les fichiers**, ainsi que des règles d'accès du stockage. Ces dernières ne figurent pas dans la copie standard de Supabase.
+- **Restauration d'essai automatique** à chaque sauvegarde, dans une base vide, avec comparaison du nombre de lignes de chaque table. Si un seul chiffre diffère, la sauvegarde échoue et GitHub envoie un e-mail.
+- **Chiffrement** de chaque archive : seuls François et Shakil, détenteurs d'une clé privée, pourront la lire.
+- **Conservation** dans les artefacts GitHub : 30 jours, et 90 jours pour la sauvegarde du 1er du mois. C'est le maximum de GitHub : un historique sur un an demandera un stockage externe.
+- **Mode d'emploi complet**, restauration pas à pas comprise : `docs/SAUVEGARDES.md`.
+- **Essai complet réussi sur le staging** : base copiée ; 4 règles du stockage sauvegardées et restaurées ; **restauration d'essai avec exactement le même nombre de lignes dans les 30 tables** ; fichier réel copié ; archive chiffrée et conservée.
+- Clé de chiffrement de François en place, et **déchiffrement vérifié par François** : il a téléchargé une archive et l'a ouverte avec sa clé privée.
+- **En attente** : la clé de Shakil, et les accès de production à enregistrer comme secrets GitHub (adresse de la base et clés du stockage), avant l'activation nocturne sur la production.
+
 ### Corrections apportées à l'audit initial
 - L'organisation Supabase est bien sur le **plan Pro**, avec des sauvegardes quotidiennes. Elles n'incluent cependant **pas les fichiers**.
 - Le déploiement automatique des fonctions serveur **fonctionnait**. Sa condition a tout de même été rendue robuste au nom du dépôt.
@@ -100,13 +110,14 @@ Le mode d'emploi du staging est dans `supabase/staging/README.md`.
 | #986 | Fin des « deux tiroirs » | ✅ Fusionnée et déployée |
 | #987 | Staging + test d'isolation | Prête ; à fusionner après #985 |
 | #988 | Cloisonnement des fichiers | Prête et testée ; à fusionner après #987, puis migration en prod |
-| (cette PR) | Ce document de suivi | — |
+| #990 | Ce document de suivi | ✅ Fusionnée |
+| #991 | Sauvegardes automatiques | Validée sur le staging ; en attente des accès de production |
 
 ## 7. Prochaines étapes
 
 1. **Vérification visuelle** dans l'application : ouvrir un document, une carte grise et un état des lieux. Il faut un accès pour François.
 2. **Mise en production du cloisonnement des fichiers** : fusion des PR #985, #987 et #988, puis application de la règle en production.
-3. **Sauvegardes** : sauvegarde automatique hors Supabase (base **et** fichiers), et procédure de restauration écrite **et testée**.
+3. **Sauvegardes** : préparées (voir le journal). Restent à faire : fournir les clés et les accès, faire un premier essai sur le staging, l'activer en production, puis réaliser un test de restauration complet par un humain.
 4. **GitHub** : protéger la branche principale (PR et tests obligatoires), ranger les anciens scripts SQL, réécrire le `README.md` et le `CLAUDE.md`.
 5. **Migration des données**, une à une, du gros bloc de réglages vers de vraies tables : congés, affectations, contrats, assurances, tâches, sinistres… Suppression ensuite du système de fusion maison.
 6. **Automatisations** : alertes d'échéance côté serveur (contrôle technique, assurance, entretien, permis), rapports.
@@ -120,10 +131,12 @@ Le mode d'emploi du staging est dans `supabase/staging/README.md`.
 | 16/10/2026 | Les 7 alertes masquées sur l'ancien exemplaire redeviennent visibles | Responsable / François |
 | 16/10/2026 | Staging dans une organisation Supabase **gratuite**, données **fictives** | François |
 | 16/10/2026 | Les anciens fichiers restent en place (pas de migration de fichiers) | Proposition validée sur le staging |
+| 16/10/2026 | Sauvegardes : artefacts GitHub chiffrés ; clés détenues par François et Shakil ; 30 jours, plus le 1er du mois gardé 90 jours | François |
 
 ## 9. Points ouverts / à surveiller
 
-- La sauvegarde quotidienne Supabase **n'inclut pas les fichiers** : à compléter (étape 3).
+- La sauvegarde quotidienne Supabase **n'inclut pas les fichiers** : c'est couvert par nos sauvegardes automatiques dès leur activation.
+- Les artefacts GitHub sont limités à **90 jours** : pour un historique d'un an, ajouter un stockage externe (Cloudflare R2, Backblaze B2…).
 - Des états des lieux vides (0 km) sont parfois créés automatiquement : à investiguer.
 - Deux dates d'affectation de véhicule à faire vérifier par Shakil.
 - Une fonction serveur réécrit les réglages d'un bloc, avec un risque de perte en cas d'écritures simultanées : à traiter avec la migration des données (étape 5).
