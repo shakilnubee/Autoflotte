@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261016b">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261016c">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20261016b"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20261016c"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20261016b">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20261016c">
 <style>
   .field-label { font-size: .78rem; font-weight: 600; color: var(--fp-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .35rem; }
   .field-input { width: 100%; padding: .6rem .8rem; border: 1px solid var(--fp-border); border-radius: .55rem; font-size: .9rem; background: white; }
@@ -380,8 +380,8 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20261016b"></script>
-<script src="../assets/js/supabase-client.js?v=20261016b"></script>
+<script src="../assets/js/vendor/supabase.js?v=20261016c"></script>
+<script src="../assets/js/supabase-client.js?v=20261016c"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -397,10 +397,10 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261016b"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261016c"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
-<script src="../assets/js/app.min.js?v=20261016b"></script>
+<script src="../assets/js/app.min.js?v=20261016c"></script>
 <script>
   lucide.createIcons();
   const $ = (id) => document.getElementById(id);
@@ -1017,11 +1017,32 @@
     } catch (_) {}
   }
   function logHist(t, txt) { if (!t) return; if (!Array.isArray(t.historique)) t.historique = []; t.historique.push({ txt, at: nowStamp() }); }
+  // RDV virtuel (programmé sur la fiche véhicule) coché « terminé » : on le MATÉRIALISE en VRAIE tâche
+  // terminée (pour qu'il apparaisse dans l'historique « Terminées »/« Toutes ») ET on marque le RDV du
+  // véhicule « fait » → il ne se régénère plus. Le TOUT dans UNE seule sauvegarde (pas de course). Avant,
+  // cocher ne créait qu'un « tombstone » → aucun historique, et au moindre souci de synchro ça « revenait ».
+  function materialiserRdvFait(t) {
+    try {
+      const s = FP.settings.get();
+      const arr = Array.isArray(s.taches) ? s.taches.slice() : [];
+      const date = String(t.echeance || '').slice(0, 10);
+      const nid = 'rdvfait-' + t.vehiculeId + '-' + date;
+      if (!arr.some(x => x && x.id === nid)) {
+        arr.push({ id: nid, titre: t.titre || 'Rendez-vous', type: 'rdv', vehiculeId: t.vehiculeId, echeance: date,
+          heure: t.heure || '', conducteur: t.conducteur || '', lieu: '', etiquettes: (t.etiquettes || ['garage']).slice(),
+          commentaires: [], sousTaches: [], note: t.note || '', statut: 'done', fait: true, faitLe: todayIso(),
+          createdAt: new Date().toISOString(), historique: [{ txt: 'Rendez-vous programmé depuis la fiche véhicule', at: nowStamp() }, { txt: 'Marquée terminée', at: nowStamp() }] });
+      }
+      s.taches = arr.filter(x => x && !x._virtuel);
+      s.vehRdvGarage = (s.vehRdvGarage && typeof s.vehRdvGarage === 'object') ? s.vehRdvGarage : {};
+      const prev = s.vehRdvGarage[t.vehiculeId] || {};
+      s.vehRdvGarage[t.vehiculeId] = { date: (date || String(prev.date || '').slice(0, 10)), motif: (prev.motif || t.titre || 'Rendez-vous'), fait: true, faitLe: todayIso() };
+      FP.settings.save(s);
+    } catch (e) {}
+  }
   function toggleTask(id) {
     const arr = getTaches(); const t = arr.find(x => x.id === id); if (!t) return;
-    // RDV virtuel (programmé sur la fiche véhicule) : « terminé » = le RDV a eu lieu → on le MARQUE fait
-    // (FP.rdvGarage.done), pas une suppression (qui « revenait » au rechargement). Plus de retard, ne revient plus.
-    if (t._virtuel) { try { if (FP.rdvGarage) FP.rdvGarage.done(t.vehiculeId); } catch (e) {} render(); if (FP.celebrate) FP.celebrate(); return; }
+    if (t._virtuel) { materialiserRdvFait(t); render(); if (FP.celebrate) FP.celebrate(); return; }
     const now = !isDone(t);
     t.fait = now; t.statut = now ? 'done' : 'todo'; t.faitLe = now ? todayIso() : null;
     logHist(t, now ? 'Marquée terminée' : 'Remise à faire');
@@ -1031,8 +1052,8 @@
   }
   function moveTask(id, to) {
     const arr = getTaches(); const t = arr.find(x => x.id === id); if (!t) return;
-    // RDV virtuel : seul « Terminé » a du sens (le RDV a eu lieu → on le retire du véhicule) ; sinon on ignore.
-    if (t._virtuel) { if (to === 'done') { try { if (FP.rdvGarage) FP.rdvGarage.done(t.vehiculeId); } catch (e) {} render(); if (FP.celebrate) FP.celebrate(); } return; }
+    // RDV virtuel : seul « Terminé » a du sens → on le matérialise en vraie tâche terminée (historique) + RDV fait.
+    if (t._virtuel) { if (to === 'done') { materialiserRdvFait(t); render(); if (FP.celebrate) FP.celebrate(); } return; }
     const lbl = (KB.find(c => c.k === to) || {}).lbl || to;
     t.statut = to; t.fait = (to === 'done'); t.faitLe = (to === 'done') ? todayIso() : null;
     logHist(t, 'Déplacée en « ' + lbl + ' »');
