@@ -23,7 +23,7 @@
 // ⚠️ Clé de cache PAR SOCIÉTÉ : sinon le cache d'une société (ex. PXP) s'afficherait sur une
 // autre (ex. « essaie B »). On suffixe par la société active (lue directement en localStorage,
 // car FP.activeSociete n'est pas encore défini à ce stade).
-window.FP_CACHE_KEY = 'fp_data_cache_v3_' + (function(){ try { return localStorage.getItem('fp_societe') || 'PXP'; } catch (e) { return 'PXP'; } })();
+window.FP_CACHE_KEY = 'fp_data_cache_v4_' + (function(){ try { return localStorage.getItem('fp_societe') || 'PXP'; } catch (e) { return 'PXP'; } })();
 (function seedFromCache() {
   try { localStorage.removeItem('fp_data_cache'); } catch (e) {} // purge l'ancienne clé (non suffixée)
   // ⚡ PERF : si le loader inline de la page a DÉJÀ peuplé FP_DATA depuis un cache société COMPLET
@@ -2089,7 +2089,7 @@ try {
   FP.ASSET_VERSION = _vm ? _vm[1] : 'dev';
 } catch (e) { FP.ASSET_VERSION = 'dev'; }
 
-// Rafraîchit le cache local (fp_data_cache_v3_<societe>) à partir de l'état EN MÉMOIRE (window.FP_DATA).
+// Rafraîchit le cache local (fp_data_cache_v4_<societe>) à partir de l'état EN MÉMOIRE (window.FP_DATA).
 // ⚠️ SOURCE UNIQUE : le cache n'était réécrit qu'au chargement complet (loadAll). Une édition unitaire
 // (fiche véhicule OU « À compléter » en rafale) mettait à jour mémoire + Supabase mais PAS ce cache →
 // en changeant de page, le 1er rendu partait d'un instantané périmé. On rappelle ce helper après chaque
