@@ -41,9 +41,14 @@ jobs:
     timeout-minutes: 60
     env:
       CIBLE: ${{ inputs.cible || (github.event_name == 'pull_request' && 'staging') || 'production' }}
-      DB_URL: ${{ (inputs.cible || (github.event_name == 'pull_request' && 'staging') || 'production') == 'staging' && secrets.STAGING_DB_URL || secrets.PROD_DB_URL }}
-      AWS_ACCESS_KEY_ID: ${{ (inputs.cible || (github.event_name == 'pull_request' && 'staging') || 'production') == 'staging' && secrets.STAGING_S3_ACCESS_KEY_ID || secrets.PROD_S3_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ (inputs.cible || (github.event_name == 'pull_request' && 'staging') || 'production') == 'staging' && secrets.STAGING_S3_SECRET_ACCESS_KEY || secrets.PROD_S3_SECRET_ACCESS_KEY }}
+      # ⚠️ Les deux jeux d'accès sont passés SÉPARÉMENT et choisis explicitement dans « Paramètres de la
+      # cible » : jamais d'expression « cond && A || B », qui renverrait B (la PRODUCTION) si A était vide.
+      S_STAGING_DB_URL: ${{ secrets.STAGING_DB_URL }}
+      S_STAGING_S3_ID: ${{ secrets.STAGING_S3_ACCESS_KEY_ID }}
+      S_STAGING_S3_SECRET: ${{ secrets.STAGING_S3_SECRET_ACCESS_KEY }}
+      S_PROD_DB_URL: ${{ secrets.PROD_DB_URL }}
+      S_PROD_S3_ID: ${{ secrets.PROD_S3_ACCESS_KEY_ID }}
+      S_PROD_S3_SECRET: ${{ secrets.PROD_S3_SECRET_ACCESS_KEY }}
     steps:
       - uses: actions/checkout@v4
 
@@ -51,9 +56,22 @@ jobs:
         run: |
           if [ "$CIBLE" = "staging" ]; then
             echo "REF=csvjmzwexszsbowibxut" >> "$GITHUB_ENV"; echo "AWS_DEFAULT_REGION=eu-west-1" >> "$GITHUB_ENV"
-          else
+            DB="$S_STAGING_DB_URL"; ID="$S_STAGING_S3_ID"; SEC="$S_STAGING_S3_SECRET"
+          elif [ "$CIBLE" = "production" ]; then
             echo "REF=tzjuptlzoywjeigmyfuj" >> "$GITHUB_ENV"; echo "AWS_DEFAULT_REGION=eu-central-1" >> "$GITHUB_ENV"
+            DB="$S_PROD_DB_URL"; ID="$S_PROD_S3_ID"; SEC="$S_PROD_S3_SECRET"
+          else
+            echo "::error::Cible inconnue : $CIBLE"; exit 1
           fi
+          # Garde-fou : l'adresse de la base doit désigner le BON projet (sa référence y figure toujours,
+          # dans l'hôte ou l'utilisateur « postgres.<ref> » du pooler) — jamais la prod à la place du staging.
+          REF_ATTENDUE=$([ "$CIBLE" = "staging" ] && echo csvjmzwexszsbowibxut || echo tzjuptlzoywjeigmyfuj)
+          if [ -n "$DB" ] && ! echo "$DB" | grep -q "$REF_ATTENDUE"; then
+            echo "::error::L'adresse de la base fournie pour « $CIBLE » ne désigne pas le projet attendu ($REF_ATTENDUE). Arrêt."; exit 1
+          fi
+          # Valeurs transmises aux étapes suivantes (masquées dans les journaux).
+          for v in "$DB" "$ID" "$SEC"; do [ -n "$v" ] && echo "::add-mask::$v"; done
+          { echo "DB_URL=$DB"; echo "AWS_ACCESS_KEY_ID=$ID"; echo "AWS_SECRET_ACCESS_KEY=$SEC"; } >> "$GITHUB_ENV"
           echo "HORODATAGE=$(date -u +%Y-%m-%d_%H%M)" >> "$GITHUB_ENV"
           # 1er du mois → conservation maximale (90 jours) ; sinon 30 jours.
           if [ "$(date -u +%d)" = "01" ]; then echo "CONSERVATION=90" >> "$GITHUB_ENV"; else echo "CONSERVATION=30" >> "$GITHUB_ENV"; fi
