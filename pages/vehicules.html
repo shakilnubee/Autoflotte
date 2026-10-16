@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261016b">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20261016c">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20261016b"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20261016c"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20261016b">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20261016c">
 <style>
   /* Petites additions locales pour cette page */
   /* .filter-chip : style centralisé (modèle Style C) dans assets/css/styles.css */
@@ -1182,8 +1182,8 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20261016b"></script>
-<script src="../assets/js/supabase-client.js?v=20261016b"></script>
+<script src="../assets/js/vendor/supabase.js?v=20261016c"></script>
+<script src="../assets/js/supabase-client.js?v=20261016c"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -1199,13 +1199,13 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261016b"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20261016c"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
-<script src="../assets/js/fleet-docs.js?v=20261016b"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20261016b"></script>
+<script src="../assets/js/fleet-docs.js?v=20261016c"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20261016c"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20261016b"></script>
+<script src="../assets/js/app.min.js?v=20261016c"></script>
 <script>
   lucide.createIcons();
 
@@ -1638,14 +1638,24 @@
     // (ex. « 140013000_…_Rechnung KKINK_…pdf »), on affiche le LIBELLÉ DU TYPE (« Carte mémo », « Facture
     // d'achat »…) comme pour « Carte grise ». Le vrai nom de fichier reste accessible au survol (title) et
     // via « Voir ». Un libellé saisi à la main (sans extension) est, lui, conservé tel quel.
+    // ⚠️ NOM PROPRE (demande utilisateur) : le TITRE est TOUJOURS le libellé COURT du type (« Contrôle
+    // technique », « Carte grise », « Carte mémo »…) — jamais un nom de fichier brut ni un libellé verbeux.
+    // Le détail stocké (garage + échéance, ou le nom de fichier) passe en SOUS-TITRE, sans répéter le type.
     const rawLabel = String(doc.label || '').trim();
     const looksLikeFile = /\.(pdf|jpe?g|png|gif|webp|heic|avif|docx?|xlsx?|pptx?|txt|csv)$/i.test(rawLabel);
-    const title = (doc.type === 'etat-des-lieux') ? 'État des lieux' : ((rawLabel && !looksLikeFile) ? rawLabel : t.label);
+    const typeLbl = (doc.type === 'etat-des-lieux') ? 'État des lieux' : t.label;
+    const title = typeLbl;
+    let detail = '';
+    if (rawLabel && !looksLikeFile && rawLabel.toLowerCase() !== typeLbl.toLowerCase()) {
+      detail = rawLabel.replace(new RegExp('^\\s*' + typeLbl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*[—–·:\\-]+\\s*', 'i'), '').trim();
+    }
+    const dateTxt = (doc.date || doc.createdAt) ? 'ajouté le ' + FP.dateNum((doc.date || doc.createdAt).slice(0, 10)) : '';
+    const subtitle = [detail, dateTxt].filter(Boolean).join(' · ');
     return `<div class="flex items-center gap-2 py-2 border-b border-slate-100 text-sm" data-doc-id="${escapeHtml(doc.id)}">
       <i data-lucide="${t.icon}" class="w-4 h-4 text-slate-400 flex-shrink-0"></i>
       <div class="flex-1 min-w-0">
-        <div class="font-medium truncate" title="${escapeHtml(rawLabel || t.label)}">${escapeHtml(title)}</div>
-        <div class="text-xs text-slate-500">${t.label}${(doc.date || doc.createdAt) ? ' · ajouté le ' + FP.dateNum((doc.date || doc.createdAt).slice(0, 10)) : ''}</div>
+        <div class="font-medium truncate" title="${escapeHtml(rawLabel || typeLbl)}">${escapeHtml(title)}</div>
+        <div class="text-xs text-slate-500 truncate">${escapeHtml(subtitle)}</div>
       </div>
       <button type="button" class="btn btn-outline !py-1 !px-2.5 text-xs" data-doc-open="${url}"><i data-lucide="eye" class="w-3.5 h-3.5"></i> Voir</button>
       <button type="button" class="p-1.5 hover:bg-red-50 rounded text-slate-300 hover:text-red-600" data-doc-del="${escapeHtml(doc.id)}" title="Supprimer ce document"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>

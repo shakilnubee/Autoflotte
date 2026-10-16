@@ -1663,6 +1663,14 @@ FP.facturesZip = async function (veh) {
     document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => { try { URL.revokeObjectURL(a.href); } catch (e) {} }, 8000);
     const msg = '✓ ' + inc + ' facture(s) dans le ZIP' + (drive.length ? ' · ' + drive.length + ' sur Drive (liens)' : '') + (nofile ? ' · ' + nofile + ' sans fichier' : '') + (fail ? ' · ' + fail + ' échec(s)' : '');
     if (busy) busy.done(msg); else if (FP.toast) FP.toast(msg);
+    // ⚠️ HONNÊTETÉ : si des factures sont sur Google Drive, le navigateur NE PEUT PAS les mettre dans le ZIP
+    // (sécurité Google). Elles sont alors listées (avec leur lien) dans « liens-Drive.txt » à l'intérieur du
+    // ZIP. On le dit CLAIREMENT (sinon l'utilisateur croit que le ZIP est vide « sans raison »).
+    if (drive.length) {
+      setTimeout(function () {
+        try { alert('ℹ️ ' + inc + ' facture(s) incluse(s) dans le ZIP.\n\n' + drive.length + ' facture(s) sont hébergées sur Google Drive : le navigateur ne peut pas les mettre dans le ZIP (sécurité Google). Leurs liens sont dans le fichier « liens-Drive.txt » à l\'intérieur du ZIP, et le détail de toutes les factures est dans « etat-des-factures.csv ».'); } catch (e) {}
+      }, 600);
+    }
   } catch (e) { const m = 'Erreur lors de la création du ZIP : ' + (e && e.message || e); if (busy) busy.fail(m); else alert(m); }
 };
 // ⚠️ HELPER CANONIQUE — amende « à payer » (statut tolérant aux accents/espaces/casse) : « à payer »,
