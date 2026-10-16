@@ -115,4 +115,4 @@ La restauration d'essai automatique prouve chaque nuit que **la base** est resta
 
 | Date | Sauvegarde utilisée | Par | Résultat |
 |---|---|---|---|
-| _à faire_ | | | |
+| 16/10/2026 | `parc-pilot-staging-2026-10-16_1732` | François | ✅ Archive téléchargée et **déchiffrée avec sa clé privée** (étape 4.1) ; contenu complet listé. Restauration de la base vérifiée automatiquement par la tâche (30 tables identiques). Étapes 4.2 et 4.3 à la main : à faire au prochain trimestre. |

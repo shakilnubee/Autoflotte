@@ -93,7 +93,7 @@ Le mode d'emploi du staging est dans `supabase/staging/README.md`.
 - **Conservation** dans les artefacts GitHub : 30 jours, et 90 jours pour la sauvegarde du 1er du mois. C'est le maximum de GitHub : un historique sur un an demandera un stockage externe.
 - **Mode d'emploi complet**, restauration pas à pas comprise : `docs/SAUVEGARDES.md`.
 - **Essai complet réussi sur le staging** : base copiée ; 4 règles du stockage sauvegardées et restaurées ; **restauration d'essai avec exactement le même nombre de lignes dans les 30 tables** ; fichier réel copié ; archive chiffrée et conservée.
-- Clé de chiffrement de François en place.
+- Clé de chiffrement de François en place, et **déchiffrement vérifié par François** : il a téléchargé une archive et l'a ouverte avec sa clé privée.
 - **En attente** : la clé de Shakil, et les accès de production à enregistrer comme secrets GitHub (adresse de la base et clés du stockage), avant l'activation nocturne sur la production.
 
 ### Corrections apportées à l'audit initial
