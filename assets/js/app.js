@@ -4606,23 +4606,16 @@ FP.societeProfil = () => {
 // PLUS JAMAIS la liste : une suppression/un renommage futur par l'utilisateur est respecté.
 // (Ne s'exécute QUE sur la config PXP — _soc() mappe la vue « toutes sociétés » → PXP ; inerte pour un client.)
 FP.normaliserLoueursPXP = function () {
-  try {
-    if (!(FP.settings && FP.settings._soc && FP.settings._soc() === 'PXP')) return;
-    const s = FP.settings.get();
-    if (s.loueursNorm) return;                                    // déjà migré → on ne touche plus rien
-    let list = Array.isArray(s.loueurs) ? s.loueurs.slice() : [];
-    const estBpce = l => /bpce/i.test(String((l && l.nom) || '')) || /bpce/i.test(String((l && l.prop) || ''));
-    const autres = list.filter(l => l && !estBpce(l) && (String(l.nom || '').trim() || String(l.prop || '').trim()));
-    // UN SEUL BPCE en tête, étiquette « propriétaire » = « BPCE » (celle stockée sur les véhicules).
-    s.loueurs = [{ nom: 'BPCE', prop: 'BPCE' }, ...autres];
-    s.loueursNorm = true;
-    // Nettoie l'ancien repli profil (sinon un repli BPCE pourrait ré-injecter un doublon plus tard).
-    if (s.profil && typeof s.profil === 'object') {
-      if (/bpce/i.test(String(s.profil.proprietaireLeasing || ''))) s.profil.proprietaireLeasing = '';
-      if (/bpce/i.test(String(s.profil.loueurNom || ''))) s.profil.loueurNom = '';
-    }
-    FP.settings.save(s);
-  } catch (e) {}
+  // ⚠️⚠️ MIGRATION NEUTRALISÉE (2026-10-16) — CAUSE DE PERTE « la liste loueurs repasse à 1 ». Cette
+  // migration tournait à CHAQUE chargement et RECONSTRUISAIT `s.loueurs` à partir de la copie LOCALE de
+  // l'appareil. Sur un appareil dont le cache n'avait pas encore reçu le 2ᵉ loueur du serveur (synchro
+  // partielle), elle rebâtissait une liste à 1 loueur puis la sauvegardait → la fusion « delta » (mergeArr)
+  // voyait le 2ᵉ loueur « présent dans la base mais plus dans ce poste » = SUPPRESSION → il disparaissait
+  // du serveur. D'où l'oscillation 2 ↔ 1. La normalisation BPCE historique est déjà faite côté serveur ;
+  // on n'y RETOUCHE donc PLUS JAMAIS (règle anti-perte ⑤ : une migration au chargement ne doit jamais
+  // réduire une liste utilisateur). Elle est désormais un NO-OP. La détection du leasing BPCE continue de
+  // marcher (par le champ « propriétaire » des véhicules, cf. FP.leasingLoueurs/propsLeasing).
+  return;
 };
 // ⚠️ MIGRATION — MODÈLES D'E-MAIL D'AMENDE OBSOLÈTES → nouveaux textes validés (2026-09-25).
 // Problème : une société (dont PXP) avait ENREGISTRÉ les anciens modèles par défaut dans son profil
