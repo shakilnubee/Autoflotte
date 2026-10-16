@@ -90,6 +90,7 @@ Si le mot de passe de la base n'est pas connu, il se réinitialise dans Supabase
      --command 'SET session_replication_role = origin' \
      --file sauvegarde/base/regles-stockage.sql
    ```
+   Si la commande s'arrête sur `permission denied for parameter log_min_messages` : c'est un simple réglage de journalisation. Supprimer la ligne concernée de `roles.sql` (elle contient `log_min_messages`), puis relancer.
 3. Vérifier les nombres de lignes :
    ```bash
    psql "<ADRESSE_DU_NOUVEAU_PROJET>" -At -f scripts/sauvegarde/compter.sql | diff - sauvegarde/base/comptes-source.txt && echo "✅ identique"
