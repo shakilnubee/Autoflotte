@@ -1608,6 +1608,12 @@ FP.dedupeFactures = (list) => {
 // ⚠️ HELPER CANONIQUE — coût d'exploitation d'un mois : factures dédoublonnées par n° + filtre exploit.
 // Même chiffre partout (dashboard, écran mural, rapport direction) — sinon un doublon de n° gonflait le mois.
 FP.coutMois = (data, ym) => (FP.dedupeFactures(((data && data.factures) || [])).filter(f => (f.date || '').slice(0, 7) === ym && FP.coutFactureExploit(f)).reduce((s, f) => s + (Number(f.montantTTC) || 0), 0));
+// ⚠️ HELPER CANONIQUE — URL ouvrable d'une FACTURE (table `factures`) : fileId = URL http (stockage
+// Supabase) OU id Google Drive ; 'IMP-…' ou vide = aucun fichier. SOURCE UNIQUE sur FP (utilisée par
+// FP.facturesZip ET FP.docsFolder). ⚠️ Avant, _factUrl n'existait QUE sur FP.docsFolder → FP.facturesZip
+// appelait FP._factUrl (inexistant) → url vide → le ZIP ne contenait AUCUN PDF (bug depuis la création
+// du bouton). On l'expose donc bien sur FP.
+FP._factUrl = function (f) { const id = (f && (f.fileId || f.fileUrl || f.url)) || ''; if (!id || /^IMP-/.test(id)) return ''; if (/^https?:\/\//.test(id)) return id; return 'https://drive.google.com/file/d/' + encodeURIComponent(id) + '/view'; };
 // ⚠️ HELPER CANONIQUE — télécharge en UN ZIP toutes les pièces jointes (PDF/scan) des factures d'un
 // véhicule + un récapitulatif CSV (« état des factures »). Utilisable sur CHAQUE véhicule (vendu ou non).
 //  • Les fichiers hébergés dans Supabase Storage sont RÉCUPÉRÉS et mis dans le ZIP (via URL signée).
@@ -13882,8 +13888,8 @@ FP.docsFolder = {
     catch (e) { return []; }
   },
   _driveId(url) { const m = String(url || '').match(/\/d\/([A-Za-z0-9_-]{20,})/) || String(url || '').match(/[?&]id=([A-Za-z0-9_-]{20,})/); return m ? m[1] : null; },
-  // URL ouvrable d'une FACTURE (table `factures`) : fileId = URL http (stockage) OU id Drive. 'IMP-…' = pas de fichier.
-  _factUrl(f) { const id = (f && (f.fileId || f.fileUrl || f.url)) || ''; if (!id || /^IMP-/.test(id)) return ''; if (/^https?:\/\//.test(id)) return id; return 'https://drive.google.com/file/d/' + encodeURIComponent(id) + '/view'; },
+  // URL ouvrable d'une FACTURE : délègue au helper canonique FP._factUrl (source unique).
+  _factUrl(f) { return FP._factUrl(f); },
   // Factures DÉJÀ saisies (fiche véhicule / page Factures) à RELIER automatiquement à une ligne de la
   // checklist de vente → on ne redemande pas de re-téléverser. Mapping { clé checklist → types de facture }.
   _FACT_LINK: { 'facture-achat': ['achat'] },
