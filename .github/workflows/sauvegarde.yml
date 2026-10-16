@@ -21,9 +21,15 @@ on:
         type: choice
         options: [production, staging]
         default: staging
+  # Sur une PR qui modifie la sauvegarde : essai complet sur le STAGING (jamais la production).
+  pull_request:
+    paths:
+      - '.github/workflows/sauvegarde.yml'
+      - 'scripts/sauvegarde/**'
+      - 'sauvegardes/**'
 
 concurrency:
-  group: sauvegarde-${{ inputs.cible || 'production' }}
+  group: sauvegarde-${{ inputs.cible || (github.event_name == 'pull_request' && 'staging') || 'production' }}
   cancel-in-progress: false
 
 permissions:
@@ -34,10 +40,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
-      CIBLE: ${{ inputs.cible || 'production' }}
-      DB_URL: ${{ (inputs.cible || 'production') == 'staging' && secrets.STAGING_DB_URL || secrets.PROD_DB_URL }}
-      AWS_ACCESS_KEY_ID: ${{ (inputs.cible || 'production') == 'staging' && secrets.STAGING_S3_ACCESS_KEY_ID || secrets.PROD_S3_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ (inputs.cible || 'production') == 'staging' && secrets.STAGING_S3_SECRET_ACCESS_KEY || secrets.PROD_S3_SECRET_ACCESS_KEY }}
+      CIBLE: ${{ inputs.cible || (github.event_name == 'pull_request' && 'staging') || 'production' }}
+      DB_URL: ${{ (inputs.cible || (github.event_name == 'pull_request' && 'staging') || 'production') == 'staging' && secrets.STAGING_DB_URL || secrets.PROD_DB_URL }}
+      AWS_ACCESS_KEY_ID: ${{ (inputs.cible || (github.event_name == 'pull_request' && 'staging') || 'production') == 'staging' && secrets.STAGING_S3_ACCESS_KEY_ID || secrets.PROD_S3_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ (inputs.cible || (github.event_name == 'pull_request' && 'staging') || 'production') == 'staging' && secrets.STAGING_S3_SECRET_ACCESS_KEY || secrets.PROD_S3_SECRET_ACCESS_KEY }}
     steps:
       - uses: actions/checkout@v4
 
